@@ -122,8 +122,10 @@ struct _net_stack {
 	int			b_stid[2];
 	int			b_addr[2];
 	int			bcid[2];
-	int			flag;
+	u_long			flag;
 	struct _itimer		*tlist;
+	void			*l2fsm;
+	void			*teifsm;
 };
 
 struct _nr_list {
@@ -146,7 +148,7 @@ typedef struct _itimer {
 	net_stack_t		*nst;
 	int			id;
 	int			expires;
-	int			Flags;
+	u_long			Flags;
 	unsigned long		data;
 	int			(*function)(unsigned long);
 } itimer_t;
@@ -220,7 +222,7 @@ static inline int if_newhead(void *arg, ifunc_t func, u_int prim, int dinfo,
 	if (!msg)
 		return(-ENXIO);
 	mISDN_newhead(prim, dinfo, msg);
-	return(func(arg, msg));
+	return(func((net_stack_t *)arg, msg));
 }
 
 static inline void mISDN_addhead(u_int prim, int dinfo, msg_t *msg)
@@ -238,7 +240,7 @@ static inline int if_addhead(void *arg, ifunc_t func, u_int prim, int dinfo,
 	if (!msg)
 		return(-ENXIO);
 	mISDN_addhead(prim, dinfo, msg);
-	return(func(arg, msg));
+	return(func((net_stack_t *)arg, msg));
 }
 
 
@@ -267,7 +269,7 @@ static inline int if_link(void *farg, ifunc_t func, u_int prim, int dinfo, int l
 
 	if (!(msg = create_link_msg(prim, dinfo, len, arg, reserve)))
 		return(-ENOMEM);
-	err = func(farg, msg);
+	err = func((net_stack_t *)farg, msg);
 	if (err)
 		free_msg(msg);
 	return(err);

@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.0 2003/08/27 07:35:32 kkeil Exp $
+/* $Id: tei.c,v 1.1 2004/02/17 20:30:07 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 // #include "debug.h"
 // #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.0 $";
+const char *tei_revision = "$Revision: 1.1 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -25,10 +25,6 @@ const char *tei_revision = "$Revision: 1.0 $";
 #define ID_VERIFY	7
 
 #define TEI_ENTITY_ID	0xf
-
-static
-struct Fsm teifsm =
-{NULL, 0, 0, NULL, NULL};
 
 enum {
 	ST_TEI_NOP,
@@ -324,7 +320,7 @@ create_teimgr(layer2_t *l2) {
 	ntei->tei_m.debug = l2->debug;
 	ntei->tei_m.userdata = ntei;
 	ntei->tei_m.printdebug = tei_debug;
-	ntei->tei_m.fsm = &teifsm;
+	ntei->tei_m.fsm = l2->nst->teifsm;
 	ntei->tei_m.state = ST_TEI_NOP;
 	FsmInitTimer(&ntei->tei_m, &ntei->t201);
 	l2->tm = ntei;
@@ -425,17 +421,23 @@ tei_mux(net_stack_t *nst, msg_t *msg)
 
 
 
-int TEIInit(void)
+int TEIInit(net_stack_t *nst)
 {
-	teifsm.state_count = TEI_STATE_COUNT;
-	teifsm.event_count = TEI_EVENT_COUNT;
-	teifsm.strEvent = strTeiEvent;
-	teifsm.strState = strTeiState;
-	FsmNew(&teifsm, TeiFnList, TEI_FN_COUNT);
+	struct Fsm *teif;
+
+	if (!(teif = malloc(sizeof(struct Fsm))))
+		return(1);
+	nst->teifsm = teif;
+	memset(teif, 0, sizeof(struct Fsm));
+	teif->state_count = TEI_STATE_COUNT;
+	teif->event_count = TEI_EVENT_COUNT;
+	teif->strEvent = strTeiEvent;
+	teif->strState = strTeiState;
+	FsmNew(teif, TeiFnList, TEI_FN_COUNT);
 	return(0);
 }
 
-void TEIFree(void)
+void TEIFree(net_stack_t *nst)
 {
-	FsmFree(&teifsm);
+	FsmFree(nst->teifsm);
 }

@@ -109,10 +109,12 @@ clear_connection(iapplication_t *ia)
 		}
 		if (c->sock)
 			close(c->sock);
+#ifdef GSM_COMPRESSION
 		if (c->r_gsm)
 			gsm_destroy(c->r_gsm);
 		if (c->s_gsm)
 			gsm_destroy(c->s_gsm);
+#endif
 		free(c);
 		ia->con = NULL;
 	}

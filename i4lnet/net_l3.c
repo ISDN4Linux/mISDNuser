@@ -1,4 +1,4 @@
-/* $Id: net_l3.c,v 1.0 2003/08/27 07:35:32 kkeil Exp $
+/* $Id: net_l3.c,v 1.1 2004/02/17 20:30:07 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -16,7 +16,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l3_revision = "$Revision: 1.0 $";
+const char *l3_revision = "$Revision: 1.1 $";
 
 #define PROTO_DIS_EURO	8
 
@@ -41,6 +41,7 @@ enum {
 	IMSG_L4_DATA,
 	IMSG_TIMER_EXPIRED,
 	IMSG_MASTER_L2_DATA,
+	IMSG_PROCEEDING_IND,
 	IMSG_ALERTING_IND,
 	IMSG_CONNECT_IND,
 	IMSG_SEL_PROC,
@@ -433,6 +434,8 @@ l3dss1_check_messagetype_validity(layer3_proc_t *pc, int mt, void *arg)
 		case MT_CONGESTION_CONTROL:
 		case MT_STATUS:
 		case MT_STATUS_ENQUIRY:
+		case MT_HOLD:
+		case MT_RETRIEVE:
 		case MT_RESUME: /* RESUME only in user->net */
 		case MT_SUSPEND: /* SUSPEND only in user->net */
 			if (pc->l3->debug & L3_DEB_CHECK)
@@ -670,6 +673,8 @@ l3dss1_setup(layer3_proc_t *pc, int pr, void *arg)
 		find_and_copy_ie(msg->data, msg->len, IE_PROGRESS, 0, umsg);
 	setup->NET_FAC =
 		find_and_copy_ie(msg->data, msg->len, IE_NET_FAC, 0, umsg);
+	setup->KEYPAD =
+		find_and_copy_ie(msg->data, msg->len, IE_KEYPAD, 0, umsg);
 	setup->SIGNAL =
 		find_and_copy_ie(msg->data, msg->len, IE_SIGNAL, 0, umsg);
 	setup->CALLED_PN =
@@ -688,6 +693,7 @@ l3dss1_setup(layer3_proc_t *pc, int pr, void *arg)
 		find_and_copy_ie(msg->data, msg->len, IE_HLC, 0, umsg);
 	setup->USER_USER =
 		find_and_copy_ie(msg->data, msg->len, IE_USER_USER, 0, umsg);
+	setup->ces = pc->ces;
 	newl3state(pc, 1);
 	L3DelTimer(&pc->timer2);
 	L3AddTimer(&pc->timer2, T_CTRL, 0x31f);
@@ -872,6 +878,38 @@ l3dss1_release_cmpl_i(layer3_proc_t *pc, int pr, void *arg)
 }
 
 static void
+l3dss1_proceeding_i(layer3_proc_t *pc, int pr, void *arg)
+{
+	msg_t			*umsg, *msg = arg;
+	CALL_PROCEEDING_t	*proc;
+
+	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	if (!pc->master) {
+		L3DelTimer(&pc->timer1);
+		newl3state(pc, 9);
+		return;
+	}
+	umsg = prep_l3data_msg(CC_PROCEEDING | INDICATION, pc->master->ces |
+		(pc->master->callref << 16), sizeof(CALL_PROCEEDING_t), msg->len, NULL);
+	if (!umsg)
+		return;
+	proc = (CALL_PROCEEDING_t *)(umsg->data + mISDN_HEAD_SIZE);
+	L3DelTimer(&pc->timer1);	/* T304 */
+	newl3state(pc, 9);
+	proc->BEARER =
+		find_and_copy_ie(msg->data, msg->len, IE_BEARER, 0, umsg);
+	proc->FACILITY =
+		find_and_copy_ie(msg->data, msg->len, IE_FACILITY, 0, umsg);
+	proc->PROGRESS =
+		find_and_copy_ie(msg->data, msg->len, IE_PROGRESS, 0, umsg);
+	proc->HLC =
+		find_and_copy_ie(msg->data, msg->len, IE_HLC, 0, umsg);
+	if (!mISDN_l3up(pc->master, umsg))
+		return;
+	free_msg(umsg);
+}
+
+static void
 l3dss1_alerting_i(layer3_proc_t *pc, int pr, void *arg)
 {
 	msg_t		*umsg, *msg = arg;
@@ -999,8 +1037,103 @@ l3dss1_connect_i(layer3_proc_t *pc, int pr, void *arg)
 		find_and_copy_ie(msg->data, msg->len, IE_LLC, 0, umsg);
 	conn->USER_USER =
 		find_and_copy_ie(msg->data, msg->len, IE_USER_USER, 0, umsg);
+	conn->ces = pc->ces;
 	if (send_proc(pc, IMSG_CONNECT_IND, umsg))
 		free_msg(umsg); 
+}
+
+static void
+l3dss1_hold(layer3_proc_t *pc, int pr, void *arg)
+{
+	msg_t		*umsg, *msg = arg;
+	HOLD_t		*hold;
+
+	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+#warning TODO: global mask for supported none mandatory services, like HOLD
+	if (pc->hold_state == HOLDAUX_HOLD_IND)
+		return;
+	if (pc->hold_state != HOLDAUX_IDLE) {
+		l3dss1_message_cause(pc, MT_HOLD_REJECT, CAUSE_NOTCOMPAT_STATE);
+		return;
+	}
+	pc->hold_state = HOLDAUX_HOLD_IND; 
+
+	umsg = prep_l3data_msg(CC_HOLD | INDICATION, pc->ces |
+		(pc->callref << 16), sizeof(HOLD_t), msg->len, NULL);
+	if (!umsg)
+		return;
+	hold = (HOLD_t *)(umsg->data + mISDN_HEAD_SIZE);
+	if (mISDN_l3up(pc, umsg))
+		free_msg(umsg);
+}
+
+static void
+l3dss1_retrieve(layer3_proc_t *pc, int pr, void *arg)
+{
+	msg_t		*umsg, *msg = arg;
+	RETRIEVE_t	*retr;
+
+	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	if (pc->hold_state == HOLDAUX_RETR_IND)
+		return;
+	if (pc->hold_state != HOLDAUX_HOLD) {
+		l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_NOTCOMPAT_STATE);
+		return;
+	}
+	pc->hold_state = HOLDAUX_RETR_IND;
+
+	umsg = prep_l3data_msg(CC_RETRIEVE | INDICATION, pc->ces |
+		(pc->callref << 16), sizeof(RETRIEVE_t), msg->len, NULL);
+	if (!umsg)
+		return;
+	retr = (RETRIEVE_t *)(umsg->data + mISDN_HEAD_SIZE);
+	retr->CHANNEL_ID =
+		find_and_copy_ie(msg->data, msg->len, IE_CHANNEL_ID, 0, umsg);
+	if (mISDN_l3up(pc, umsg))
+		free_msg(umsg);
+}
+
+static void
+l3dss1_suspend(layer3_proc_t *pc, int pr, void *arg)
+{
+	msg_t		*umsg, *msg = arg;
+	SUSPEND_t	*susp;
+
+	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	umsg = prep_l3data_msg(CC_SUSPEND | INDICATION, pc->ces |
+		(pc->callref << 16), sizeof(SUSPEND_t), msg->len, NULL);
+	if (!umsg)
+		return;
+	susp = (SUSPEND_t *)(umsg->data + mISDN_HEAD_SIZE);
+	susp->CALL_ID =
+		find_and_copy_ie(msg->data, msg->len, IE_CALL_ID, 0, umsg);
+	susp->FACILITY =
+		find_and_copy_ie(msg->data, msg->len, IE_FACILITY, 0, umsg);
+	newl3state(pc, 15);
+	if (mISDN_l3up(pc, umsg))
+		free_msg(umsg);
+}
+
+static void
+l3dss1_resume(layer3_proc_t *pc, int pr, void *arg)
+{
+	msg_t		*umsg, *msg = arg;
+	RESUME_t	*res;
+
+	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	umsg = prep_l3data_msg(CC_RESUME | INDICATION, pc->ces |
+		(pc->callref << 16), sizeof(RESUME_t), msg->len, NULL);
+	if (!umsg)
+		return;
+	res = (RESUME_t *)(umsg->data + mISDN_HEAD_SIZE);
+	res->CALL_ID =
+		find_and_copy_ie(msg->data, msg->len, IE_CALL_ID, 0, umsg);
+	res->FACILITY =
+		find_and_copy_ie(msg->data, msg->len, IE_FACILITY, 0, umsg);
+	res->ces = pc->ces;
+	newl3state(pc, 17);
+	if (mISDN_l3up(pc, umsg))
+		free_msg(umsg);
 }
 
 static struct stateentry datastatelist[] =
@@ -1013,6 +1146,8 @@ static struct stateentry datastatelist[] =
 		MT_STATUS, l3dss1_release_cmpl},
 	{SBIT(0),
 		MT_SETUP, l3dss1_setup},
+	{SBIT(6) | SBIT(7)  | SBIT(9) | SBIT(25),
+		MT_CALL_PROCEEDING, l3dss1_proceeding_i},
 	{SBIT(6) | SBIT(7)  | SBIT(9) | SBIT(25),
 		MT_ALERTING, l3dss1_alerting_i},
 	{SBIT(6) | SBIT(7)  | SBIT(9) | SBIT(25),
@@ -1036,6 +1171,14 @@ static struct stateentry datastatelist[] =
 		MT_USER_INFORMATION, l3dss1_userinfo},
 	{SBIT(7) | SBIT(8) | SBIT(9) | SBIT(19) | SBIT(25),
 		MT_RELEASE_COMPLETE, l3dss1_release_cmpl_i},
+	{SBIT(3) | SBIT(4) | SBIT(10),
+		MT_HOLD, l3dss1_hold},
+	{SBIT(3) | SBIT(4) | SBIT(10) | SBIT(12),
+		MT_RETRIEVE, l3dss1_retrieve},
+	{SBIT(10),
+		MT_SUSPEND, l3dss1_suspend},
+	{SBIT(0),
+		MT_RESUME, l3dss1_resume},
 };
 
 #define DATASLLEN \
@@ -1062,6 +1205,14 @@ create_child_proc(layer3_proc_t *pc, int mt, msg_t *msg, int state) {
 	send_proc(p3i, IMSG_L2_DATA, &l3m);
 	return(0);
 }                                                   
+
+static void
+l3dss1_proceeding_m(layer3_proc_t *pc, int pr, void *arg)
+{
+	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	L3DelTimer(&pc->timer1);
+	create_child_proc(pc, pr, arg, 9);
+}
 
 static void
 l3dss1_alerting_m(layer3_proc_t *pc, int pr, void *arg)
@@ -1140,9 +1291,8 @@ l3dss1_information_mx(layer3_proc_t *pc, int pr, void *arg)
 
 static struct stateentry mdatastatelist[] =
 {
-
-// TODO CALL_PROCEEDING
-
+	{SBIT(6) | SBIT(7) | SBIT(9) | SBIT(25),
+		MT_CALL_PROCEEDING, l3dss1_proceeding_m},
 	{SBIT(6) | SBIT(7) | SBIT(9) | SBIT(25),
 		MT_ALERTING, l3dss1_alerting_m},
 	{SBIT(6) | SBIT(7) | SBIT(9) | SBIT(25),
@@ -1463,6 +1613,76 @@ l3dss1_userinfo_req(layer3_proc_t *pc, int pr, void *arg)
 }
 
 static void
+l3dss1_information_req(layer3_proc_t *pc, int pr, void *arg)
+{
+	INFORMATION_t *info = arg;
+
+	if (info) {
+		MsgStart(pc, MT_INFORMATION);
+ 		if (info->COMPLETE)
+			*pc->op++ = IE_COMPLETE;
+		if (info->DISPLAY)
+			AddvarIE(pc, IE_DISPLAY, info->DISPLAY);
+		if (info->KEYPAD)
+			AddvarIE(pc, IE_KEYPAD, info->KEYPAD);
+		if (info->SIGNAL)
+			AddvarIE(pc, IE_SIGNAL, info->SIGNAL);
+		if (info->CALLED_PN)
+			AddvarIE(pc, IE_CALLED_PN, info->CALLED_PN);
+		SendMsg(pc, -1);
+	}
+}
+
+static void
+l3dss1_progress_req(layer3_proc_t *pc, int pr, void *arg)
+{
+	PROGRESS_t *prog = arg;
+
+	if (prog) {
+		MsgStart(pc, MT_INFORMATION);
+		if (prog->BEARER)
+			AddvarIE(pc, IE_BEARER, prog->BEARER);
+		if (prog->CAUSE)
+			AddvarIE(pc, IE_CAUSE, prog->CAUSE);
+		if (prog->FACILITY)
+			AddvarIE(pc, IE_FACILITY, prog->FACILITY);
+		if (prog->PROGRESS)
+			AddvarIE(pc, IE_PROGRESS, prog->PROGRESS);
+		else
+			return;
+		if (prog->DISPLAY)
+			AddvarIE(pc, IE_DISPLAY, prog->DISPLAY);
+		if (prog->HLC)
+			AddvarIE(pc, IE_HLC, prog->HLC);
+#warning ETSI 300286-1 only define USER_USER for USER_INFORMATION SETUP ALERTING PROGRESS CONNECT DISCONNECT RELEASE*
+		if (prog->USER_USER)
+			AddvarIE(pc, IE_USER_USER, prog->USER_USER);
+		SendMsg(pc, -1);
+	}
+}
+
+static void
+l3dss1_notify_req(layer3_proc_t *pc, int pr, void *arg)
+{
+	NOTIFY_t *noti = arg;
+
+	if (noti) {
+		MsgStart(pc, MT_INFORMATION);
+		if (noti->BEARER)
+			AddvarIE(pc, IE_BEARER, noti->BEARER);
+		if (noti->NOTIFY)
+			AddvarIE(pc, IE_NOTIFY, noti->NOTIFY);
+		else
+			return;
+		if (noti->DISPLAY)
+			AddvarIE(pc, IE_DISPLAY, noti->DISPLAY);
+		if (noti->REDIR_DN)
+			AddvarIE(pc, IE_REDIR_DN, noti->REDIR_DN);
+		SendMsg(pc, -1);
+	}
+}
+
+static void
 l3dss1_disconnect_req_out(layer3_proc_t *pc, int pr, void *arg)
 {
 	DISCONNECT_t	*disc = arg;
@@ -1540,6 +1760,19 @@ l3dss1_release_cmpl_req(layer3_proc_t *pc, int pr, void *arg)
 		l3dss1_message(pc, MT_RELEASE_COMPLETE);
 	}
 	send_proc(pc, IMSG_END_PROC_M, NULL);
+}
+
+static void
+l3dss1_t302(layer3_proc_t *pc, int pr, void *arg)
+{
+	{
+		int t = 0x302;
+
+		StopAllL3Timer(pc);
+		if_link(pc->l3->nst->manager, (ifunc_t)pc->l3->nst->l3_manager,
+			CC_TIMEOUT | INDICATION,pc->ces | (pc->callref << 16),
+			sizeof(int), &t, 0);
+	}
 }
 
 static void
@@ -1642,6 +1875,198 @@ l3dss1_t312(layer3_proc_t *pc, int pr, void *arg)
 	}
 }
 
+static void
+l3dss1_holdack_req(layer3_proc_t *pc, int pr, void *arg)
+{
+	HOLD_ACKNOWLEDGE_t *hack = arg;
+
+	if (pc->hold_state != HOLDAUX_HOLD_IND)
+		return;
+	pc->hold_state = HOLDAUX_HOLD; 
+	if (hack) {
+		MsgStart(pc, MT_HOLD_ACKNOWLEDGE);
+		if (hack->DISPLAY)
+			AddvarIE(pc, IE_DISPLAY, hack->DISPLAY);
+		SendMsg(pc, -1);
+	} else {
+		l3dss1_message(pc, MT_HOLD_ACKNOWLEDGE);
+	}
+}
+
+static void
+l3dss1_holdrej_req(layer3_proc_t *pc, int pr, void *arg)
+{
+	HOLD_REJECT_t *hrej = arg;
+
+	if (pc->hold_state != HOLDAUX_HOLD_IND)
+		return;
+	pc->hold_state = HOLDAUX_IDLE; 
+	MsgStart(pc, MT_HOLD_REJECT);
+	if (hrej) {
+		if (hrej->CAUSE)
+			AddvarIE(pc, IE_CAUSE, hrej->CAUSE);
+		else {
+			*pc->op++ = IE_CAUSE;
+			*pc->op++ = 2;
+			*pc->op++ = 0x80;
+			*pc->op++ = 0x80 | 0x47;
+		}
+		if (hrej->DISPLAY)
+			AddvarIE(pc, IE_DISPLAY, hrej->DISPLAY);
+	} else {
+		*pc->op++ = IE_CAUSE;
+		*pc->op++ = 2;
+		*pc->op++ = 0x80;
+		*pc->op++ = 0x80 | 0x47;
+	}
+	SendMsg(pc, -1);
+}
+
+static void
+l3dss1_retrack_req(layer3_proc_t *pc, int pr, void *arg)
+{
+	RETRIEVE_ACKNOWLEDGE_t *rack = arg;
+
+	if (pc->hold_state != HOLDAUX_RETR_IND)
+		return;
+	pc->hold_state = HOLDAUX_IDLE;
+	if (rack) {
+		MsgStart(pc, MT_RETRIEVE_ACKNOWLEDGE);
+		if (rack->CHANNEL_ID)
+			AddvarIE(pc, IE_CHANNEL_ID, rack->CHANNEL_ID);
+		if (rack->DISPLAY)
+			AddvarIE(pc, IE_DISPLAY, rack->DISPLAY);
+		SendMsg(pc, -1);
+	} else {
+		l3dss1_message(pc, MT_RETRIEVE_ACKNOWLEDGE);
+	}
+}
+
+static void
+l3dss1_retrrej_req(layer3_proc_t *pc, int pr, void *arg)
+{
+	RETRIEVE_REJECT_t *rrej = arg;
+
+	if (pc->hold_state != HOLDAUX_RETR_IND)
+		return;
+	pc->hold_state = HOLDAUX_HOLD; 
+	MsgStart(pc, MT_RETRIEVE_REJECT);
+	if (rrej) {
+		if (rrej->CAUSE)
+			AddvarIE(pc, IE_CAUSE, rrej->CAUSE);
+		else {
+			*pc->op++ = IE_CAUSE;
+			*pc->op++ = 2;
+			*pc->op++ = 0x80;
+			*pc->op++ = 0x80 | 0x47;
+		}
+		if (rrej->DISPLAY)
+			AddvarIE(pc, IE_DISPLAY, rrej->DISPLAY);
+	} else {
+		*pc->op++ = IE_CAUSE;
+		*pc->op++ = 2;
+		*pc->op++ = 0x80;
+		*pc->op++ = 0x80 | 0x47;
+	}
+	SendMsg(pc, -1);
+}
+
+static void
+l3dss1_suspack_req(layer3_proc_t *pc, int pr, void *arg)
+{
+	SUSPEND_ACKNOWLEDGE_t *sack = arg;
+
+	StopAllL3Timer(pc);
+	if (sack) {
+		MsgStart(pc, MT_SUSPEND_ACKNOWLEDGE);
+		if (sack->FACILITY)
+			AddvarIE(pc, IE_FACILITY, sack->FACILITY);
+		if (sack->DISPLAY)
+			AddvarIE(pc, IE_DISPLAY, sack->DISPLAY);
+		SendMsg(pc, 0);
+	} else {
+		l3dss1_message(pc, MT_SUSPEND_ACKNOWLEDGE);
+	}
+	newl3state(pc, 0);
+	send_proc(pc, IMSG_END_PROC_M, NULL);
+}
+
+static void
+l3dss1_susprej_req(layer3_proc_t *pc, int pr, void *arg)
+{
+	SUSPEND_REJECT_t *srej = arg;
+
+	MsgStart(pc, MT_SUSPEND_REJECT);
+	if (srej) {
+		if (srej->CAUSE)
+			AddvarIE(pc, IE_CAUSE, srej->CAUSE);
+		else {
+			*pc->op++ = IE_CAUSE;
+			*pc->op++ = 2;
+			*pc->op++ = 0x80;
+			*pc->op++ = 0x80 | 0x47;
+		}
+		if (srej->DISPLAY)
+			AddvarIE(pc, IE_DISPLAY, srej->DISPLAY);
+	} else {
+		*pc->op++ = IE_CAUSE;
+		*pc->op++ = 2;
+		*pc->op++ = 0x80;
+		*pc->op++ = 0x80 | 0x47;
+	}
+	SendMsg(pc, -1);
+	newl3state(pc, 10);
+}
+
+static void
+l3dss1_resack_req(layer3_proc_t *pc, int pr, void *arg)
+{
+	RESUME_ACKNOWLEDGE_t *rack = arg;
+
+	StopAllL3Timer(pc);
+	if (rack) {
+		MsgStart(pc, MT_RESUME_ACKNOWLEDGE);
+		if (rack->CHANNEL_ID)
+			AddvarIE(pc, IE_CHANNEL_ID, rack->CHANNEL_ID);
+		if (rack->FACILITY)
+			AddvarIE(pc, IE_FACILITY, rack->FACILITY);
+		if (rack->DISPLAY)
+			AddvarIE(pc, IE_DISPLAY, rack->DISPLAY);
+		SendMsg(pc, 0);
+	} else {
+		l3dss1_message(pc, MT_RESUME_ACKNOWLEDGE);
+	}
+	newl3state(pc, 10);
+}
+
+static void
+l3dss1_resrej_req(layer3_proc_t *pc, int pr, void *arg)
+{
+	RESUME_REJECT_t *rrej = arg;
+
+	MsgStart(pc, MT_RESUME_REJECT);
+	if (rrej) {
+		if (rrej->CAUSE)
+			AddvarIE(pc, IE_CAUSE, rrej->CAUSE);
+		else {
+			*pc->op++ = IE_CAUSE;
+			*pc->op++ = 2;
+			*pc->op++ = 0x80;
+			*pc->op++ = 0x80 | 0x47;
+		}
+		if (rrej->DISPLAY)
+			AddvarIE(pc, IE_DISPLAY, rrej->DISPLAY);
+	} else {
+		*pc->op++ = IE_CAUSE;
+		*pc->op++ = 2;
+		*pc->op++ = 0x80;
+		*pc->op++ = 0x80 | 0x47;
+	}
+	SendMsg(pc, -1);
+	newl3state(pc, 0);
+	send_proc(pc, IMSG_END_PROC_M, NULL);
+}
+
 /* *INDENT-OFF* */
 static struct stateentry downstatelist[] =
 {
@@ -1665,9 +2090,9 @@ static struct stateentry downstatelist[] =
 	 CC_SETUP_ACKNOWLEDGE | REQUEST, l3dss1_setup_ack_req},
 	{SBIT(1) | SBIT(2),
 	 CC_PROCEEDING | REQUEST, l3dss1_proceed_req},
-	{SBIT(1) | SBIT(2) | SBIT(3),
+	{SBIT(2) | SBIT(3),
 	 CC_ALERTING | REQUEST, l3dss1_alert_req},
-	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4),
+	{SBIT(2) | SBIT(3) | SBIT(4),
 	 CC_CONNECT | REQUEST, l3dss1_connect_req},
 	{SBIT(8),
 	 CC_CONNECT | RESPONSE, l3dss1_connect_res},
@@ -1675,19 +2100,56 @@ static struct stateentry downstatelist[] =
 	 CC_DISCONNECT | REQUEST, l3dss1_disconnect_req},
 	{SBIT(6) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(25),
 	 CC_DISCONNECT | REQUEST, l3dss1_disconnect_req_out},
-// TODO CC_RELEASE only in SBIT(11)
-	{SBIT(6) | SBIT(7) | SBIT(11) | SBIT(25),
-	 CC_RELEASE | REQUEST, l3dss1_release_req},
+	{SBIT(11)
+#warning bitte beachte folgendes:
+/*
+es ist nur erlaubt, im state 11 einen release zu schicken!
+dennoch verwende der stack den release scheinbar, um einen prozess
+zu releasen, wie es z.b. in l3dss1_disconnect_req_out geschieht.
+der process befindet sich zu diesem zeitpunk noch im state 7, 9 oder 25.
+wenn man den (Layer 4) state auf 11 ändern würde, braucht mann die folgende
+zeile nicht: (bitte nachdenken, ob dies korrekt ist)
+Nein glaube ich nicht. CC_RELEASE |= CC_RELEASE_CR muss aber mal ein paar Tests
+machen
+*/
+	| SBIT(12) | SBIT(7) | SBIT(9) | SBIT(25)
+	 ,CC_RELEASE | REQUEST, l3dss1_release_req},
+#warning noch ein bug: wenn ein CC_DISCONNECT gesendet wird (state 7 = klingeling), dann bekommt man nur einen RELEASE_CR, aber keinen vorherigen RELEASE 
+/* muss ich auch testen, keine Zeit */
 	{ALL_STATES,
 	 CC_FACILITY | REQUEST, l3dss1_facility_req},
 	{SBIT(4) | SBIT(7) | SBIT(8) | SBIT(10),
 	 CC_USER_INFORMATION | REQUEST, l3dss1_userinfo_req},
+	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(10) | SBIT(11) | SBIT(12),
+	 CC_INFORMATION | REQUEST, l3dss1_information_req},
+	{SBIT(2) | SBIT(3) | SBIT(4),
+	 CC_PROGRESS | REQUEST, l3dss1_progress_req},
+	{SBIT(10) | SBIT(15),
+	 CC_NOTIFY | REQUEST, l3dss1_notify_req},
+	{SBIT(2),
+	 CC_T302, l3dss1_t302},
 	{SBIT(6),
 	 CC_T303, l3dss1_t303},
 	{SBIT(19),
 	 CC_T308, l3dss1_t308},
 	{ALL_STATES,
 	 CC_T312, l3dss1_t312},
+	{SBIT(3) | SBIT(4) | SBIT(10) | SBIT(12),
+	 CC_HOLD_ACKNOWLEDGE | REQUEST, l3dss1_holdack_req},
+	{SBIT(3) | SBIT(4) | SBIT(10) | SBIT(12),
+	 CC_HOLD_REJECT | REQUEST, l3dss1_holdrej_req},
+	{SBIT(3) | SBIT(4) | SBIT(10) | SBIT(12),
+	 CC_RETRIEVE_ACKNOWLEDGE | REQUEST, l3dss1_retrack_req},
+	{SBIT(3) | SBIT(4) | SBIT(10) | SBIT(12),
+	 CC_RETRIEVE_REJECT | REQUEST, l3dss1_retrrej_req},
+	{SBIT(15),
+	 CC_SUSPEND_ACKNOWLEDGE | REQUEST, l3dss1_suspack_req},
+	{SBIT(15),
+	 CC_SUSPEND_REJECT | REQUEST, l3dss1_susprej_req},
+	{SBIT(17),
+	 CC_RESUME_ACKNOWLEDGE | REQUEST, l3dss1_resack_req},
+	{SBIT(17),
+	 CC_RESUME_REJECT | REQUEST, l3dss1_resrej_req},
 };
 
 #define DOWNSLLEN \
@@ -1718,7 +2180,8 @@ imsg_intrelease(layer3_proc_t *master, layer3_proc_t *child)
 		case 25:
 			if (master->child ||
 				test_bit(FLG_L3P_TIMER312, &master->Flags)) {
-				/* TODO: save cause */
+#warning TODO: save cause
+#warning bedenke auch, dass vielleicht overlap sending mit information-messages praktisch wäre (später PTP)
 			} else {
 				send_proc(master, IMSG_END_PROC, NULL);
 			}
@@ -1964,16 +2427,16 @@ dl_data_mux(layer3_t *l3, mISDN_head_t *hh, msg_t *msg)
 	proc = find_proc(l3->proc, hh->dinfo, cr);
 	dprint(DBGM_L3, "%s: proc(%p)\n", __FUNCTION__, proc);
 	if (!proc) {
-		if (l3m.mt == MT_SETUP) {
-			/* Setup creates a new transaction process */
+		if (l3m.mt == MT_SETUP || l3m.mt == MT_RESUME) {
+			/* Setup/Resume creates a new transaction process */
 			if (msg->data[2] & 0x80) {
-				/* Setup with wrong CREF flag */
+				/* Setup/Resume with wrong CREF flag */
 				if (l3->debug & L3_DEB_STATE)
 					l3_debug(l3, "dss1 wrong CRef flag");
 				free_msg(msg);
 				return(0);
 			}
-			dprint(DBGM_L3, "%s: MT_SETUP\n", __FUNCTION__);
+			dprint(DBGM_L3, "%s: %s\n", __FUNCTION__, (l3m.mt==MT_SETUP)?"MT_SETUP":"MT_RESUME");
 			if (!(proc = create_proc(l3, hh->dinfo, cr, NULL))) {
 				/* May be to answer with RELEASE_COMPLETE and
 				 * CAUSE 0x2f "Resource unavailable", but this
@@ -2046,7 +2509,6 @@ manager_l3(net_stack_t *nst, msg_t *msg)
 				nst->layer3->next_cr = 1;
 			proc = create_proc(nst->layer3, hh->dinfo & 0xffff,
 				nst->layer3->next_cr | 0x80, NULL);
-			// TODO Errorhandling
 			dprint(DBGM_L3, "%s: proc(%p)\n", __FUNCTION__, proc);
 			APPEND_TO_LIST(proc, nst->layer3->proc);
 			l4id = proc->ces | (proc->callref << 16);
@@ -2164,6 +2626,9 @@ l3_msg(layer3_t *l3, u_int pr, int dinfo, void *arg)
 			}
 			break;
 		case (DL_RELEASE | INDICATION):
+#warning du musst alle processe releasen CC_RELEASE!!! dies geschieht z.b. wenn man das telefon vom s0-bus abnimmt und der layer-2 dadurch zusammen bricht.
+#warning geschieht dies auch im TE-mode?
+#warning TODO DL_RELEASE | INDICATION handling; inclusiv special state 10 (T309)
 			if (l3->l2_state == ST_L3_LC_ESTAB) {
 				l3->l2_state = ST_L3_LC_REL;
 			}

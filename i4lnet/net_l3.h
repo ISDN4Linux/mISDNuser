@@ -1,4 +1,4 @@
-/* $Id: net_l3.h,v 1.0 2003/08/27 07:35:32 kkeil Exp $
+/* $Id: net_l3.h,v 1.1 2004/02/17 20:30:07 keil Exp $
  *
  * Layer 3 defines
  *
@@ -30,12 +30,13 @@ struct _layer3_proc {
 	int		ces;
 	int		selces;
 	int		state;
-	int		Flags;
+	u_long		Flags;
 	L3Timer_t	timer1;
 	L3Timer_t	timer2;
 	int		bc;
 	int             err;
 	int		cause;
+	int		hold_state;
 	u_char		obuf[MAX_DFRAME_LEN];
 	u_char		*op;
 };
@@ -105,6 +106,7 @@ typedef struct _CONNECT {
 	u_char *LLC;
 	u_char *HLC;
 	u_char *USER_USER;
+	int ces;
 } CONNECT_t;
 
 typedef struct _CONNECT_ACKNOWLEDGE {
@@ -134,6 +136,7 @@ typedef struct _NOTIFY {
 	u_char *BEARER;
 	u_char *NOTIFY;
 	u_char *DISPLAY;
+	u_char *REDIR_DN;
 } NOTIFY_t;
 
 typedef struct _PROGRESS {
@@ -165,6 +168,7 @@ typedef struct _RELEASE_COMPLETE {
 typedef struct _RESUME {
 	u_char *CALL_ID;
 	u_char *FACILITY;
+	int ces;
 } RESUME_t;
 
 typedef struct _RESUME_ACKNOWLEDGE {
@@ -196,6 +200,7 @@ typedef struct _SETUP {
 	u_char *LLC;
 	u_char *HLC;
 	u_char *USER_USER;
+	int ces;
 } SETUP_t;
 
 typedef struct _SETUP_ACKNOWLEDGE {
@@ -253,5 +258,32 @@ typedef struct _FACILITY {
 	u_char *DISPLAY;
 } FACILITY_t;
 
+typedef struct _HOLD {
+	u_char *DISPLAY;
+} HOLD_t;
+
+typedef struct _HOLD_ACKNOWLEDGE {
+	u_char *CHANNEL_ID;
+	u_char *DISPLAY;
+} HOLD_ACKNOWLEDGE_t;
+
+typedef struct _HOLD_REJECT {
+	u_char *CAUSE;
+	u_char *DISPLAY;
+} HOLD_REJECT_t;
+
+typedef struct _RETRIEVE {
+	u_char *CHANNEL_ID;
+} RETRIEVE_t;
+
+typedef struct _RETRIEVE_ACKNOWLEDGE {
+	u_char *CHANNEL_ID;
+	u_char *DISPLAY;
+} RETRIEVE_ACKNOWLEDGE_t;
+
+typedef struct _RETRIEVE_REJECT {
+	u_char *CAUSE;
+	u_char *DISPLAY;
+} RETRIEVE_REJECT_t;
 
 #endif

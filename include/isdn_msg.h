@@ -1,6 +1,10 @@
 #ifndef ISDN_MSG_H
 #define ISDN_MSG_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <pthread.h>
 #include <semaphore.h>
 
@@ -145,14 +149,14 @@ static __inline__ unsigned char *msg_push(msg_t *msg, unsigned int len)
 static __inline__ char *__msg_pull(msg_t *msg, unsigned int len)
 {
 	msg->len-=len;
-	return 	msg->data+=len;
+	return 	(char *)msg->data+=len;
 }
 
 static __inline__ unsigned char * msg_pull(msg_t *msg, unsigned int len)
-{	
-	if (len > msg->len)
+{
+	if (len > (unsigned int)msg->len)
 		return NULL;
-	return __msg_pull(msg,len);
+	return (unsigned char *)__msg_pull(msg,len);
 }
 
 static __inline__ int msg_headroom(msg_t *msg)
@@ -179,9 +183,13 @@ static __inline__ void __msg_trim(msg_t *msg, unsigned int len)
 
 static __inline__ void msg_trim(msg_t *msg, unsigned int len)
 {
-	if (msg->len > len) {
+	if ((unsigned int)msg->len > len) {
 		__msg_trim(msg, len);
 	}
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

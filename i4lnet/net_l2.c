@@ -1,4 +1,4 @@
-/* $Id: net_l2.c,v 1.0 2003/08/27 07:35:32 kkeil Exp $
+/* $Id: net_l2.c,v 1.1 2004/02/17 20:30:07 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,14 +13,11 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l2_revision = "$Revision: 1.0 $";
+const char *l2_revision = "$Revision: 1.1 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
 static int debug = 0xff;
-
-static
-struct Fsm l2fsm = {NULL, 0, 0, NULL, NULL};
 
 enum {
 	ST_L2_1,
@@ -1722,7 +1719,7 @@ ph_data_mux(net_stack_t *nst, iframe_t *frm, msg_t *msg)
 
 	datap = msg_pull(msg, IFRAME_HEAD_SIZE);
 	if (msg->len <= 2) {
-		dprint(DBGM_L2, "%s: msg (%d)too shoort\n", __FUNCTION__,
+		dprint(DBGM_L2, "%s: msg (%d) too short\n", __FUNCTION__,
 			msg->len);
 		msg_push(msg, IFRAME_HEAD_SIZE);
 		return(ret);
@@ -2023,7 +2020,7 @@ new_dl2(net_stack_t *nst, int tei) {
 	msg_queue_init(&nl2->i_queue);
 	msg_queue_init(&nl2->ui_queue);
 	InitWin(nl2);
-	nl2->l2m.fsm = &l2fsm;
+	nl2->l2m.fsm = nst->l2fsm;
 	nl2->l2m.state = ST_L2_4;
 	nl2->l2m.debug = debug;
 	nl2->l2m.nst = nl2->nst;
@@ -2040,13 +2037,18 @@ int Isdnl2Init(net_stack_t *nst)
 {
 	layer2_t	*l2;
 	msg_t		*msg;
+	struct		Fsm *l2f;
 
-	l2fsm.state_count = L2_STATE_COUNT;
-	l2fsm.event_count = L2_EVENT_COUNT;
-	l2fsm.strEvent = strL2Event;
-	l2fsm.strState = strL2State;
-	FsmNew(&l2fsm, L2FnList, L2_FN_COUNT);
-	TEIInit();
+	if (!(l2f = malloc(sizeof(struct Fsm))))
+		return(-ENOMEM);
+	nst->l2fsm = l2f;
+	memset(l2f, 0, sizeof(struct Fsm));
+	l2f->state_count = L2_STATE_COUNT;
+	l2f->event_count = L2_EVENT_COUNT;
+	l2f->strEvent = strL2Event;
+	l2f->strState = strL2State;
+	FsmNew(l2f, L2FnList, L2_FN_COUNT);
+	TEIInit(nst);
 	nst->l1_l2 = l2muxer;
 	nst->l3_l2 = l2from_up;
 	l2 = new_dl2(nst, 127);
@@ -2067,6 +2069,7 @@ void cleanup_Isdnl2(net_stack_t *nst)
 		while(nst->layer2)
 			release_l2(nst->layer2);
 	}
-	TEIFree();
-	FsmFree(&l2fsm);
+	TEIFree(nst);
+	FsmFree(nst->l2fsm);
+	free(nst->l2fsm);
 }

@@ -32,11 +32,11 @@ init_ibuffer(int size)
 {
 	ibuffer_t	*ib;
 
-	ib = malloc(sizeof(ibuffer_t));
+	ib = (ibuffer_t *)malloc(sizeof(ibuffer_t));
 	if (!ib)
 		return(NULL);
 	memset(ib, 0, sizeof(ibuffer_t));
-	ib->buffer = malloc(size);
+	ib->buffer = (unsigned char *)malloc(size);
 	if (!ib->buffer) {
 		free(ib);
 		return(NULL);
@@ -80,7 +80,7 @@ ibuf_freecount(ibuffer_t *ib)
 static inline void
 ibuf_memcpy_w(ibuffer_t *ib, void *data, int len)
 {
-	unsigned char *p = data;
+	unsigned char *p = (unsigned char *)data;
 	int	frag;
 
 	frag = ib->size - ib->widx;
@@ -99,7 +99,7 @@ ibuf_memcpy_w(ibuffer_t *ib, void *data, int len)
 static inline void
 ibuf_memcpy_r(void *data, ibuffer_t *ib, int len)
 {
-	unsigned char *p = data;
+	unsigned char *p = (unsigned char *)data;
 	int	frag;
 
 	frag = ib->size - ib->ridx;

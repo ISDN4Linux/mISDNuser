@@ -1,4 +1,4 @@
-/* $Id: l3dss1.h,v 1.0 2003/08/27 07:35:32 kkeil Exp $
+/* $Id: l3dss1.h,v 1.1 2004/02/17 20:30:08 keil Exp $
  *
  *  DSS1 (Euro) D-channel protocol defines
  *
@@ -70,6 +70,22 @@
 #define MT_NOTIFY		0x6e
 #define MT_STATUS		0x7d
 #define MT_STATUS_ENQUIRY	0x75
+#define MT_HOLD			0x24
+#define MT_HOLD_ACKNOWLEDGE	0x28
+#define MT_HOLD_REJECT		0x30
+#define MT_RETRIEVE		0x31
+#define MT_RETRIEVE_ACKNOWLEDGE	0x33
+#define MT_RETRIEVE_REJECT	0x37
+
+#warning FIXME if mISDN.h is uptodate
+#ifndef CC_HOLD
+#define CC_HOLD                 0x032400
+#define CC_HOLD_ACKNOWLEDGE     0x032800
+#define CC_HOLD_REJECT          0x033000
+#define CC_RETRIEVE             0x033100
+#define CC_RETRIEVE_ACKNOWLEDGE 0x033300
+#define CC_RETRIEVE_REJECT      0x033700
+#endif
 
 #define IE_SEGMENT	0x00
 #define IE_BEARER	0x04
@@ -100,6 +116,7 @@
 #define IE_CALLED_PN	0x70
 #define IE_CALLED_SUB	0x71
 #define IE_REDIR_NR	0x74
+#define IE_REDIR_DN	0x76
 #define IE_TRANS_SEL	0x78
 #define IE_RESTART_IND	0x79
 #define IE_LLC		0x7c
@@ -151,6 +168,13 @@
 #define NO_CAUSE		254
 
 #define PROGRESS_TONE		8
+
+#define HOLDAUX_IDLE		0
+#define HOLDAUX_HOLD_REQ	1
+#define HOLDAUX_HOLD		2
+#define HOLDAUX_RETR_REQ	3
+#define HOLDAUX_HOLD_IND	4
+#define HOLDAUX_RETR_IND	5
 
 #else /* only l3dss1_process */
 
