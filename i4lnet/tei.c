@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.2 2004/07/04 14:08:14 jolly Exp $
+/* $Id: tei.c,v 1.3 2004/07/08 00:46:41 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 // #include "debug.h"
 // #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.2 $";
+const char *tei_revision = "$Revision: 1.3 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -346,7 +346,7 @@ tei_mux(net_stack_t *nst, msg_t *msg)
 			hh->prim);
 		return(-EINVAL);
 	}
-	msg_pull(msg, mISDN_HEAD_SIZE);
+	msg_pull(msg, mISDN_HEADER_LEN);
 	if (msg->len < 8) {
 		wprint("short tei mgr frame %d/8\n", msg->len);
 		return(-EINVAL);

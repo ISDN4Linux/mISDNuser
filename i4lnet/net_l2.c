@@ -1,4 +1,4 @@
-/* $Id: net_l2.c,v 1.2 2004/07/04 14:08:14 jolly Exp $
+/* $Id: net_l2.c,v 1.3 2004/07/08 00:46:41 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l2_revision = "$Revision: 1.2 $";
+const char *l2_revision = "$Revision: 1.3 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -447,14 +447,14 @@ send_uframe(layer2_t *l2, msg_t *msg, u_char cmd, u_char cr)
 	tmp[i++] = cmd;
 	if (msg)
 		msg_trim(msg, 0);
-	else if ((msg = alloc_msg(i + mISDN_HEAD_SIZE)))
-		msg_reserve(msg, mISDN_HEAD_SIZE);
+	else if ((msg = alloc_msg(i + mISDN_HEADER_LEN)))
+		msg_reserve(msg, mISDN_HEADER_LEN);
 	else {
 		dprint(DBGM_L2,"%s: can't alloc msguff\n", __FUNCTION__);
 		return;
 	}
 	memcpy(msg_put(msg, i), tmp, i);
-	msg_push(msg, mISDN_HEAD_SIZE);
+	msg_push(msg, mISDN_HEADER_LEN);
 	enqueue_super(l2, msg);
 }
 
@@ -593,7 +593,7 @@ l2_mdl_assign(struct FsmInst *fi, int event, void *arg)
 
 	FsmChangeState(fi, ST_L2_3);
 	msg_trim(msg, 0);
-	hh = (mISDN_head_t *)msg_put(msg, mISDN_HEAD_SIZE);
+	hh = (mISDN_head_t *)msg_put(msg, mISDN_HEADER_LEN);
 	hh->prim = MDL_ASSIGN | INDICATION;
 	hh->dinfo = 0;
 	if (l2_tei(l2->tm, msg))
@@ -635,9 +635,9 @@ tx_ui(layer2_t *l2)
 		header[1] = 0xff; /* tei 127 */
 	header[i++] = UI;
 	while ((msg = msg_dequeue(&l2->ui_queue))) {
-		msg_pull(msg, mISDN_HEAD_SIZE);
+		msg_pull(msg, mISDN_HEADER_LEN);
 		memcpy(msg_push(msg, i), header, i);
-		msg_push(msg, mISDN_HEAD_SIZE);
+		msg_push(msg, mISDN_HEADER_LEN);
 		enqueue_ui(l2, msg);
 	}
 }
@@ -662,7 +662,7 @@ l2_got_ui(struct FsmInst *fi, int event, void *arg)
 /*
  *		in states 1-3 for broadcast
  */
-	msg_push(msg, mISDN_HEAD_SIZE);
+	msg_push(msg, mISDN_HEADER_LEN);
 	if (l2up(l2, DL_UNITDATA | INDICATION, CES(l2), msg))
 		free_msg(msg);
 }
@@ -710,7 +710,7 @@ l2_release(struct FsmInst *fi, int event, void *arg)
 	layer2_t *l2 = fi->userdata;
 	msg_t *msg = arg;
 
-	msg_trim(msg, mISDN_HEAD_SIZE);
+	msg_trim(msg, mISDN_HEADER_LEN);
 	if (l2up(l2, DL_RELEASE | CONFIRM, CES(l2), msg))
 		free_msg(msg);
 }
@@ -758,7 +758,7 @@ l2_start_multi(struct FsmInst *fi, int event, void *arg)
 	FsmChangeState(fi, ST_L2_7);
 	FsmAddTimer(&l2->t203, l2->T203, EV_L2_T203, NULL, 3);
 	msg_trim(msg, 0);
-	msg_push(msg, mISDN_HEAD_SIZE);
+	msg_push(msg, mISDN_HEADER_LEN);
 	if (l2up(l2, DL_ESTABLISH | INDICATION, CES(l2), msg))
 		free_msg(msg);
 }
@@ -935,13 +935,13 @@ enquiry_cr(layer2_t *l2, u_char typ, u_char cr, u_char pf)
 		tmp[i++] = (l2->vr << 1) | (pf ? 1 : 0);
 	} else
 		tmp[i++] = (l2->vr << 5) | typ | (pf ? 0x10 : 0);
-	if (!(msg = alloc_msg(i + mISDN_HEAD_SIZE))) {
+	if (!(msg = alloc_msg(i + mISDN_HEADER_LEN))) {
 		dprint(DBGM_L2, "isdnl2 can't alloc sbbuff for enquiry_cr\n");
 		return;
 	} else
-		msg_reserve(msg, mISDN_HEAD_SIZE);
+		msg_reserve(msg, mISDN_HEADER_LEN);
 	memcpy(msg_put(msg, i), tmp, i);
-	msg_push(msg, mISDN_HEAD_SIZE);
+	msg_push(msg, mISDN_HEADER_LEN);
 	enqueue_super(l2, msg);
 }
 
@@ -1134,7 +1134,7 @@ l2_got_iframe(struct FsmInst *fi, int event, void *arg)
 		else
 			test_and_set_bit(FLG_ACK_PEND, &l2->flag);
 		msg_pull(msg, l2headersize(l2, 0));
-		msg_push(msg, mISDN_HEAD_SIZE);
+		msg_push(msg, mISDN_HEADER_LEN);
 		if (l2up(l2, DL_DATA | INDICATION, CES(l2), msg))
 			free_msg(msg);
 	} else {
@@ -1325,25 +1325,25 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 	}
 
 	p1 = msg_headroom(msg);
-	msg_pull(msg, mISDN_HEAD_SIZE);
+	msg_pull(msg, mISDN_HEADER_LEN);
 	if (p1 >= i)
 		memcpy(msg_push(msg, i), header, i);
 	else {
 		dprint(DBGM_L2,
 		"isdnl2 pull_iqueue msg header(%d/%d) too short\n", i, p1);
 		omsg = msg;
-		msg = alloc_msg(omsg->len + i + mISDN_HEAD_SIZE);
+		msg = alloc_msg(omsg->len + i + mISDN_HEADER_LEN);
 		if (!msg) {
 			free_msg(omsg);
 			dprint(DBGM_L2,"%s: no msg mem\n", __FUNCTION__);
 			return;
 		}
-		msg_reserve(msg, mISDN_HEAD_SIZE);
+		msg_reserve(msg, mISDN_HEADER_LEN);
 		memcpy(msg_put(msg, i), header, i);
 		memcpy(msg_put(msg, omsg->len), omsg->data, omsg->len);
 		free_msg(omsg);
 	}
-	msg_push(msg, mISDN_HEAD_SIZE);
+	msg_push(msg, mISDN_HEADER_LEN);
 	l2down(l2, PH_DATA_REQ, DINFO_SKB, msg);
 	test_and_clear_bit(FLG_ACK_PEND, &l2->flag);
 	if (!test_and_set_bit(FLG_T200_RUN, &l2->flag)) {
@@ -1443,7 +1443,7 @@ l2_st3_tei_remove(struct FsmInst *fi, int event, void *arg)
 
 	msg_queue_purge(&l2->ui_queue);
 	l2->tei = -1;
-	msg_trim(msg, mISDN_HEAD_SIZE);
+	msg_trim(msg, mISDN_HEADER_LEN);
 	if (l2up(l2, DL_RELEASE | INDICATION, CES(l2), msg))
 		free_msg(msg);
 	FsmChangeState(fi, ST_L2_1);
@@ -1717,18 +1717,18 @@ ph_data_mux(net_stack_t *nst, iframe_t *frm, msg_t *msg)
 	mISDN_head_t	*hh;
 	int		c = 0;
 
-	datap = msg_pull(msg, IFRAME_HEAD_SIZE);
+	datap = msg_pull(msg, mISDN_HEADER_LEN);
 	if (msg->len <= 2) {
 		dprint(DBGM_L2, "%s: msg (%d) too short\n", __FUNCTION__,
 			msg->len);
-		msg_push(msg, IFRAME_HEAD_SIZE);
+		msg_push(msg, mISDN_HEADER_LEN);
 		return(ret);
 	}
 	psapi = *datap++;
 	ptei = *datap++;
 	if ((psapi & 1) || !(ptei & 1)) {
 		dprint(DBGM_L2, "l2 D-channel frame wrong EA0/EA1\n");
-		msg_push(msg, IFRAME_HEAD_SIZE);
+		msg_push(msg, mISDN_HEADER_LEN);
 		return(ret);
 	}
 	psapi >>= 2;
@@ -1736,7 +1736,7 @@ ph_data_mux(net_stack_t *nst, iframe_t *frm, msg_t *msg)
 	dprint(DBGM_L2, "%s: sapi(%d) tei(%d)\n", __FUNCTION__, psapi, ptei);
 	if (ptei == GROUP_TEI) {
 		if (psapi == TEI_SAPI) {
-			hh = (mISDN_head_t *)msg_push(msg, mISDN_HEAD_SIZE);
+			hh = (mISDN_head_t *)msg_push(msg, mISDN_HEADER_LEN);
 			hh->prim = MDL_UNITDATA | INDICATION;
 			return(tei_mux(nst, msg));
 		} else {

@@ -77,8 +77,8 @@ free_tdevice(tenovisdev_t *dev)
 	pthread_mutex_unlock(&dev->mutex);
 	ret = pthread_mutex_destroy(&dev->mutex);
 	if (ret)
-		fprintf(stderr, __FUNCTION__ "mutex destroy returns %d\n",
-			ret);
+		fprintf(stderr, "%s: mutex destroy returns %d\n",
+			__FUNCTION__, ret);
 	ret = mISDN_close(dev->fid);
 	free(dev);
 	return(ret);

@@ -80,7 +80,7 @@ stack2manager(void *dat, void *arg) {
 		RELEASE_COMPLETE_t	*rc;
 		unsigned char		cause[4];
 
-		setup = (SETUP_t*)(msg->data + mISDN_HEAD_SIZE);
+		setup = (SETUP_t*)(msg->data + mISDN_HEADER_LEN);
 		pthread_mutex_lock(&mgr->bc[0].lock);
 		if (mgr->bc[0].cstate == BC_CSTATE_NULL) {
 			mgr->bc[0].cstate = BC_CSTATE_ICALL;
@@ -108,7 +108,7 @@ stack2manager(void *dat, void *arg) {
 			cause[2] = 0x80 | CAUSE_NO_CHANNEL;
 		prep_l3data_msg(CC_RELEASE_COMPLETE | REQUEST, hh->dinfo,
 			sizeof(RELEASE_COMPLETE_t), 3, msg);
-		rc = (RELEASE_COMPLETE_t *)(msg->data + mISDN_HEAD_SIZE);
+		rc = (RELEASE_COMPLETE_t *)(msg->data + mISDN_HEADER_LEN);
 		rc->CAUSE = msg_put(msg, 3);
 		memcpy(rc->CAUSE, &cause, 3);
 		if (manager2stack(mgr->nst, msg))

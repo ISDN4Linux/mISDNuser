@@ -12,16 +12,15 @@ typedef unsigned short u16;
 
 #include <sys/types.h>
 #include <stdio.h>
-#include <linux/mISDNif.h>
+#include <mISDNif.h>
 
 #define mISDN_INBUFFER_SIZE	0x20000
-#define mISDN_HEADER_LEN	16
 
 typedef struct _iframe {
-	u_int   addr;
-	u_int   prim;
-	int     dinfo;
-	int     len;
+	u_int	addr __attribute__((packed));
+	u_int	prim __attribute__((packed));
+	int	dinfo __attribute__((packed));
+	int	len __attribute__((packed));
 	union {
 		u_char  b[4];
 		void    *p;

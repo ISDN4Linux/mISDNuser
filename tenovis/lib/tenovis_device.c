@@ -27,8 +27,8 @@ DL3open(void)
 		return(fid);
 	dev = get_tdevice(fid);
 	if (dev) {
-		fprintf(stderr, __FUNCTION__ " device %d (%p) has allready fid(%d)\n",
-			dev->fid, dev, fid);
+		fprintf(stderr, "%s: device %d (%p) has allready fid(%d)\n",
+			__FUNCTION__, dev->fid, dev, fid);
 		close(fid);
 		errno = EBUSY;
 		return(-1); 
@@ -143,9 +143,9 @@ extern	size_t	DL3read(int DL3fd, void *buf, size_t count)
 	}
 	if (!count)
 		return(0);
-	if (count > dev->size - IFRAME_HEAD_SIZE)
-		count = dev->size - IFRAME_HEAD_SIZE;
-	ret = mISDN_read(dev->fid, dev->buf.p, count + IFRAME_HEAD_SIZE,
+	if (count > dev->size - mISDN_HEADER_LEN)
+		count = dev->size - mISDN_HEADER_LEN;
+	ret = mISDN_read(dev->fid, dev->buf.p, count + mISDN_HEADER_LEN,
 		TIMEOUT_10SEC);
 #ifdef PRINTDEBUG
 	fprintf(stdout, __FUNCTION__": mISDN_read ret(%d) adr(%x) pr(%x) di(%x) l(%d)\n",

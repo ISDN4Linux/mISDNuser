@@ -270,20 +270,15 @@ handle_timer(net_stack_t *nst, int id)
 int
 write_dmsg(net_stack_t *nst, msg_t *msg)
 {
-	iframe_t	*frm;
 	mISDN_head_t	*hh;
 
 	hh = (mISDN_head_t *)msg->data;
 	dprint(DBGM_NET, "%s: msg(%p) len(%d) pr(%x) di(%x)\n", __FUNCTION__,
 		msg, msg->len, hh->prim, hh->dinfo);
-	msg_pull(msg, mISDN_HEAD_SIZE);
-	frm = (iframe_t *)msg_push(msg, IFRAME_HEAD_SIZE);
-	frm->prim = hh->prim;
-	frm->dinfo = hh->dinfo;
-	frm->addr = nst->l2_id | IF_DOWN;
-	frm->len = msg->len - IFRAME_HEAD_SIZE;
-	if (frm->prim == PH_DATA_REQ) {
-		frm->dinfo = (int)msg;
+	hh->addr = nst->l2_id | IF_DOWN;
+	hh->len = msg->len - mISDN_HEADER_LEN;
+	if (hh->prim == PH_DATA_REQ) {
+		hh->dinfo = (int)msg;
 		if (nst->phd_down_msg) {
 			msg_queue_tail(&nst->down_queue, msg);
 			return(0);
@@ -361,12 +356,7 @@ do_net_read(net_stack_t *nst)
 static int
 b_message(net_stack_t *nst, int ch, iframe_t *frm, msg_t *msg)
 {
-	mISDN_head_t	*hh;
-
-	msg_pull(msg, IFRAME_HEAD_SIZE);
-	hh = (mISDN_head_t *)msg_push(msg, mISDN_HEAD_SIZE);
-	hh->prim = frm->prim;
-	hh->dinfo = nst->bcid[ch];
+	frm->dinfo = nst->bcid[ch];
 	if (nst->l3_manager)
 		return(nst->l3_manager(nst->manager, msg));
 	return(-EINVAL);
@@ -431,7 +421,7 @@ setup_bchannel(net_stack_t *nst, mISDN_head_t *hh, msg_t *msg) {
 	}
 	ch = hh->dinfo -1;
 	dprint(DBGM_NET,"%s:ch%d\n", __FUNCTION__, hh->dinfo);
-	msg_pull(msg, mISDN_HEAD_SIZE);
+	msg_pull(msg, mISDN_HEADER_LEN);
 	id = (int *)msg->data;
 	nst->bcid[ch] = *id;
 	msg_pull(msg, sizeof(int));
@@ -518,20 +508,15 @@ cleanup_bc(net_stack_t *nst, mISDN_head_t *hh, msg_t *msg)
 static int
 l1_request(net_stack_t *nst, mISDN_head_t *hh, msg_t *msg)
 {
-	iframe_t	*frm;
-
 	hh = (mISDN_head_t *)msg->data;
 	dprint(DBGM_NET, "%s: msg(%p) len(%d) pr(%x) di(%x)\n", __FUNCTION__,
 		msg, msg->len, hh->prim, hh->dinfo);
-	msg_pull(msg, mISDN_HEAD_SIZE);
-	frm = (iframe_t *)msg_push(msg, IFRAME_HEAD_SIZE);
-	frm->prim = hh->prim;
-	frm->addr = hh->dinfo;
-	if (frm->prim == PH_DATA_REQ)
-		frm->dinfo = (int)msg;
+	hh->addr = hh->dinfo;
+	if (hh->prim == PH_DATA_REQ)
+		hh->dinfo = (int)msg;
 	else
-		frm->dinfo = 0;
-	frm->len = msg->len - IFRAME_HEAD_SIZE;
+		hh->dinfo = 0;
+	hh->len = msg->len - mISDN_HEADER_LEN;
 	mISDN_write(nst->device, msg->data, msg->len, -1);
 	free_msg(msg);
 	return(0);
@@ -555,7 +540,7 @@ do_writemsg(net_stack_t *nst, msg_t *msg)
 	} else if (hh->prim == (BC_CLEANUP | REQUEST)) {
 		ret = cleanup_bc(nst, hh, msg);
 	} else if (hh->prim == (CC_NEW_CR | INDICATION)) {
-		msg_pull(msg, mISDN_HEAD_SIZE);
+		msg_pull(msg, mISDN_HEADER_LEN);
 		if (hh->dinfo == nst->bcid[0]) {
 			nst->bcid[0] = *((int *)msg->data);
 			free_msg(msg);
