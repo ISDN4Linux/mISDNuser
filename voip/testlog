@@ -1,0 +1,3 @@
+debug_init: debug_mask = 0
+debug_init: debug_mask = 0
+debug_close: debug channel now closed

@@ -1,0 +1,7 @@
+# 
+# for each channel one line with a value:
+#	0 don't record channel
+#	1 record channel
+#
+1
+0
