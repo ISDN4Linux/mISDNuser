@@ -1,4 +1,4 @@
-/* $Id: net_l2.c,v 0.9 2003/08/27 07:33:03 kkeil Exp $
+/* $Id: net_l2.c,v 1.0 2003/08/27 07:35:32 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.9 $";
+const char *l2_revision = "$Revision: 1.0 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 

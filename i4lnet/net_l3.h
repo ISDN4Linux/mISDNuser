@@ -1,4 +1,4 @@
-/* $Id: net_l3.h,v 0.9 2003/08/27 07:33:03 kkeil Exp $
+/* $Id: net_l3.h,v 1.0 2003/08/27 07:35:32 kkeil Exp $
  *
  * Layer 3 defines
  *

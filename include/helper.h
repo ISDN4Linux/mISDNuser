@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 0.9 2003/08/27 07:33:02 kkeil Exp $
+/* $Id: helper.h,v 1.0 2003/08/27 07:35:32 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
