@@ -3,7 +3,7 @@
 
 /* API library to use with /dev/mISDN */
 
-/* we need some extentions */
+/* we need somme extentions */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -16,6 +16,19 @@ typedef unsigned short u16;
 
 #define mISDN_INBUFFER_SIZE	0x20000
 #define mISDN_HEADER_LEN	16
+
+typedef struct _iframe {
+	u_int   addr;
+	u_int   prim;
+	int     dinfo;
+	int     len;
+	union {
+		u_char  b[4];
+		void    *p;
+		int     i;
+	} data;
+} iframe_t;
+
 
 #define TIMEOUT_1SEC	1000000
 #define TIMEOUT_10SEC	10000000

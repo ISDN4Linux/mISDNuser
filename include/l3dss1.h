@@ -1,4 +1,4 @@
-/* $Id: l3dss1.h,v 1.2 2004/07/04 10:49:44 jolly Exp $
+/* $Id: l3dss1.h,v 1.3 2004/07/04 14:08:15 jolly Exp $
  *
  *  DSS1 (Euro) D-channel protocol defines
  *

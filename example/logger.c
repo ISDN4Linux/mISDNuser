@@ -90,7 +90,7 @@ int process_dchannel(devinfo_t *di, int len, iframe_t *frm)
 	write(di->save, frm, len);
 	if (frm->prim == (PH_DATA | INDICATION) && (frm->len >0)) {
 		if (VerifyOn>5)
-			printhexdata(stdout, frm->len, &frm->data.i);
+			printhexdata(stdout, frm->len, (void *)&frm->data.i);
 	} 
 	return(0);
 }
@@ -183,11 +183,10 @@ int deactivate_bchan(devinfo_t *di) {
 }
 
 int read_mutiplexer(devinfo_t *di) {
-	unsigned char	*p, *msg, buf[MAX_REC_BUF];
+	unsigned char	buf[MAX_REC_BUF];
 	iframe_t	*rfrm;
 	int		timeout = TIMEOUT_10SEC;
 	int		ret = 0;
-	int		len;
 
 	rfrm = (iframe_t *)buf;
 	/* Main loop */
@@ -230,7 +229,6 @@ int
 add_dlayer2(devinfo_t *di, int prot)
 {
 	layer_info_t li;
-	stack_info_t si;
 	interface_info_t ii;
 	int lid, ret;
 
@@ -383,7 +381,7 @@ char *argv[];
 
 {
 	char FileName[200],FileNameOut[200];
-	int aidx=1,para=1, idx;
+	int aidx=1,para=1;
 	char sw;
 	devinfo_t mISDN;
 	int err;

@@ -47,7 +47,7 @@ unsigned char *firmware;
 int download_firmware(devinfo_t *di, int size) {
 	unsigned char *p, buf[2048], rbuf[128];
 	iframe_t *frm = (iframe_t *)buf;
-	iframe_t *rfrm = (iframe_t *)rbuf;
+	//iframe_t *rfrm = (iframe_t *)rbuf;
 	int cnt, ret = 0;
 	int *adr, l;
 

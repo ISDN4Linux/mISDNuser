@@ -195,7 +195,7 @@ extern	int		timer_pending(itimer_t *);
 
 extern	u_char		*findie(u_char *, int, u_char, int);
 extern	u_char		*find_and_copy_ie(u_char *, int, u_char, int, msg_t *);
-extern	void		display_NR_IE(u_char *, char *);
+extern	void		display_NR_IE(u_char *, char *, char *);
 
 extern	int		match_nr(manager_t *mgr, unsigned char *nx, nr_list_t **nrx);
 

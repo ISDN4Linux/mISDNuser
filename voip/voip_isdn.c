@@ -445,8 +445,8 @@ route_call(iapplication_t *ap, bchannel_t *bc)
 	int		ret;
 
 	if (bc) {
-		display_NR_IE(bc->msn,  __FUNCTION__": msn");
-		display_NR_IE(bc->nr,   __FUNCTION__":  nr");
+		display_NR_IE(bc->msn,  __FUNCTION__, ": msn");
+		display_NR_IE(bc->nr,   __FUNCTION__, ":  nr");
 	}
 	ap->data1 = bc;
 	if (!bc)

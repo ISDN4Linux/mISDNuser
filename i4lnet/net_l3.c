@@ -1,4 +1,4 @@
-/* $Id: net_l3.c,v 1.1 2004/02/17 20:30:07 keil Exp $
+/* $Id: net_l3.c,v 1.2 2004/07/04 14:08:14 jolly Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -16,7 +16,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l3_revision = "$Revision: 1.1 $";
+const char *l3_revision = "$Revision: 1.2 $";
 
 #define PROTO_DIS_EURO	8
 
@@ -68,7 +68,7 @@ struct stateentry {
 #define ALL_STATES	0x03ffffff
 
 void
-display_NR_IE(u_char *p, char *head)
+display_NR_IE(u_char *p, char *head1, char *head2)
 {
 	int len;
 	char	txt[128];
@@ -89,7 +89,7 @@ display_NR_IE(u_char *p, char *head)
 		while(len--)
 			tp += sprintf(tp, "%c", *p++);
 	}
-	dprint(DBGM_L3, "%s %s\n", head, txt);
+	dprint(DBGM_L3, "%s%s %s\n", head1, head2, txt);
 }
 
 static void
@@ -407,6 +407,7 @@ l3dss1_msg_without_setup(layer3_proc_t *pc, u_char cause)
 	send_proc(pc, IMSG_END_PROC, NULL);
 }
 
+#if 0
 static int
 l3dss1_check_messagetype_validity(layer3_proc_t *pc, int mt, void *arg)
 {
@@ -449,6 +450,7 @@ l3dss1_check_messagetype_validity(layer3_proc_t *pc, int mt, void *arg)
 	}
 	return(0);
 }
+#endif
 
 static void
 l3dss1_std_ie_err(layer3_proc_t *pc, int ret) {
@@ -945,6 +947,7 @@ l3dss1_alerting_i(layer3_proc_t *pc, int pr, void *arg)
 	free_msg(umsg);
 }
 
+#if 0
 static void
 l3dss1_call_proc(layer3_proc_t *pc, int pr, void *arg)
 {
@@ -996,6 +999,7 @@ l3dss1_call_proc(layer3_proc_t *pc, int pr, void *arg)
 	if (mISDN_l3up(pc, umsg))
 		free_msg(umsg);
 }
+#endif
 
 static void
 l3dss1_connect_i(layer3_proc_t *pc, int pr, void *arg)
@@ -2675,4 +2679,7 @@ void cleanup_Isdnl3(net_stack_t *nst)
 		while(nst->layer3)
 			release_l3(nst->layer3);
 	}
+//puts("jolldebug 1");
+//	free(malloc(1000));
+//puts("jolldebug 2");
 }
