@@ -1,4 +1,4 @@
-/* $Id: l3dss1.h,v 1.1 2004/02/17 20:30:08 keil Exp $
+/* $Id: l3dss1.h,v 1.2 2004/07/04 10:49:44 jolly Exp $
  *
  *  DSS1 (Euro) D-channel protocol defines
  *
@@ -76,16 +76,6 @@
 #define MT_RETRIEVE		0x31
 #define MT_RETRIEVE_ACKNOWLEDGE	0x33
 #define MT_RETRIEVE_REJECT	0x37
-
-#warning FIXME if mISDN.h is uptodate
-#ifndef CC_HOLD
-#define CC_HOLD                 0x032400
-#define CC_HOLD_ACKNOWLEDGE     0x032800
-#define CC_HOLD_REJECT          0x033000
-#define CC_RETRIEVE             0x033100
-#define CC_RETRIEVE_ACKNOWLEDGE 0x033300
-#define CC_RETRIEVE_REJECT      0x033700
-#endif
 
 #define IE_SEGMENT	0x00
 #define IE_BEARER	0x04

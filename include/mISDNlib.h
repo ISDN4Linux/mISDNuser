@@ -3,8 +3,10 @@
 
 /* API library to use with /dev/mISDN */
 
-/* we need somme extentions */
+/* we need some extentions */
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 
 typedef unsigned short u16;
 
