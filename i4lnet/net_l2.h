@@ -1,4 +1,4 @@
-/* $Id: net_l2.h,v 0.9 2003/08/27 07:33:03 kkeil Exp $
+/* $Id: net_l2.h,v 0.9.1.1 2003/08/27 07:33:03 kkeil Exp $
  *
  * Layer 2 defines
  *

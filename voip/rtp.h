@@ -2,7 +2,7 @@
 * rtp.h  --  RTP header file
 * RTP draft: November 1994 version
 *
-* $Id: rtp.h,v 0.9 2003/08/27 07:33:03 kkeil Exp $
+* $Id: rtp.h,v 0.9.1.1 2003/08/27 07:33:03 kkeil Exp $
 */
 
 #define RTP_SEQ_MOD (1<<16)
