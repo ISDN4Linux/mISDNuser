@@ -1,4 +1,4 @@
-/* $Id: net_l3.c,v 1.4 2005/04/30 15:31:01 jolly Exp $
+/* $Id: net_l3.c,v 1.5 2005/04/30 15:35:08 jolly Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -17,7 +17,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l3_revision = "$Revision: 1.4 $";
+const char *l3_revision = "$Revision: 1.5 $";
 
 #define PROTO_DIS_EURO	8
 
@@ -2595,7 +2595,7 @@ dl_data_mux(layer3_t *l3, mISDNuser_head_t *hh, msg_t *msg)
 			return(0);
 		}
 	}
-	if ((proc->ces & 0xfffffff0) == 0xff00) {
+	if ((proc->ces & 0xffffff00) == 0xff00) {
 		dprint(DBGM_L3, "%s: master state %d found\n", __FUNCTION__,
 			proc->state);
 		msg_push(msg, mISDNUSER_HEAD_SIZE);
