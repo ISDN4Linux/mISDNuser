@@ -1,4 +1,4 @@
-/* $Id: net_l3.c,v 1.3 2004/07/08 00:46:41 keil Exp $
+/* $Id: net_l3.c,v 1.4 2005/04/30 15:31:01 jolly Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -11,12 +11,13 @@
 #include <stdlib.h>
 #include <asm/bitops.h>
 #include "mISDNlib.h"
+#include "net_l2.h"
 #include "net_l3.h"
 #include "l3dss1.h"
 #include "helper.h"
 // #include "debug.h"
 
-const char *l3_revision = "$Revision: 1.3 $";
+const char *l3_revision = "$Revision: 1.4 $";
 
 #define PROTO_DIS_EURO	8
 
@@ -112,12 +113,19 @@ getcallref(u_char *p)
 	int l, cr = 0;
 
 	p++;			/* prot discr */
-	if (*p & 0xfe)		/* wrong callref BRI only 1 octet*/
-		return(-2);
 	l = 0xf & *p++;		/* callref length */
+	if (l > 2)		/* wrong callref only 1 or 2 octet*/
+		return(-2);
 	if (!l)			/* dummy CallRef */
 		return(-1);
-	cr = *p++;
+	if (l == 1) {		/* BRI */
+		cr = *p & 0x7f;
+		cr += (*p & 0x80) << 8;
+	} else {		/* PRI */
+		cr = *p++ << 8;
+		cr += *p;
+	}
+
 	return (cr);
 }
                                                                                         
@@ -126,7 +134,7 @@ newl3state(layer3_proc_t *pc, int state)
 {
 	if (pc->l3->debug & L3_DEB_STATE)
 		l3_debug(pc->l3, "newstate cr %d %d%s --> %d%s", 
-			 pc->callref & 0x7F,
+			 pc->callref & 0x7FFF,
 			 pc->state, pc->master ? "i" : "",
 			 state, pc->master ? "i" : "");
 	pc->state = state;
@@ -136,7 +144,7 @@ static void
 L3ExpireTimer(L3Timer_t *t)
 {
 	if (t->pc->l3->debug & L3_DEB_STATE)
-		l3_debug(t->pc->l3, "timer nr %x expired", t->nr);
+		l3_debug(t->pc->l3, "timer %p nr %x expired", t, t->nr);
 	send_proc(t->pc, IMSG_TIMER_EXPIRED, &t->nr);
 }
 
@@ -174,6 +182,11 @@ StopAllL3Timer(layer3_proc_t *pc)
 {
 	L3DelTimer(&pc->timer1);
 	L3DelTimer(&pc->timer2);
+dprint(DBGM_L3, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
+#warning also remove flags:
+	test_and_clear_bit(FLG_L3P_TIMER303_1, &pc->Flags);
+	test_and_clear_bit(FLG_L3P_TIMER308_1, &pc->Flags);
+	test_and_clear_bit(FLG_L3P_TIMER312, &pc->Flags);
 }
 
 void
@@ -185,8 +198,13 @@ RemoveAllL3Timer(layer3_proc_t *pc)
 	if (ret)
 		dprint(DBGM_L3, "RemoveL3Timer1: ret %d\n", ret);
 	ret = remove_timer(&pc->timer2.tl);
+dprint(DBGM_L3, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
 	if (ret)
 		dprint(DBGM_L3, "RemoveL3Timer2: ret %d\n", ret);
+#warning also remove flags:
+	test_and_clear_bit(FLG_L3P_TIMER303_1, &pc->Flags);
+	test_and_clear_bit(FLG_L3P_TIMER308_1, &pc->Flags);
+	test_and_clear_bit(FLG_L3P_TIMER312, &pc->Flags);
 }
 
 static layer3_proc_t *
@@ -228,7 +246,7 @@ find_proc(layer3_proc_t *master, int ces, int cr)
 			if (cp)
 				return(cp);
 		}
-		if (((p->ces & 0xfffffff0) == 0xfff0) && (p->callref == cr))
+		if (((p->ces & 0xffffff00) == 0xff00) && (p->callref == cr))
 			break;
 		p = p->next;
 	}
@@ -304,8 +322,17 @@ static void MsgStart(layer3_proc_t *pc, u_char mt) {
 	if (pc->callref == -1) { /* dummy cr */
 		*pc->op++ = 0;
 	} else {
-		*pc->op++ = 1;
-		*pc->op++ = pc->callref ^ 0x80;
+		if (pc->l3->nst->feature & FEATURE_NET_CRLEN2) {
+			*pc->op++ = 2;
+			*pc->op++ = (pc->callref >> 8) ^ 0x80;
+			*pc->op++ = pc->callref & 0xff;
+		} else {
+			*pc->op++ = 1;
+			*pc->op = pc->callref & 0x7f;
+			if (!(pc->callref & 0x8000))
+				*pc->op |= 0x80;
+			pc->op++;
+		}
 	}
 	*pc->op++ = mt;
 }
@@ -347,8 +374,17 @@ l3dss1_message(layer3_proc_t *pc, u_char mt)
 		return(-ENOMEM);
 	p = msg_put(msg, 4);
 	*p++ = 8;
-	*p++ = 1;
-	*p++ = pc->callref ^ 0x80;
+	if (pc->l3->nst->feature & FEATURE_NET_CRLEN2) {
+		*p++ = 2;
+		*p++ = (pc->callref >> 8) ^ 0x80;
+		*p++ = pc->callref & 0xff;
+	} else {
+		*p++ = 1;
+		*p = pc->callref & 0x7f;
+		if (!(pc->callref & 0x8000))
+			*p |= 0x80;
+		p++;
+	}
 	*p++ = mt;
 	dhexprint(DBGM_L3DATA, "l3 oframe:", msg->data, 4);
 	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, pc->ces, msg)))
@@ -477,23 +513,48 @@ l3dss1_std_ie_err(layer3_proc_t *pc, int ret) {
 
 static u_char *
 l3dss1_get_channel_id(layer3_proc_t *pc, msg_t *omsg, msg_t *nmsg) {
-	u_char *sp, *p;
+	u_char	*sp, *p;
+	int	l;
 
 	if ((sp = p = findie(omsg->data, omsg->len, IE_CHANNEL_ID, 0))) {
-		if (*p != 1) { /* len for BRI = 1 */
-			if (pc->l3->debug & L3_DEB_WARN)
-				l3_debug(pc->l3, "wrong chid len %d", *p);
-			pc->err = -2;
-			return (NULL);
+		l = *p++;
+		if (pc->l3->nst->feature & FEATURE_NET_EXTCID) { /* PRI */
+			if (l < 3) {
+				if (pc->l3->debug & L3_DEB_WARN)
+					l3_debug(pc->l3, "wrong chid len %d", *p);
+				pc->err = -2;
+				return (NULL);
+			}
+			if ((*p & 0x60) != 0x20) {
+				if (pc->l3->debug & L3_DEB_WARN)
+					l3_debug(pc->l3, "wrong chid %x (for PRI interface)", *p);
+				pc->err = -3;
+				return (NULL);
+			}
+			p++;
+			if (*p & 0x10) {
+				if (pc->l3->debug & L3_DEB_WARN)
+					l3_debug(pc->l3, "wrong chid %x (channel map not supported)", *p);
+				pc->err = -4;
+				return (NULL);
+			}
+			p++;
+			pc->bc = *p & 0x7f;
+		} else { /* BRI */
+			if (l < 1) {
+				if (pc->l3->debug & L3_DEB_WARN)
+					l3_debug(pc->l3, "wrong chid len %d", *p);
+				pc->err = -2;
+				return (NULL);
+			}
+			if (*p & 0x60) {
+				if (pc->l3->debug & L3_DEB_WARN)
+					l3_debug(pc->l3, "wrong chid %x", *p);
+				pc->err = -3;
+				return (NULL);
+			}
+			pc->bc = *p & 3;
 		}
-		p++;
-		if (*p & 0x60) { /* only base rate interface */
-			if (pc->l3->debug & L3_DEB_WARN)
-				l3_debug(pc->l3, "wrong chid %x", *p);
-			pc->err = -3;
-			return (NULL);
-		}
-		pc->bc = *p & 3;
 		p = sp;
 		sp = msg_put(nmsg, 1 + *p);
 		memcpy(sp, p, 1 + *p);
@@ -559,7 +620,7 @@ l3dss1_facility(layer3_proc_t *pc, int pr, void *arg)
 		(pc->callref << 16), sizeof(FACILITY_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	fac = (FACILITY_t *)(umsg->data + mISDN_HEADER_LEN);
+	fac = (FACILITY_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	fac->FACILITY =
 		find_and_copy_ie(msg->data, msg->len, IE_FACILITY, 0, umsg);
 	if (mISDN_l3up(pc, umsg))
@@ -576,7 +637,7 @@ l3dss1_userinfo(layer3_proc_t *pc, int pr, void *arg)
 		(pc->callref << 16), sizeof(USER_INFORMATION_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	ui = (USER_INFORMATION_t *)(umsg->data + mISDN_HEADER_LEN);
+	ui = (USER_INFORMATION_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	ui->USER_USER =
 		find_and_copy_ie(msg->data, msg->len, IE_USER_USER, 0, umsg);
 	if (mISDN_l3up(pc, umsg))
@@ -596,7 +657,7 @@ l3dss1_setup(layer3_proc_t *pc, int pr, void *arg)
 		(pc->callref << 16), sizeof(SETUP_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	setup = (SETUP_t *)(umsg->data + mISDN_HEADER_LEN);
+	setup = (SETUP_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	/*
 	 * Bearer Capabilities
 	 */
@@ -698,6 +759,7 @@ l3dss1_setup(layer3_proc_t *pc, int pr, void *arg)
 	setup->ces = pc->ces;
 	newl3state(pc, 1);
 	L3DelTimer(&pc->timer2);
+dprint(DBGM_L3, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
 	L3AddTimer(&pc->timer2, T_CTRL, 0x31f);
 	if (err) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, err);
@@ -716,7 +778,7 @@ l3dss1_disconnect(layer3_proc_t *pc, int pr, void *arg)
 		(pc->callref << 16), sizeof(DISCONNECT_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	disc = (DISCONNECT_t *)(umsg->data + mISDN_HEADER_LEN);
+	disc = (DISCONNECT_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	StopAllL3Timer(pc);
 	newl3state(pc, 11);
 	if (!(disc->CAUSE = l3dss1_get_cause(pc, msg, umsg))) {
@@ -744,7 +806,7 @@ l3dss1_disconnect_i(layer3_proc_t *pc, int pr, void *arg)
 		(pc->callref << 16), sizeof(DISCONNECT_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	disc = (DISCONNECT_t *)(umsg->data + mISDN_HEADER_LEN);
+	disc = (DISCONNECT_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	StopAllL3Timer(pc);
 	if (!(disc->CAUSE = l3dss1_get_cause(pc, msg, umsg))) {
 		if (pc->l3->debug & L3_DEB_WARN)
@@ -780,7 +842,7 @@ l3dss1_information(layer3_proc_t *pc, int pr, void *arg) {
 		(pc->callref << 16), sizeof(INFORMATION_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	info = (INFORMATION_t *)(umsg->data + mISDN_HEADER_LEN);
+	info = (INFORMATION_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	info->COMPLETE =
 		find_and_copy_ie(msg->data, msg->len, IE_COMPLETE, 0, umsg);
 	info->KEYPAD =
@@ -808,7 +870,7 @@ l3dss1_release(layer3_proc_t *pc, int pr, void *arg)
 		(pc->callref << 16), sizeof(RELEASE_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	rel = (RELEASE_t *)(umsg->data + mISDN_HEADER_LEN);
+	rel = (RELEASE_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	StopAllL3Timer(pc);
 	if (!(rel->CAUSE = l3dss1_get_cause(pc, msg, umsg))) {
 		if (pc->state != 12)
@@ -853,7 +915,7 @@ l3dss1_release_cmpl(layer3_proc_t *pc, int pr, void *arg)
 		(pc->callref << 16), sizeof(RELEASE_COMPLETE_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	relc = (RELEASE_COMPLETE_t *)(umsg->data + mISDN_HEADER_LEN);
+	relc = (RELEASE_COMPLETE_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	StopAllL3Timer(pc);
 	newl3state(pc, 0);
 	if (!(relc->CAUSE = l3dss1_get_cause(pc, msg, umsg))) {
@@ -880,6 +942,36 @@ l3dss1_release_cmpl_i(layer3_proc_t *pc, int pr, void *arg)
 }
 
 static void
+l3dss1_setup_acknowledge_i(layer3_proc_t *pc, int pr, void *arg)
+{
+	msg_t			*umsg, *msg = arg;
+	SETUP_ACKNOWLEDGE_t	*sa;
+
+	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	if (!pc->master) {
+		L3DelTimer(&pc->timer1);
+		newl3state(pc, 25);
+		return;
+	}
+	umsg = prep_l3data_msg(CC_SETUP_ACKNOWLEDGE | INDICATION, pc->master->ces |
+		(pc->master->callref << 16), sizeof(SETUP_ACKNOWLEDGE_t), msg->len, NULL);
+	if (!umsg)
+		return;
+	sa = (SETUP_ACKNOWLEDGE_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
+	L3DelTimer(&pc->timer1);	/* T304 */
+	newl3state(pc, 25);
+	sa->CHANNEL_ID =
+		find_and_copy_ie(msg->data, msg->len, IE_CHANNEL_ID, 0, umsg);
+	sa->FACILITY =
+		find_and_copy_ie(msg->data, msg->len, IE_FACILITY, 0, umsg);
+	sa->PROGRESS =
+		find_and_copy_ie(msg->data, msg->len, IE_PROGRESS, 0, umsg);
+	if (!mISDN_l3up(pc->master, umsg))
+		return;
+	free_msg(umsg);
+}
+
+static void
 l3dss1_proceeding_i(layer3_proc_t *pc, int pr, void *arg)
 {
 	msg_t			*umsg, *msg = arg;
@@ -895,9 +987,11 @@ l3dss1_proceeding_i(layer3_proc_t *pc, int pr, void *arg)
 		(pc->master->callref << 16), sizeof(CALL_PROCEEDING_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	proc = (CALL_PROCEEDING_t *)(umsg->data + mISDN_HEADER_LEN);
+	proc = (CALL_PROCEEDING_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	L3DelTimer(&pc->timer1);	/* T304 */
 	newl3state(pc, 9);
+	proc->CHANNEL_ID =
+		find_and_copy_ie(msg->data, msg->len, IE_CHANNEL_ID, 0, umsg);
 	proc->BEARER =
 		find_and_copy_ie(msg->data, msg->len, IE_BEARER, 0, umsg);
 	proc->FACILITY =
@@ -927,9 +1021,11 @@ l3dss1_alerting_i(layer3_proc_t *pc, int pr, void *arg)
 		(pc->master->callref << 16), sizeof(ALERTING_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	al = (ALERTING_t *)(umsg->data + mISDN_HEADER_LEN);
+	al = (ALERTING_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	L3DelTimer(&pc->timer1);	/* T304 */
 	newl3state(pc, 7);
+	al->CHANNEL_ID =
+		find_and_copy_ie(msg->data, msg->len, IE_CHANNEL_ID, 0, umsg);
 	al->BEARER =
 		find_and_copy_ie(msg->data, msg->len, IE_BEARER, 0, umsg);
 	al->FACILITY =
@@ -960,14 +1056,16 @@ l3dss1_call_proc(layer3_proc_t *pc, int pr, void *arg)
 		(pc->callref << 16), sizeof(CALL_PROCEEDING_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	cp = (CALL_PROCEEDING_t *)(umsg->data + mISDN_HEADER_LEN);
+	cp = (CALL_PROCEEDING_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	if ((cp->CHANNEL_ID = l3dss1_get_channel_id(pc, msg, umsg))) {
-		if ((0 == pc->bc) || (3 == pc->bc)) {
-			if (pc->l3->debug & L3_DEB_WARN)
-				l3_debug(pc->l3, "setup answer with wrong chid %x", pc->bc);
-			l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
-			free_msg(umsg);
-			return;
+		if (!(pc->l3->nst->feature & FEATURE_NET_EXTCID)) { /* BRI */
+			if ((0 == pc->bc) || (3 == pc->bc)) {
+				if (pc->l3->debug & L3_DEB_WARN)
+					l3_debug(pc->l3, "setup answer with wrong chid %x", pc->bc);
+				l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
+				free_msg(umsg);
+				return;
+			}
 		}
 	} else if (1 == pc->state) {
 		if (pc->l3->debug & L3_DEB_WARN)
@@ -1016,7 +1114,7 @@ l3dss1_connect_i(layer3_proc_t *pc, int pr, void *arg)
 		(pc->master->callref << 16), sizeof(CONNECT_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	conn = (CONNECT_t *)(umsg->data + mISDN_HEADER_LEN);
+	conn = (CONNECT_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	L3DelTimer(&pc->timer1);	/* T310 */
 	newl3state(pc, 8);
 	conn->BEARER =
@@ -1052,6 +1150,10 @@ l3dss1_hold(layer3_proc_t *pc, int pr, void *arg)
 	msg_t		*umsg, *msg = arg;
 	HOLD_t		*hold;
 
+	if (!(pc->l3->nst->feature & FEATURE_NET_HOLD)) {
+		l3dss1_message_cause(pc, MT_HOLD_REJECT, CAUSE_MT_NOTIMPLEMENTED);
+		return;
+	}
 	dprint(DBGM_L3,"%s\n", __FUNCTION__);
 #warning TODO: global mask for supported none mandatory services, like HOLD
 	if (pc->hold_state == HOLDAUX_HOLD_IND)
@@ -1066,7 +1168,7 @@ l3dss1_hold(layer3_proc_t *pc, int pr, void *arg)
 		(pc->callref << 16), sizeof(HOLD_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	hold = (HOLD_t *)(umsg->data + mISDN_HEADER_LEN);
+	hold = (HOLD_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	if (mISDN_l3up(pc, umsg))
 		free_msg(umsg);
 }
@@ -1077,6 +1179,10 @@ l3dss1_retrieve(layer3_proc_t *pc, int pr, void *arg)
 	msg_t		*umsg, *msg = arg;
 	RETRIEVE_t	*retr;
 
+	if (!(pc->l3->nst->feature & FEATURE_NET_HOLD)) {
+		l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_MT_NOTIMPLEMENTED);
+		return;
+	}
 	dprint(DBGM_L3,"%s\n", __FUNCTION__);
 	if (pc->hold_state == HOLDAUX_RETR_IND)
 		return;
@@ -1090,7 +1196,7 @@ l3dss1_retrieve(layer3_proc_t *pc, int pr, void *arg)
 		(pc->callref << 16), sizeof(RETRIEVE_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	retr = (RETRIEVE_t *)(umsg->data + mISDN_HEADER_LEN);
+	retr = (RETRIEVE_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	retr->CHANNEL_ID =
 		find_and_copy_ie(msg->data, msg->len, IE_CHANNEL_ID, 0, umsg);
 	if (mISDN_l3up(pc, umsg))
@@ -1108,7 +1214,7 @@ l3dss1_suspend(layer3_proc_t *pc, int pr, void *arg)
 		(pc->callref << 16), sizeof(SUSPEND_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	susp = (SUSPEND_t *)(umsg->data + mISDN_HEADER_LEN);
+	susp = (SUSPEND_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	susp->CALL_ID =
 		find_and_copy_ie(msg->data, msg->len, IE_CALL_ID, 0, umsg);
 	susp->FACILITY =
@@ -1129,7 +1235,7 @@ l3dss1_resume(layer3_proc_t *pc, int pr, void *arg)
 		(pc->callref << 16), sizeof(RESUME_t), msg->len, NULL);
 	if (!umsg)
 		return;
-	res = (RESUME_t *)(umsg->data + mISDN_HEADER_LEN);
+	res = (RESUME_t *)(umsg->data + mISDNUSER_HEAD_SIZE);
 	res->CALL_ID =
 		find_and_copy_ie(msg->data, msg->len, IE_CALL_ID, 0, umsg);
 	res->FACILITY =
@@ -1150,6 +1256,9 @@ static struct stateentry datastatelist[] =
 		MT_STATUS, l3dss1_release_cmpl},
 	{SBIT(0),
 		MT_SETUP, l3dss1_setup},
+#warning setup ack
+	{SBIT(6) | SBIT(7)  | SBIT(9) | SBIT(25),
+		MT_SETUP_ACKNOWLEDGE, l3dss1_setup_acknowledge_i},
 	{SBIT(6) | SBIT(7)  | SBIT(9) | SBIT(25),
 		MT_CALL_PROCEEDING, l3dss1_proceeding_i},
 	{SBIT(6) | SBIT(7)  | SBIT(9) | SBIT(25),
@@ -1188,18 +1297,18 @@ static struct stateentry datastatelist[] =
 #define DATASLLEN \
 	(sizeof(datastatelist) / sizeof(struct stateentry))
 
-static int
-create_child_proc(layer3_proc_t *pc, int mt, msg_t *msg, int state) {
-	mISDN_head_t	*hh;
+static layer3_proc_t
+*create_child_proc(layer3_proc_t *pc, int mt, msg_t *msg, int state) {
+	mISDNuser_head_t	*hh;
 	struct _l3_msg	l3m;
 	layer3_proc_t	*p3i;
 
-	hh = (mISDN_head_t *)msg->data;
-	msg_pull(msg, mISDN_HEADER_LEN);
+	hh = (mISDNuser_head_t *)msg->data;
+	msg_pull(msg, mISDNUSER_HEAD_SIZE);
 	p3i = create_proc(pc->l3, hh->dinfo, pc->callref, pc);
 	if (!p3i) {
 		l3_debug(pc->l3, "cannot create child\n");
-		return(-ENOMEM);
+		return(NULL);
 	}
 	p3i->state = pc->state;
 	if (pc->state != -1)
@@ -1207,8 +1316,16 @@ create_child_proc(layer3_proc_t *pc, int mt, msg_t *msg, int state) {
 	l3m.mt = mt;
 	l3m.msg = msg;
 	send_proc(p3i, IMSG_L2_DATA, &l3m);
-	return(0);
+	return(p3i);
 }                                                   
+
+static void
+l3dss1_setup_acknowledge_m(layer3_proc_t *pc, int pr, void *arg)
+{
+	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	L3DelTimer(&pc->timer1);
+	create_child_proc(pc, pr, arg, 25);
+}
 
 static void
 l3dss1_proceeding_m(layer3_proc_t *pc, int pr, void *arg)
@@ -1245,7 +1362,7 @@ l3dss1_release_mx(layer3_proc_t *pc, int pr, void *arg)
 {
 	msg_t	*msg = arg;
 
-	msg_pull(msg, mISDN_HEADER_LEN);
+	msg_pull(msg, mISDNUSER_HEAD_SIZE);
 	l3dss1_release(pc, pr, msg);
 }
 
@@ -1256,7 +1373,7 @@ l3dss1_release_cmpl_m(layer3_proc_t *pc, int pr, void *arg)
 	u_char	*p;
 
 	if (pc->state == 6) {
-		msg_pull(msg, mISDN_HEADER_LEN);
+		msg_pull(msg, mISDNUSER_HEAD_SIZE);
 		if ((p = l3dss1_get_cause(pc, msg, NULL))) {
 			dprint(DBGM_L3,"%s cause (%d/%d)\n", __FUNCTION__,
 				pc->cause, pc->err);
@@ -1280,7 +1397,7 @@ l3dss1_release_cmpl_mx(layer3_proc_t *pc, int pr, void *arg)
 {
 	msg_t	*msg = arg;
 
-	msg_pull(msg, mISDN_HEADER_LEN);
+	msg_pull(msg, mISDNUSER_HEAD_SIZE);
 	l3dss1_release_cmpl(pc, pr, msg);
 }
 
@@ -1289,12 +1406,15 @@ l3dss1_information_mx(layer3_proc_t *pc, int pr, void *arg)
 {
 	msg_t	*msg = arg;
 
-	msg_pull(msg, mISDN_HEADER_LEN);
+	msg_pull(msg, mISDNUSER_HEAD_SIZE);
 	l3dss1_information(pc, pr, msg);
 }
 
 static struct stateentry mdatastatelist[] =
 {
+#warning setup acknowledge
+	{SBIT(6) | SBIT(7) | SBIT(9) | SBIT(25),
+		MT_SETUP_ACKNOWLEDGE, l3dss1_setup_acknowledge_m},
 	{SBIT(6) | SBIT(7) | SBIT(9) | SBIT(25),
 		MT_CALL_PROCEEDING, l3dss1_proceeding_m},
 	{SBIT(6) | SBIT(7) | SBIT(9) | SBIT(25),
@@ -1457,8 +1577,16 @@ l3dss1_setup_req(layer3_proc_t *pc, int pr, void *arg)
 	memcpy(msg_put(msg, l), &pc->obuf[0], l);
 	newl3state(pc, 6);
 	dhexprint(DBGM_L3DATA, "l3 oframe:", &pc->obuf[0], l);
-	if (l3_msg(pc->l3, DL_UNITDATA | REQUEST, 127, msg))
-		free_msg(msg);
+#warning testing
+	if (pc->l3->l2_state0 && (pc->l3->nst->feature & FEATURE_NET_PTP)) {
+		dprint(DBGM_L3, "%s: proc(%p) sending SETUP to CES 0\n", __FUNCTION__, pc);
+		if (l3_msg(pc->l3, DL_DATA | REQUEST, 0, msg))
+			free_msg(msg);
+	} else {
+		dprint(DBGM_L3, "%s: proc(%p) sending SETUP to broadcast CES\n", __FUNCTION__, pc);
+		if (l3_msg(pc->l3, DL_UNITDATA | REQUEST, 127, msg))
+			free_msg(msg);
+	}
 	L3DelTimer(&pc->timer1);
 	test_and_clear_bit(FLG_L3P_TIMER303_1, &pc->Flags);
 	L3AddTimer(&pc->timer1, T303, 0x303);
@@ -1480,12 +1608,15 @@ l3dss1_connect_req(layer3_proc_t *pc, int pr, void *arg)
 		if (conn->CHANNEL_ID[0] == 1)
 			pc->bc = conn->CHANNEL_ID[1] & 3;
 	}
+#warning pc->bc is nice, but a task of the application. if you change anything, please let me know. 
+#if 0
 	if (!pc->bc) {
 		if (pc->l3->debug & L3_DEB_WARN)
 			l3_debug(pc->l3, "D-chan connect for waiting call");
 		l3dss1_disconnect_req(pc, pr, NULL);
 		return;
 	}
+#endif
 	if (conn) {
 		MsgStart(pc, MT_CONNECT);
 		if (conn->BEARER)
@@ -1529,12 +1660,14 @@ l3dss1_connect_res(layer3_proc_t *pc, int pr, void *arg)
 		if (connack->CHANNEL_ID[0] == 1)
 			pc->bc = connack->CHANNEL_ID[1] & 3;
 	}
+#if 0
 	if (!pc->bc) {
 		if (pc->l3->debug & L3_DEB_WARN)
 			l3_debug(pc->l3, "D-chan connect for waiting call");
 		l3dss1_disconnect_req(pc, pr, NULL);
 		return;
 	}
+#endif
 	if (connack) {
 		MsgStart(pc, MT_CONNECT_ACKNOWLEDGE);
 		if (connack->CHANNEL_ID)
@@ -1658,9 +1791,9 @@ l3dss1_progress_req(layer3_proc_t *pc, int pr, void *arg)
 			AddvarIE(pc, IE_DISPLAY, prog->DISPLAY);
 		if (prog->HLC)
 			AddvarIE(pc, IE_HLC, prog->HLC);
-#warning ETSI 300286-1 only define USER_USER for USER_INFORMATION SETUP ALERTING PROGRESS CONNECT DISCONNECT RELEASE*
-		if (prog->USER_USER)
-			AddvarIE(pc, IE_USER_USER, prog->USER_USER);
+//#warning ETSI 300286-1 only define USER_USER for USER_INFORMATION SETUP ALERTING PROGRESS CONNECT DISCONNECT RELEASE*
+//		if (prog->USER_USER)
+//			AddvarIE(pc, IE_USER_USER, prog->USER_USER);
 		SendMsg(pc, -1);
 	}
 }
@@ -1794,7 +1927,7 @@ l3dss1_t303(layer3_proc_t *pc, int pr, void *arg)
 			sizeof(RELEASE_COMPLETE_t), 3, NULL);
 		if (!msg)
 			return;
-		relc = (RELEASE_COMPLETE_t *)(msg->data + mISDN_HEADER_LEN);
+		relc = (RELEASE_COMPLETE_t *)(msg->data + mISDNUSER_HEAD_SIZE);
 		newl3state(pc, 0);
 		relc->CAUSE = msg_put(msg, 3);
 		relc->CAUSE[0] = 2;
@@ -1818,6 +1951,7 @@ l3dss1_t303(layer3_proc_t *pc, int pr, void *arg)
 					free_msg(msg);
 			}
 			L3DelTimer(&pc->timer2);
+dprint(DBGM_L3, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
 			L3AddTimer(&pc->timer2, T312, 0x312);
 			test_and_set_bit(FLG_L3P_TIMER312,
 				&pc->Flags);
@@ -1830,7 +1964,7 @@ l3dss1_t303(layer3_proc_t *pc, int pr, void *arg)
 		sizeof(RELEASE_COMPLETE_t), 3, NULL);
 	if (!msg)
 		return;
-	relc = (RELEASE_COMPLETE_t *)(msg->data + mISDN_HEADER_LEN);
+	relc = (RELEASE_COMPLETE_t *)(msg->data + mISDNUSER_HEAD_SIZE);
 	relc->CAUSE = msg_put(msg, 3);
 	relc->CAUSE[0] = 2;
 	relc->CAUSE[1] = 0x85;
@@ -1867,6 +2001,7 @@ l3dss1_t312(layer3_proc_t *pc, int pr, void *arg)
 
 	test_and_clear_bit(FLG_L3P_TIMER312, &pc->Flags);
 	L3DelTimer(&pc->timer2);
+dprint(DBGM_L3, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
 	l3_debug(pc->l3, "%s: state %d", __FUNCTION__, pc->state);
 	if (pc->state == 22) {
 		StopAllL3Timer(pc);
@@ -2124,7 +2259,7 @@ machen
 	 CC_FACILITY | REQUEST, l3dss1_facility_req},
 	{SBIT(4) | SBIT(7) | SBIT(8) | SBIT(10),
 	 CC_USER_INFORMATION | REQUEST, l3dss1_userinfo_req},
-	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(10) | SBIT(11) | SBIT(12),
+	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(10) | SBIT(11) | SBIT(12) | SBIT(25),
 	 CC_INFORMATION | REQUEST, l3dss1_information_req},
 	{SBIT(2) | SBIT(3) | SBIT(4),
 	 CC_PROGRESS | REQUEST, l3dss1_progress_req},
@@ -2184,6 +2319,7 @@ imsg_intrelease(layer3_proc_t *master, layer3_proc_t *child)
 		case 25:
 			if (master->child ||
 				test_bit(FLG_L3P_TIMER312, &master->Flags)) {
+	dprint(DBGM_L3, "%s: JOLLY child=%p, flg=%d\n", __FUNCTION__, master->child, test_bit(FLG_L3P_TIMER312, &master->Flags));
 #warning TODO: save cause
 #warning bedenke auch, dass vielleicht overlap sending mit information-messages praktisch wäre (später PTP)
 			} else {
@@ -2371,7 +2507,7 @@ send_proc(layer3_proc_t *proc, int op, void *arg)
 }
 
 static int
-dl_data_mux(layer3_t *l3, mISDN_head_t *hh, msg_t *msg)
+dl_data_mux(layer3_t *l3, mISDNuser_head_t *hh, msg_t *msg)
 {
 	layer3_proc_t	*proc;
 	int		ret = -EINVAL;
@@ -2454,14 +2590,15 @@ dl_data_mux(layer3_t *l3, mISDN_head_t *hh, msg_t *msg)
 		} else {
 			dprint(DBGM_L3, "%s: mt(%x) do not create proc\n", __FUNCTION__,
 				l3m.mt);
+#warning TODO: it happens that a response to an outgoing setup is received after connect of another terminal. in this case we must release.
 			free_msg(msg);
 			return(0);
 		}
 	}
-	if ((proc->ces & 0xfffffff0) == 0xfff0) {
+	if ((proc->ces & 0xfffffff0) == 0xff00) {
 		dprint(DBGM_L3, "%s: master state %d found\n", __FUNCTION__,
 			proc->state);
-		msg_push(msg, mISDN_HEADER_LEN);
+		msg_push(msg, mISDNUSER_HEAD_SIZE);
 		send_proc(proc, IMSG_MASTER_L2_DATA, &l3m);
 	} else
 		send_proc(proc, IMSG_L2_DATA, &l3m);
@@ -2472,14 +2609,14 @@ dl_data_mux(layer3_t *l3, mISDN_head_t *hh, msg_t *msg)
 int
 l3_muxer(net_stack_t *nst, msg_t *msg)
 {
-	mISDN_head_t	*hh;
+	mISDNuser_head_t	*hh;
 	int		ret = -EINVAL;
 
-	hh = (mISDN_head_t *)msg->data;
+	hh = (mISDNuser_head_t *)msg->data;
 	dprint(DBGM_L3, "%s: msg len(%d)\n", __FUNCTION__, msg->len);
 	dprint(DBGM_L3, "%s: pr(%x) di(%x)\n", __FUNCTION__,
 		hh->prim, hh->dinfo);
-	msg_pull(msg, mISDN_HEADER_LEN);
+	msg_pull(msg, mISDNUSER_HEAD_SIZE);
 	if (hh->prim == (DL_DATA | INDICATION)) {
 		ret = dl_data_mux(nst->layer3, hh, msg); 
 	} else {
@@ -2494,26 +2631,60 @@ l3_muxer(net_stack_t *nst, msg_t *msg)
 static int
 manager_l3(net_stack_t *nst, msg_t *msg)
 {
-	mISDN_head_t	*hh;
+	mISDNuser_head_t	*hh;
 	layer3_proc_t	*proc;
 	struct _l3_msg	l3m;
 
-	hh = (mISDN_head_t *)msg->data;
+	hh = (mISDNuser_head_t *)msg->data;
 	dprint(DBGM_L3, "%s: msg len(%d)\n", __FUNCTION__, msg->len);
 	dprint(DBGM_L3, "%s: pr(%x) di(%x)\n", __FUNCTION__,
 		hh->prim, hh->dinfo);
-	msg_pull(msg, mISDN_HEADER_LEN);
+	msg_pull(msg, mISDNUSER_HEAD_SIZE);
 	proc = find_proc(nst->layer3->proc, hh->dinfo & 0xffff,
 		(hh->dinfo>>16)& 0xffff);
 	if (!proc) {
 		if (hh->prim == (CC_SETUP | REQUEST)) {
 			int l4id;
 			nst->layer3->next_cr++;
-			if (nst->layer3->next_cr>126)
-				nst->layer3->next_cr = 1;
+			if (nst->feature & FEATURE_NET_CRLEN2) {
+				if (nst->layer3->next_cr>32766)
+					nst->layer3->next_cr = 1;
+			} else {
+				if (nst->layer3->next_cr>126)
+					nst->layer3->next_cr = 1;
+			}
 			proc = create_proc(nst->layer3, hh->dinfo & 0xffff,
-				nst->layer3->next_cr | 0x80, NULL);
+				nst->layer3->next_cr | 0x8000, NULL);
+			if (!proc) {
+				dprint(DBGM_L3, "%s: pr(%x) failed to create proc.\n",
+					__FUNCTION__, hh->prim);
+				free_msg(msg);
+				return(0);
+			}
 			dprint(DBGM_L3, "%s: proc(%p)\n", __FUNCTION__, proc);
+#warning testing
+#if 0
+printf("check for tei 0 active\n");
+		l2 = nst->layer2;
+		while(l2) {
+			if (l2->tei == 0 && l2->sapi == 0)
+				break;
+			l2 = l2->next;
+		}
+		if (l2) if (l2->state == ST_L2_4) {
+			p3i = create_proc(proc->l3, 0, proc->callref, proc);
+			if (!p3i) {
+				l3_debug(proc->l3, "cannot create child\n");
+				return(NULL);
+			}
+			proc = p3i;
+			
+			dprint(DBGM_L3, "%s: TEI 0 is active, so we created proc(%p)\n", __FUNCTION__, proc);
+			
+		}
+#endif
+			
+
 			APPEND_TO_LIST(proc, nst->layer3->proc);
 			l4id = proc->ces | (proc->callref << 16);
 			if_link(nst->manager, (ifunc_t)nst->l3_manager, CC_SETUP |
@@ -2547,7 +2718,7 @@ release_l3(layer3_t *l3) {
 			l3->proc->ces);
 		send_proc(l3->proc, IMSG_END_PROC, NULL);
 	}
-	msg_queue_purge(&l3->squeue);
+	msg_queue_purge(&l3->squeue0);
 	REMOVE_FROM_LISTBASE(l3, l3->nst->layer3);
 	free(l3);
 }
@@ -2578,74 +2749,157 @@ l3down(layer3_t *l3, u_int prim, int dinfo, msg_t *msg) {
 }
 
 static void
-send_squeue(layer3_t *l3)
+send_squeue(layer3_t *l3, msg_queue_t *squeue)
 {
 	msg_t	*msg;
 
-	while((msg = msg_dequeue(&l3->squeue))) {
+	while((msg = msg_dequeue(&l3->squeue0))) {
 		if (l3->nst->l3_l2(l3->nst, msg))
 			free_msg(msg);
 	}
 }
 
+#warning testing
+static int
+remove_proc(layer3_proc_t **procp, int ces)
+{
+	int found = 1;
+	int any = 0;
+	layer3_proc_t *proc;
+
+	if (ces > 126)
+		return(0);
+
+	while(found) {
+		found = 0;
+		proc = *procp;
+		while(proc) {
+			dprint(DBGM_L3, "%s: comparing %s proc(%x) ces(%x)\n", __FUNCTION__,
+				(proc->master)?"child":"master", proc, proc->ces);
+			if (proc->ces == ces) {
+				dprint(DBGM_L3, "%s: found proc(%x)\n", __FUNCTION__,
+					 proc);
+				if (proc->master)
+					send_proc(proc, IMSG_END_PROC_M, NULL);
+				else
+					send_proc(proc, IMSG_END_PROC, NULL);
+				any = 1;
+				found = 1;
+				break;
+			}
+			if (proc->child) {
+				if (remove_proc(&proc->child, ces)) {
+					any = 1;
+					found = 1;
+					break;
+				}
+			}
+			proc = proc->next;
+		}
+	}
+	return(any);
+}
+
+#warning l2_state makes no sense in multipoint environment. shouldnt we use something like l2_state[ces] ?
 static int
 l3_msg(layer3_t *l3, u_int pr, int dinfo, void *arg)
 {
-	msg_t	*msg = arg;
-
+	msg_t	*msg = arg, *lmsg = NULL;
+#warning testing
+	int	ces = dinfo & 0xffff;
 	dprint(DBGM_L3, "%s: pr(%x) di(%x) arg(%p)\n", __FUNCTION__,
 		pr, dinfo, arg);
 	switch (pr) {
 		case (DL_UNITDATA | REQUEST):
 			return(l3down(l3, pr, dinfo, arg));
 		case (DL_DATA | REQUEST):
-			if (l3->l2_state == ST_L3_LC_ESTAB) {
+			if (l3->l2_state0 == ST_L3_LC_ESTAB || ces > 0) {
 				return(l3down(l3, pr, dinfo, arg));
 			} else {
-				mISDN_addhead(pr, dinfo, msg);
-				msg_queue_tail(&l3->squeue, msg);
-				l3->l2_state = ST_L3_LC_ESTAB_WAIT;
-				l3down(l3, DL_ESTABLISH | REQUEST, dinfo, NULL);
-				return(0);
+				if (ces == 0) {
+					mISDN_addhead(pr, dinfo, msg);
+					msg_queue_tail(&l3->squeue0, msg);
+					l3->l2_state0 = ST_L3_LC_ESTAB_WAIT;
+					l3down(l3, DL_ESTABLISH | REQUEST, dinfo, NULL);
+					return(0);
+				}
 			}
 			break;
 		case (DL_DATA | CONFIRM):
 			break;
 		case (DL_ESTABLISH | REQUEST):
-			if (l3->l2_state != ST_L3_LC_ESTAB) {
-				l3down(l3, pr, dinfo, NULL);
-				l3->l2_state = ST_L3_LC_ESTAB_WAIT;
+			if (ces == 0) {
+				if (l3->l2_state0 != ST_L3_LC_ESTAB) {
+					l3down(l3, pr, dinfo, NULL);
+					l3->l2_state0 = ST_L3_LC_ESTAB_WAIT;
+				}
 			}
 			break;
 		case (DL_ESTABLISH | CONFIRM):
-			if (l3->l2_state != ST_L3_LC_REL_WAIT) {
-				l3->l2_state = ST_L3_LC_ESTAB;
-				send_squeue(l3);
+			if (ces == 0) {
+				if (l3->l2_state0 != ST_L3_LC_REL_WAIT) {
+					l3->l2_state0 = ST_L3_LC_ESTAB;
+					send_squeue(l3, &l3->squeue0);
+				}
 			}
+			if (!l3->nst->l3_manager)
+				break;
+			if (!(lmsg = create_link_msg(pr, dinfo, 0, NULL, 0)))
+				break;
+			if (l3->nst->l3_manager(l3->nst->manager, lmsg))
+				free_msg(lmsg);
 			break;
 		case (DL_ESTABLISH | INDICATION):
-			if (l3->l2_state == ST_L3_LC_REL) {
-				l3->l2_state = ST_L3_LC_ESTAB;
-				send_squeue(l3);
+			if (ces == 0) {
+				if (l3->l2_state0 == ST_L3_LC_REL) {
+					l3->l2_state0 = ST_L3_LC_ESTAB;
+					send_squeue(l3, &l3->squeue0);
+				}
 			}
+			if (!l3->nst->l3_manager)
+				break;
+			if (!(lmsg = create_link_msg(pr, dinfo, 0, NULL, 0)))
+				break;
+			if (l3->nst->l3_manager(l3->nst->manager, lmsg))
+				free_msg(lmsg);
 			break;
 		case (DL_RELEASE | INDICATION):
 #warning du musst alle processe releasen CC_RELEASE!!! dies geschieht z.b. wenn man das telefon vom s0-bus abnimmt und der layer-2 dadurch zusammen bricht.
 #warning geschieht dies auch im TE-mode?
 #warning TODO DL_RELEASE | INDICATION handling; inclusiv special state 10 (T309)
-			if (l3->l2_state == ST_L3_LC_ESTAB) {
-				l3->l2_state = ST_L3_LC_REL;
+			if (ces == 0) {
+				if (l3->l2_state0 == ST_L3_LC_ESTAB) {
+					l3->l2_state0 = ST_L3_LC_REL;
+				}
 			}
+			if (!l3->nst->l3_manager)
+				break;
+			if (!(lmsg = create_link_msg(pr, dinfo, 0, NULL, 0)))
+				break;
+			if (l3->nst->l3_manager(l3->nst->manager, lmsg))
+				free_msg(lmsg);
+			remove_proc(&l3->proc, dinfo);
 			break;
 		case (DL_RELEASE | CONFIRM):
-			if (l3->l2_state == ST_L3_LC_REL_WAIT) {
-				l3->l2_state = ST_L3_LC_REL;
+			if (ces == 0) {
+				if (l3->l2_state0 == ST_L3_LC_REL_WAIT) {
+					l3->l2_state0 = ST_L3_LC_REL;
+				}
 			}
+			if (!l3->nst->l3_manager)
+				break;
+			if (!(lmsg = create_link_msg(pr, dinfo, 0, NULL, 0)))
+				break;
+			if (l3->nst->l3_manager(l3->nst->manager, lmsg))
+				free_msg(lmsg);
+			remove_proc(&l3->proc, dinfo);
 			break;
 		case (DL_RELEASE | REQUEST):
-			if (l3->l2_state == ST_L3_LC_ESTAB) {
-				l3down(l3, pr, dinfo, NULL);
-				l3->l2_state = ST_L3_LC_REL_WAIT;
+			if (ces == 0) {
+				if (l3->l2_state0 == ST_L3_LC_ESTAB) {
+					l3down(l3, pr, dinfo, NULL);
+					l3->l2_state0 = ST_L3_LC_REL_WAIT;
+				}
 			}
 			break;
 	}
@@ -2666,8 +2920,9 @@ int Isdnl3Init(net_stack_t *nst)
 	nst->l2_l3 = l3_muxer;
 	nst->manager_l3 = manager_l3;
 	l3->debug = 0xff;
-	msg_queue_init(&l3->squeue);
-	l3->l2_state = ST_L3_LC_REL;
+#warning testing
+	msg_queue_init(&l3->squeue0);
+	l3->l2_state0 = ST_L3_LC_REL;
 	APPEND_TO_LIST(l3, nst->layer3);
 	return(0);
 }
@@ -2679,7 +2934,4 @@ void cleanup_Isdnl3(net_stack_t *nst)
 		while(nst->layer3)
 			release_l3(nst->layer3);
 	}
-//puts("jolldebug 1");
-//	free(malloc(1000));
-//puts("jolldebug 2");
 }
