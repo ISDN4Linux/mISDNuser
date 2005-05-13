@@ -6,10 +6,10 @@ libmISDN.a: device.o layer.o stack.o status.o
 	ar -r $@ $^
 	ar -s $@
 
-device.o : device.c ../include/mISDNlib.h
-layer.o : layer.c ../include/mISDNlib.h
-stack.o : stack.c ../include/mISDNlib.h
-status.o : status.c ../include/mISDNlib.h 
+device.o : device.c ../include/mISDNlib.h ../include/mISDNif.h
+layer.o : layer.c ../include/mISDNlib.h ../include/mISDNif.h
+stack.o : stack.c ../include/mISDNlib.h ../include/mISDNif.h
+status.o : status.c ../include/mISDNlib.h  ../include/mISDNif.h
 
 clean:
 	rm -f *.o *~ DEADJOE

@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.1 2004/07/08 00:46:42 keil Exp $
+/* $Id: mISDNif.h,v 1.2 2005/05/13 10:38:24 keil Exp $
  *
  */
 
@@ -29,12 +29,12 @@
  *              - changed if any interface is extended but backwards compatible
  *
  */
-#define	MISDN_MAJOR_VERSION	1
+#define	MISDN_MAJOR_VERSION	2
 #define	MISDN_MINOR_VERSION	0
 #define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
 
-#define MISDN_REVISION		"$Revision: 1.1 $"
-#define MISDN_DATE		"$Date: 2004/07/08 00:46:42 $"
+#define MISDN_REVISION		"$Revision: 1.2 $"
+#define MISDN_DATE		"$Date: 2005/05/13 10:38:24 $"
 
 /* SUBCOMMANDS */
 #define REQUEST		0x80
@@ -61,18 +61,20 @@
 #define MGR_SETSTACK_NW	0x0f1900
 #define MGR_ADDSTPARA	0x0f1A00
 #define MGR_CLRSTPARA	0x0f1B00
+#define MGR_ADDLAYER	0x0f1C00
 #define MGR_GETLAYER	0x0f2100
 #define MGR_GETLAYERID	0x0f2200
 #define MGR_NEWLAYER	0x0f2300
 #define MGR_DELLAYER	0x0f2400
 #define MGR_CLONELAYER	0x0f2500
-#define MGR_GETIF	0x0f3100
-#define MGR_CONNECT	0x0f3200
+//#define MGR_GETIF	0x0f3100
+//#define MGR_CONNECT	0x0f3200
 #define MGR_DISCONNECT	0x0f3300
-#define MGR_SETIF	0x0f3400
-#define MGR_ADDIF	0x0f3500
-#define MGR_QUEUEIF	0x0f3600
+//#define MGR_SETIF	0x0f3400
+//#define MGR_ADDIF	0x0f3500
+//#define MGR_QUEUEIF	0x0f3600
 #define MGR_CTRLREADY	0x0f4100
+#define MGR_STACKREADY	0x0f4200
 #define MGR_RELEASE	0x0f4500
 #define MGR_GETDEVICE	0x0f5100
 #define MGR_DELDEVICE	0x0f5200
@@ -106,6 +108,10 @@
 #define INFO3_P10	0x130a
 #define INFO4_P8	0x1408
 #define INFO4_P10	0x140a
+#define D_RX_MON0	0x1800
+#define D_TX_MON0	0x1801
+#define D_RX_MON1	0x1810
+#define D_TX_MON1	0x1811
 #define LOSTFRAMING	0x1f00
 #define ANYSIGNAL	0x1f01
 
@@ -418,6 +424,7 @@
 #define LAYER_OUTRANGE(layer)	((layer<0) || (layer>MAX_LAYER_NR))
 #define mISDN_MAX_IDLEN	16
 
+#ifdef OBSOLATE
 #define IF_NOACTIV	0x00000000
 #define IF_DOWN		0x01000000
 #define IF_UP		0x02000000
@@ -432,18 +439,51 @@
 #define IF_INSTMASK	0x400F0000
 #define IF_LAYERMASK	0x00F00000
 #define IF_TYPE(i)	((i)->stat & IF_TYPEMASK)
-#define CHILD_ID_INC	0x00000100
-#define CHILD_ID_MAX	0x1000FF00
-#define CLONE_ID_INC	0x00000100
-#define CLONE_ID_MAX	0x2000FF00
-#define INST_ID_INC	0x00010000
-#define INST_ID_MAX	0x400F0000
+#endif
+
+/*
+ * general ID layout for instance and stack id's
+ * 3322 2222 2222 1111 1111 1100 0000 0000
+ * 1098 7654 3210 9876 5432 1098 7654 3210
+ * FFFF FFFF CCCC CCCC SSSS SSSS RRRR LLLL
+ *
+ * L (bit 03-00) Layer ID
+ * R (bit 07-04) reserved (0)
+ * S (bit 15-08) Stack ID/controller number
+ * C (bit 23-16) Child/Clone ID
+ * F (bit 31-24) Flags as defined below
+ *
+ */
+
+#define FLG_MSG_DOWN	0x01000000
+#define FLG_MSG_UP	0x02000000
+#define FLG_MSG_TARGET	0x04000000
+#define FLG_MSG_CLONED	0x08000000
 #define FLG_CHILD_STACK	0x10000000
 #define FLG_CLONE_STACK	0x20000000
 #define FLG_INSTANCE	0x40000000
+#define FLG_MSG_TAGGED	0x80000000
+#define MSG_DIR_MASK	0x03000000
+#define MSG_BROADCAST	0x03000000
+#define MSG_TO_OWNER	0x00000000
+
+#define CHILD_ID_INC	0x00010000
+#define CHILD_ID_MAX	0x10FF0000
+#define CHILD_ID_MASK	0x00FF0000
+#define CLONE_ID_INC	0x00010000
+#define CLONE_ID_MAX	0x20FF0000
+#define CLONE_ID_MASK	0x00FF0000
+#define STACK_ID_INC	0x00000100
+#define STACK_ID_MAX	0x00007F00
+#define STACK_ID_MASK	0x30FFFF00
+#define MASTER_ID_MASK	0x0000FF00
+#define LAYER_ID_INC	0x00000001
+#define LAYER_ID_MAX	MAX_LAYER_NR
+#define LAYER_ID_MASK	0x0000000F
+#define INST_ID_MASK	0x70FFFFFF
 
 #define DUMMY_CR_FLAG	0x7FFFFF00
-#define CONTROLER_MASK	0x000000FF
+// #define CONTROLER_MASK	0x0000FF
 
 /* stack channel values */
 #define CHANNEL_NUMBER	0x000000FF
@@ -466,6 +506,11 @@
 #define EXT_IF_CREATE	0x00040000
 #define EXT_IF_SPLIT	0x00080000
 
+/* stack status flag (bit position) */
+#define mISDN_STACK_INIT	0
+#define mISDN_STACK_STOPPED	1
+#define mISDN_STACK_ABORT	2
+#define mISDN_STACK_KILLED	3
 
 /* special packet type */
 #define PACKET_NOACK	250
@@ -548,13 +593,14 @@ typedef struct _layer_info {
 	mISDN_pid_t	pid;
 } layer_info_t;
 
-
+#ifdef OBSOLATE
 typedef struct _interface_info {
 	int		extentions;
 	u_int		owner;
 	u_int		peer;
 	int		stat;
 } interface_info_t;
+#endif
 
 typedef struct _channel_info {
 	u_int		channel;

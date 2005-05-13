@@ -1,5 +1,6 @@
-LIBINCL	:= $(INCLUDEDIR)/mISDNlib.h
-PROGS	:= testcon testnet testcon_l2 loadfirm logger
+LIBINCL	:= $(INCLUDEDIR)/mISDNlib.h $(INCLUDEDIR)/mISDNif.h
+PROGS	:= testcon loadfirm
+# PROGS   := testcon testnet testcon_l2 loadfirm logger
 
 all: $(PROGS)
 

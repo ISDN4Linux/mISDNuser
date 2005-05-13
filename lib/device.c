@@ -127,6 +127,10 @@ mISDN_close(int fid)
 	if (devlist==dev)
 		devlist=dev->next;
 	pthread_mutex_lock(&dev->rmutex);
+#ifdef CLOSE_REPORT
+	fprintf(stderr, "%s: fid(%d) isize(%d) inbuf(%p) irp(%p) iend(%p)\n",
+		__FUNCTION__, fid, dev->isize, dev->inbuf, dev->irp, dev->iend);	
+#endif
 	if (dev->inbuf)
 		free(dev->inbuf);
 	dev->inbuf = NULL;

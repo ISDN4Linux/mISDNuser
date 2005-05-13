@@ -64,6 +64,77 @@ mISDN_new_layer(int fid, layer_info_t *l_info)
 }
 
 int
+mISDN_register_layer(int fid, u_int sid, u_int lid) 
+{
+	iframe_t	ifr;
+	int		ret;
+
+	set_wrrd_atomic(fid);
+	ret = mISDN_write_frame(fid, &ifr, sid, MGR_REGLAYER | REQUEST, lid,
+		0, NULL, TIMEOUT_1SEC);
+//	fprintf(stderr, "%s: wret %d\n", __FUNCTION__, ret); 
+	if (ret) {
+		clear_wrrd_atomic(fid);
+		return(ret);
+	}
+	ret = mISDN_read_frame(fid, &ifr, sizeof(iframe_t),
+		sid, MGR_REGLAYER | CONFIRM, TIMEOUT_1SEC);
+//	fprintf(stderr, "%s: rret %d\n", __FUNCTION__, ret);
+	if (ret != mISDN_HEADER_LEN) {
+		if (ret >= 0)
+			ret = -1;
+	} else {
+		ret = ifr.len;
+	}
+	return(ret);
+}
+
+int
+mISDN_unregister_layer(int fid, u_int sid, u_int lid) 
+{
+	iframe_t	ifr;
+	int		ret;
+
+	set_wrrd_atomic(fid);
+	ret = mISDN_write_frame(fid, &ifr, sid, MGR_UNREGLAYER | REQUEST, lid,
+		0, NULL, TIMEOUT_1SEC);
+//	fprintf(stderr, "%s: wret %d\n", __FUNCTION__, ret); 
+	if (ret) {
+		clear_wrrd_atomic(fid);
+		return(ret);
+	}
+	ret = mISDN_read_frame(fid, &ifr, sizeof(iframe_t),
+		sid, MGR_UNREGLAYER | CONFIRM, TIMEOUT_1SEC);
+//	fprintf(stderr, "%s: rret %d\n", __FUNCTION__, ret);
+	if (ret != mISDN_HEADER_LEN) {
+		if (ret >= 0)
+			ret = -1;
+	} else {
+		ret = ifr.len;
+	}
+	return(ret);
+}
+
+int
+mISDN_get_setstack_ind(int fid, u_int lid)
+{
+	iframe_t	ifr;
+	int		ret;
+
+	ret = mISDN_read_frame(fid, &ifr, sizeof(iframe_t),
+		lid, MGR_SETSTACK | INDICATION, TIMEOUT_5SEC);
+//	fprintf(stderr, "%s: rret %d\n", __FUNCTION__, ret);
+	if (ret != mISDN_HEADER_LEN) {
+		if (ret >= 0)
+			ret = -1;
+	} else {
+		ret = ifr.len;
+	}
+	return(ret);
+}
+
+#ifdef OBSOLATE
+int
 mISDN_connect(int fid, interface_info_t *i_info)
 {
 	unsigned char	buf[sizeof(interface_info_t) + mISDN_HEADER_LEN];
@@ -91,6 +162,7 @@ mISDN_connect(int fid, interface_info_t *i_info)
 	}
 	return(ret);
 }
+#endif
 
 int
 mISDN_get_layer_info(int fid, int lid, void *info, size_t max_len)
@@ -111,6 +183,7 @@ mISDN_get_layer_info(int fid, int lid, void *info, size_t max_len)
 	return(ret);
 }
 
+#ifdef OBSOLATE
 int
 mISDN_get_interface_info(int fid, interface_info_t *i_info)
 {
@@ -136,3 +209,4 @@ mISDN_get_interface_info(int fid, interface_info_t *i_info)
 	}
 	return(ret);
 }
+#endif

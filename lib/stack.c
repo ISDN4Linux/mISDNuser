@@ -121,6 +121,8 @@ mISDN_get_stack_info(int fid, int stack, void *info, size_t max_len)
 	ret = mISDN_read_frame(fid, info, max_len,
 		stack, MGR_GETSTACK | CONFIRM, TIMEOUT_1SEC);
 	clear_wrrd_atomic(fid);
+	if (ret == mISDN_HEADER_LEN)
+		ret = ((iframe_t *)info)->len;
 	return(ret);
 }
 
