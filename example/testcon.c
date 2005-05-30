@@ -167,12 +167,12 @@ int setup_bchannel(devinfo_t *di) {
 	li.pid.layermask = ISDN_LAYER(3);
 	li.st = di->b_stid[di->used_bchannel];
 	ret = mISDN_new_layer(di->device, &li);
-	if (ret<0) {
+	if (ret) {
 		fprintf(stdout, "new_layer ret(%d)\n", ret);
 		return(0);
 	}
-	if (ret) {
-		di->b_adress[di->used_bchannel] = ret;
+	if (li.id) {
+		di->b_adress[di->used_bchannel] = li.id;
 		if (VerifyOn>2)
 			fprintf(stdout,"b_adress%d %08x\n",
 				di->used_bchannel+1, ret);
@@ -206,9 +206,8 @@ int setup_bchannel(devinfo_t *di) {
 		if (ret > 0)
 			di->b_l2[di->used_bchannel] = ret;
 		fprintf(stdout, "b_l2 id %08x\n", ret);
-			
-		
-	}
+	} else
+		ret = 0;
 	return(ret);
 }
 
@@ -588,19 +587,34 @@ add_dlayer3(devinfo_t *di, int prot)
 {
 	layer_info_t li;
 	stack_info_t si;
-	int lid, ret;
+	int lid, stid, ret;
 
 	if (di->layer3) {
 		memset(&si, 0, sizeof(stack_info_t));
 		si.extentions = EXT_STACK_CLONE;
 		si.mgr = -1;
 		si.id = di->d_stid;
-		ret = mISDN_new_stack(di->device, &si);
-		if (ret <= 0) {
-			fprintf(stdout, "clone stack failed ret(%d)\n", ret);
+		stid = mISDN_new_stack(di->device, &si);
+		if (stid <= 0) {
+			fprintf(stdout, "clone stack failed ret(%d)\n", stid);
 			return(11);
 		}
-		di->d_stid = ret;
+		memset(&li, 0, sizeof(layer_info_t));
+		li.object_id = -1;
+		li.extentions = EXT_INST_CLONE;
+		li.parent = di->layer2;
+		li.st = stid;
+		ret = mISDN_new_layer(di->device, &li);
+		if (ret) {
+			fprintf(stdout, "clone layer failed ret(%d)\n", ret);
+			return(11);
+		}
+		if (!li.clone) {
+			fprintf(stdout, "no cloned id\n");
+			return(11);
+		}
+		di->layer2 = li.clone;
+		di->d_stid = stid;
 	}
 	memset(&li, 0, sizeof(layer_info_t));
 	strcpy(&li.name[0], "user L3");
@@ -609,10 +623,10 @@ add_dlayer3(devinfo_t *di, int prot)
 	li.pid.protocol[3] = prot;
 	li.pid.layermask = ISDN_LAYER(3);
 	li.st = di->d_stid;
-	lid = mISDN_new_layer(di->device, &li);
-	if (lid<0)
+	ret = mISDN_new_layer(di->device, &li);
+	if (ret)
 		return(12);
-	di->layer3 = lid;
+	di->layer3 = li.id;
 	if (VerifyOn>1)
 		fprintf(stdout,"new layer3 id %08x\n", di->layer3);
 	if (!di->layer3)

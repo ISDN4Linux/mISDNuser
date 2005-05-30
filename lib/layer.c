@@ -37,6 +37,7 @@ mISDN_new_layer(int fid, layer_info_t *l_info)
 	unsigned char	buf[sizeof(layer_info_t) + mISDN_HEADER_LEN];
 	iframe_t	*ifr = (iframe_t *)buf;
 	int		ret;
+	u_int		*ip;
 	
 	set_wrrd_atomic(fid);
 	ret = mISDN_write_frame(fid, buf, 0, MGR_NEWLAYER | REQUEST,
@@ -52,13 +53,17 @@ mISDN_new_layer(int fid, layer_info_t *l_info)
 //	fprintf(stderr, "%s: rret %d\n", __FUNCTION__, ret);
 	if (ret<0)
 		return(ret);
-	if (ret < (mISDN_HEADER_LEN + sizeof(int))) {
+	if (ret < (mISDN_HEADER_LEN + 2*sizeof(int))) {
 		if (ret == mISDN_HEADER_LEN)
 			ret = ifr->len;
 		else if (ret>0)
 			ret = -EINVAL;
-	} else
-		ret = ifr->data.i;
+	} else {
+		ret = 0;
+		ip = &ifr->data.p;
+		l_info->id = *ip++;
+		l_info->clone = *ip;
+	}
 //	fprintf(stderr, "%s: ret %x\n", __FUNCTION__, ret);
 	return(ret);
 }
@@ -181,6 +186,22 @@ mISDN_get_layer_info(int fid, int lid, void *info, size_t max_len)
 		lid, MGR_GETLAYER | CONFIRM, TIMEOUT_1SEC);
 	clear_wrrd_atomic(fid);
 	return(ret);
+}
+
+void
+mISDNprint_layer_info(FILE *file, layer_info_t *l_info)
+{
+	int i;
+
+	fprintf(file, "instance id %08x\n", l_info->id);
+	fprintf(file, "       name %s\n", l_info->name);
+	fprintf(file, "        obj %08x\n", l_info->object_id);
+	fprintf(file, "        ext %08x\n", l_info->extentions);
+	fprintf(file, "      stack %08x\n", l_info->st);
+	fprintf(file, "      clone %08x\n", l_info->clone);
+	fprintf(file, "     parent %08x\n", l_info->parent);
+	for(i=0;i<=MAX_LAYER_NR;i++)
+		fprintf(file, "   prot%d %08x\n", i, l_info->pid.protocol[i]);
 }
 
 #ifdef OBSOLATE

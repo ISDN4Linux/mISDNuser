@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.2 2005/05/13 10:38:24 keil Exp $
+/* $Id: mISDNif.h,v 1.3 2005/05/30 18:14:32 keil Exp $
  *
  */
 
@@ -33,8 +33,8 @@
 #define	MISDN_MINOR_VERSION	0
 #define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
 
-#define MISDN_REVISION		"$Revision: 1.2 $"
-#define MISDN_DATE		"$Date: 2005/05/13 10:38:24 $"
+#define MISDN_REVISION		"$Revision: 1.3 $"
+#define MISDN_DATE		"$Date: 2005/05/30 18:14:32 $"
 
 /* SUBCOMMANDS */
 #define REQUEST		0x80
@@ -448,7 +448,8 @@
  * FFFF FFFF CCCC CCCC SSSS SSSS RRRR LLLL
  *
  * L (bit 03-00) Layer ID
- * R (bit 07-04) reserved (0)
+ * R (bit 06-04) reserved (0)
+ * U (bit 07)    user device id
  * S (bit 15-08) Stack ID/controller number
  * C (bit 23-16) Child/Clone ID
  * F (bit 31-24) Flags as defined below
@@ -480,6 +481,7 @@
 #define LAYER_ID_INC	0x00000001
 #define LAYER_ID_MAX	MAX_LAYER_NR
 #define LAYER_ID_MASK	0x0000000F
+#define FLG_ID_USER	0x00000080
 #define INST_ID_MASK	0x70FFFFFF
 
 #define DUMMY_CR_FLAG	0x7FFFFF00
@@ -496,7 +498,7 @@
 #define CHANNEL_EXT_PCM	0x01000000
 #define CHANNEL_EXT_REV	0x02000000
 
-/* interface extentions */
+/* instance/stack extentions */
 #define EXT_STACK_CLONE 0x00000001
 #define EXT_INST_CLONE	0x00000100
 #define EXT_INST_MGR	0x00000200
@@ -578,6 +580,8 @@ typedef struct _stack_info {
 	mISDN_stPara_t	para;
 	u_int		extentions;
 	u_int		mgr;
+	u_int		master;
+	u_int		clone;
 	int		instcnt;
 	int		inst[MAX_LAYER_NR +1];
 	int		childcnt;
@@ -590,6 +594,8 @@ typedef struct _layer_info {
 	int		extentions;
 	u_int		id;
 	u_int		st;
+	u_int		clone;
+	u_int		parent;
 	mISDN_pid_t	pid;
 } layer_info_t;
 

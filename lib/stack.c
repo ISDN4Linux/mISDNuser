@@ -138,6 +138,8 @@ mISDNprint_stack_info(FILE *file, stack_info_t *s_info)
 	for(i=0;i<s_info->instcnt;i++)
 		fprintf(file, "   inst%d %08x\n", i, s_info->inst[i]);
 	fprintf(file, "     mgr %08x\n", s_info->mgr);
+	fprintf(file, "  master %08x\n", s_info->master);
+	fprintf(file, "   clone %08x\n", s_info->clone);
 	for(i=0;i<s_info->childcnt;i++)
 		fprintf(file, "  child%d %08x\n", i, s_info->child[i]);
 }

@@ -270,7 +270,9 @@ extern int mISDN_get_layerid(int fid, int stack, int layer);
  * l_info   - info for the layer
  *
  * return:
- *    layer id or negativ error code
+ *    0 on success or error code
+ *    l_info->id the id of the new layer
+ *    l_info->clone the id of a cloned layer
  *
  */
 extern int mISDN_new_layer(int fid, layer_info_t *l_info);
@@ -321,6 +323,20 @@ extern int mISDN_get_setstack_ind(int fid, u_int lid);
  *
  */
 extern int mISDN_get_layer_info(int fid, int lid, void *info, size_t max_len);
+
+/* mISDNprint_layer_info(FILE *file, layer_info_t *l_info)
+ *
+ * print out the layer_info in readable output
+ *
+ * parameter:
+ * file     - stream to print to
+ * l_info   - layer_info
+ *
+ * return:
+ *    nothing
+ *
+ */
+extern void mISDNprint_layer_info(FILE *file, layer_info_t *l_info);
 
 /* mISDN_get_interface_info(int fid, interface_info_t *i_info)
  *

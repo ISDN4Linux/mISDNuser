@@ -18,7 +18,7 @@ char *pname;
 	fprintf(stderr,"  -?               Usage ; printout this information\n");
 	fprintf(stderr,"  -c<n>            use card number n (default 1)\n"); 
 	fprintf(stderr,"  -v<n>            Printing debug info level n\n");
-	fprintf(stderr,"        0          only recived messages are printed\n");
+	fprintf(stderr,"        0          only received messages are printed\n");
 	fprintf(stderr,"        1          send count\n");
 	fprintf(stderr,"        2          send status\n");
 	fprintf(stderr,"        3          send contens\n");
@@ -160,11 +160,11 @@ int do_setup(devinfo_t *di, int cardnr) {
 	li.pid.layermask = ISDN_LAYER(3);
 	li.st = di->b_stid[di->used_bchannel];
 	ret = mISDN_new_layer(di->device, &li);
-	if (ret<=0) {
+	if (ret) {
 		fprintf(stdout, "new_layer ret(%d)\n", ret);
 		return(4);
 	}
-	di->b_adress[di->used_bchannel] = ret;
+	di->b_adress[di->used_bchannel] = li.id;
 	if (VerifyOn>2)
 		fprintf(stdout,"b_adress%d %08x\n",
 			di->used_bchannel+1, ret);
