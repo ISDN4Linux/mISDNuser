@@ -46,7 +46,6 @@ typedef struct _devinfo {
 	int	layer3;
 	int	b_stid[2];
 	int	b_adress[2];
-	int     b_l2[2];
 	int	used_bchannel;
 	int	save;
 	int	play;
@@ -102,7 +101,7 @@ int play_msg(devinfo_t *di) {
 		di->play = -1;
 	}
 	
-	frm->addr = di->b_adress[di->used_bchannel] | FLG_MSG_DOWN;
+	frm->addr = di->b_adress[di->used_bchannel] | IF_DOWN;
 	frm->prim = DL_DATA | REQUEST;
 	frm->dinfo = 0;
 	frm->len = len;
@@ -137,7 +136,7 @@ int send_data(devinfo_t *di) {
 		len = 1;
 	}
 	
-	frm->addr = di->b_adress[di->used_bchannel] | FLG_MSG_DOWN;
+	frm->addr = di->b_adress[di->used_bchannel] | IF_DOWN;
 	frm->prim = DL_DATA | REQUEST;
 	frm->dinfo = 0;
 	frm->len = len;
@@ -151,7 +150,7 @@ int send_data(devinfo_t *di) {
 
 int setup_bchannel(devinfo_t *di) {
 	mISDN_pid_t pid;
-	int ret, i;
+	int ret;
 	layer_info_t li;
 
 
@@ -167,12 +166,12 @@ int setup_bchannel(devinfo_t *di) {
 	li.pid.layermask = ISDN_LAYER(3);
 	li.st = di->b_stid[di->used_bchannel];
 	ret = mISDN_new_layer(di->device, &li);
-	if (ret) {
+	if (ret<0) {
 		fprintf(stdout, "new_layer ret(%d)\n", ret);
 		return(0);
 	}
-	if (li.id) {
-		di->b_adress[di->used_bchannel] = li.id;
+	if (ret) {
+		di->b_adress[di->used_bchannel] = ret;
 		if (VerifyOn>2)
 			fprintf(stdout,"b_adress%d %08x\n",
 				di->used_bchannel+1, ret);
@@ -183,31 +182,14 @@ int setup_bchannel(devinfo_t *di) {
 		pid.layermask = ISDN_LAYER(1) | ISDN_LAYER(2)| ISDN_LAYER(3);
 		if (di->flag & FLG_CALL_ORGINATE)
 			pid.global = 1;
-		ret = mISDN_set_stack(di->device, di->b_stid[di->used_bchannel], &pid);
+		ret = mISDN_set_stack(di->device,
+			di->b_stid[di->used_bchannel], &pid);
 		if (ret) {
 			fprintf(stdout, "set_stack ret(%d)\n", ret);
 			return(0);
 		}
-		/* Wait until the stack is really available */
-		ret = mISDN_get_setstack_ind(di->device, di->b_adress[di->used_bchannel]);
-		if (ret) {
-			fprintf(stdout, "get_setstack_ind ret (%d)\n", ret);
-			return(0);
-		}
-		/* get the registered id of the b3 layer */
-		ret = mISDN_get_layerid(di->device, di->b_stid[di->used_bchannel], 3);
-		if (ret <= 0) {
-			fprintf(stdout, "get_layerid b3 ret(%d)\n", ret);
-			return(0);
-		}
-		di->b_adress[di->used_bchannel] = ret;
-		/* get the registered id of the b2  layer */
-		ret = mISDN_get_layerid(di->device, di->b_stid[di->used_bchannel], 2);
-		if (ret > 0)
-			di->b_l2[di->used_bchannel] = ret;
-		fprintf(stdout, "b_l2 id %08x\n", ret);
-	} else
-		ret = 0;
+		ret = di->b_adress[di->used_bchannel];
+	}
 	return(ret);
 }
 
@@ -237,7 +219,7 @@ int send_SETUP(devinfo_t *di, int SI, char *PNr) {
 	while (*np)
 		*p++ = *np++ & 0x7f;
 	len = p - msg;
-	ret = mISDN_write_frame(di->device, buf, di->layer3 | FLG_MSG_DOWN,
+	ret = mISDN_write_frame(di->device, buf, di->layer3 | IF_DOWN,
 		DL_DATA | REQUEST, 0, len, msg, TIMEOUT_1SEC);
 	return(ret);
 }
@@ -248,7 +230,7 @@ int activate_bchan(devinfo_t *di) {
 	int ret;
 
 	ret = mISDN_write_frame(di->device, buf,
-		di->b_adress[di->used_bchannel] | FLG_MSG_DOWN,
+		di->b_adress[di->used_bchannel] | IF_DOWN,
 		DL_ESTABLISH | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"DL_ESTABLISH write ret=%d\n", ret);
@@ -269,7 +251,7 @@ int deactivate_bchan(devinfo_t *di) {
 	int ret;
 
 	ret = mISDN_write_frame(di->device, buf,
-		di->b_adress[di->used_bchannel] | FLG_MSG_DOWN,
+		di->b_adress[di->used_bchannel] | IF_DOWN,
 		DL_RELEASE | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"DL_RELEASE write ret=%d\n", ret);
@@ -292,7 +274,7 @@ int send_touchtone(devinfo_t *di, int tone) {
 		fprintf(stdout,"send_touchtone %c\n", DTMF_TONE_MASK & tone);
 	tval = DTMF_TONE_VAL | tone;
 	ret = mISDN_write_frame(di->device, &frm,
-		di->b_adress[di->used_bchannel] | FLG_MSG_DOWN,
+		di->b_adress[di->used_bchannel] | IF_DOWN,
 		PH_CONTROL | REQUEST, 0, 4, &tval, TIMEOUT_1SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"tt send ret=%d\n", ret);
@@ -317,7 +299,7 @@ start_again:
 			if (VerifyOn>4)
 				fprintf(stdout,"readloop addr(%x) prim(%x) len(%d)\n",
 					rfrm->addr, rfrm->prim, rfrm->len);
-			if (rfrm->addr == (di->b_l2[di->used_bchannel] | FLG_MSG_UP)) {
+			if (rfrm->addr == (di->b_adress[di->used_bchannel] | IF_DOWN)) {
 				/* B-Channel related messages */
 				if (rfrm->prim == (DL_DATA | INDICATION)) {
 					/* received data, save it */
@@ -360,7 +342,7 @@ start_again:
 				MsgHead(p, di->cr, MT_CONNECT_ACKNOWLEDGE);
 				len = p - msg;
 				ret = mISDN_write_frame(di->device, buf,
-					di->layer3 | FLG_MSG_DOWN, DL_DATA | REQUEST,
+					di->layer3 | IF_DOWN, DL_DATA | REQUEST,
 					0, len, msg, TIMEOUT_1SEC);
 				/* if here is outgoing data, send first part */
 				switch (di->func) {
@@ -415,7 +397,7 @@ start_again:
 				MsgHead(p, di->cr, MT_RELEASE);
 				len = p - msg;
 				ret = mISDN_write_frame(di->device, buf,
-					di->layer3 | FLG_MSG_DOWN, DL_DATA | REQUEST,
+					di->layer3 | IF_DOWN, DL_DATA | REQUEST,
 					0, len, msg, TIMEOUT_1SEC);
 			} else if ((ret > 19) && (buf[19] == MT_RELEASE)) {
 				/* on a disconnecting msg leave loop */
@@ -424,7 +406,7 @@ start_again:
 				MsgHead(p, di->cr, MT_RELEASE_COMPLETE);
 				len = p - msg;
 				ret = mISDN_write_frame(di->device, buf,
-					di->layer3 | FLG_MSG_DOWN, DL_DATA | REQUEST,
+					di->layer3 | IF_DOWN, DL_DATA | REQUEST,
 					0, len, msg, TIMEOUT_1SEC);
 				return(2);
 			} else if ((ret > 19) && (buf[19] == MT_RELEASE_COMPLETE)) {
@@ -443,7 +425,7 @@ start_again:
 			MsgHead(p, di->cr, MT_DISCONNECT);
 			len = p - msg;
 			ret = mISDN_write_frame(di->device, buf,
-				di->layer3 | FLG_MSG_DOWN, DL_DATA | REQUEST,
+				di->layer3 | IF_DOWN, DL_DATA | REQUEST,
 				0, len, msg, TIMEOUT_1SEC);
 			di->flag &= ~FLG_SEND_TONE;
 		}
@@ -543,7 +525,7 @@ int do_connection(devinfo_t *di) {
 			MsgHead(p, di->cr, MT_CONNECT);
 			len = p - msg;
 			ret = mISDN_write_frame(di->device, buf,
-				di->layer3 | FLG_MSG_DOWN, DL_DATA | REQUEST,
+				di->layer3 | IF_DOWN, DL_DATA | REQUEST,
 				0, len, msg, TIMEOUT_1SEC);
 		}
 		if (!read_mutiplexer(di)) { /* timed out */
@@ -553,7 +535,7 @@ int do_connection(devinfo_t *di) {
 			MsgHead(p, di->cr, MT_RELEASE_COMPLETE);
 			len = p - msg;
 			ret = mISDN_write_frame(di->device, buf,
-				di->layer3 | FLG_MSG_DOWN, DL_DATA | REQUEST,
+				di->layer3 | IF_DOWN, DL_DATA | REQUEST,
 				0, len, msg, TIMEOUT_1SEC);
 		}
 		deactivate_bchan(di);
@@ -562,7 +544,7 @@ int do_connection(devinfo_t *di) {
 	}
 clean_up:
 	sleep(1);
-	ret = mISDN_write_frame(di->device, buf, di->layer3 | FLG_MSG_DOWN,
+	ret = mISDN_write_frame(di->device, buf, di->layer3 | IF_DOWN,
 		DL_RELEASE | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"ret=%d\n", ret);
@@ -570,7 +552,7 @@ clean_up:
 	if (VerifyOn>3)
 		fprintf(stdout,"read ret=%d\n", ret);
 	sleep(1);
-	ret = mISDN_write_frame(di->device, buf, di->layer3 | FLG_MSG_DOWN,
+	ret = mISDN_write_frame(di->device, buf, di->layer3 | IF_DOWN,
 		MGR_DELLAYER | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"ret=%d\n", ret);
@@ -587,34 +569,20 @@ add_dlayer3(devinfo_t *di, int prot)
 {
 	layer_info_t li;
 	stack_info_t si;
-	int lid, stid, ret;
+	interface_info_t ii;
+	int lid, ret;
 
 	if (di->layer3) {
 		memset(&si, 0, sizeof(stack_info_t));
 		si.extentions = EXT_STACK_CLONE;
 		si.mgr = -1;
 		si.id = di->d_stid;
-		stid = mISDN_new_stack(di->device, &si);
-		if (stid <= 0) {
-			fprintf(stdout, "clone stack failed ret(%d)\n", stid);
+		ret = mISDN_new_stack(di->device, &si);
+		if (ret <= 0) {
+			fprintf(stdout, "clone stack failed ret(%d)\n", ret);
 			return(11);
 		}
-		memset(&li, 0, sizeof(layer_info_t));
-		li.object_id = -1;
-		li.extentions = EXT_INST_CLONE;
-		li.parent = di->layer2;
-		li.st = stid;
-		ret = mISDN_new_layer(di->device, &li);
-		if (ret) {
-			fprintf(stdout, "clone layer failed ret(%d)\n", ret);
-			return(11);
-		}
-		if (!li.clone) {
-			fprintf(stdout, "no cloned id\n");
-			return(11);
-		}
-		di->layer2 = li.clone;
-		di->d_stid = stid;
+		di->d_stid = ret;
 	}
 	memset(&li, 0, sizeof(layer_info_t));
 	strcpy(&li.name[0], "user L3");
@@ -623,27 +591,13 @@ add_dlayer3(devinfo_t *di, int prot)
 	li.pid.protocol[3] = prot;
 	li.pid.layermask = ISDN_LAYER(3);
 	li.st = di->d_stid;
-	ret = mISDN_new_layer(di->device, &li);
-	if (ret)
+	lid = mISDN_new_layer(di->device, &li);
+	if (lid<0)
 		return(12);
-	di->layer3 = li.id;
-	if (VerifyOn>1)
-		fprintf(stdout,"new layer3 id %08x\n", di->layer3);
+	di->layer3 = lid;
 	if (!di->layer3)
 		return(13);
 	
-	ret = mISDN_register_layer(di->device, di->d_stid, di->layer3);
-	if (ret) {
-		fprintf(stdout, "register_layer ret(%d)\n", ret);
-		return(14);
-	}
-	lid = mISDN_get_layerid(di->device, di->d_stid, 3);
-	if (lid<0) {
-		fprintf(stdout,"cannot get layer3 (%d)\n", lid);
-		return(15);
-	}
-	di->layer3 = lid;
-#ifdef OBSOLATE
 	/* 
 	 * EXT_IF_CREATE | EXT_IF_EXCLUSIV sorgen dafuer, das wenn die L3
 	 * Schnittstelle schon benutzt ist, eine neue L2 Instanz erzeugt
@@ -653,12 +607,12 @@ add_dlayer3(devinfo_t *di, int prot)
 	ii.extentions = EXT_IF_CREATE | EXT_IF_EXCLUSIV;
 	ii.owner = di->layer3;
 	ii.peer = di->layer2;
-	ii.stat = FLG_MSG_DOWN;
+	ii.stat = IF_DOWN;
 	ret = mISDN_connect(di->device, &ii);
 	if (ret)
 		return(13);
 	ii.owner = di->layer3;
-	ii.stat = FLG_MSG_TARGET | FLG_MSG_DOWN;
+	ii.stat = IF_DOWN;
 	ret = mISDN_get_interface_info(di->device, &ii);
 	if (ret != 0)
 		return(14);
@@ -668,7 +622,6 @@ add_dlayer3(devinfo_t *di, int prot)
 		fprintf(stdout, "Layer 2 %08x cloned from %08x\n",
 			ii.peer, di->layer2);
 	di->layer2 = ii.peer;
-#endif
 	return(0);
 }
 
@@ -766,17 +719,7 @@ int do_setup(devinfo_t *di) {
 	ret = add_dlayer3(di, ISDN_PID_L3_DSS1USER);
 	if (ret)
 		return(ret);
-
-	ret = mISDN_get_stack_info(di->device, di->d_stid, buf, 1024);
-	if (ret<=0) {
-		fprintf(stdout,"cannot get stackinfo err: %d\n", ret);
-		return(3);
-	}
-	stinf = (stack_info_t *)&frm->data.p;
-	if (VerifyOn>1)
-		mISDNprint_stack_info(stdout, stinf);
-
-	ret = mISDN_write_frame(di->device, buf, di->layer3 | FLG_MSG_DOWN,
+	ret = mISDN_write_frame(di->device, buf, di->layer3 | IF_DOWN,
 		DL_ESTABLISH | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"dl_etablish write ret=%d\n", ret);
