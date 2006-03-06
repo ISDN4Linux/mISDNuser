@@ -28,10 +28,12 @@ iframe_t		*frame;
 int
 init_lowdchannel(void)
 {
-	int			ret;
 	stack_info_t		*stinf;
 	layer_info_t		linf;
+	int			ret;
+#ifdef OBSOLETE
 	interface_info_t	iinf;
+#endif
 	int			dstid, dl2id;
 
 	frame = (iframe_t *)buffer;
@@ -60,19 +62,21 @@ init_lowdchannel(void)
 	dstid = stinf->id;
 	dl2id = mISDN_get_layerid(hid, dstid, 2);
 	fprintf(stdout, " dl2id = %08x\n", dl2id);
+#ifdef OBSOLETE
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.owner = dl2id;
-	iinf.stat = IF_UP;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_UP;
 	ret = mISDN_get_interface_info(hid, &iinf);
 	fprintf(stdout, "l2 up   own(%x) -> peer(%x)\n",
 		iinf.owner, iinf.peer);
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.owner = dl2id;
-	iinf.stat = IF_DOWN;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_DOWN;
 	ret = mISDN_get_interface_info(hid, &iinf);
 	fprintf(stdout, "l2 down own(%x) -> peer(%x)\n",
 		iinf.owner, iinf.peer);
 
+#endif
 	memset(&linf, 0, sizeof(layer_info_t));
 	strcpy(&linf.name[0], "tst L3");
 	linf.object_id = -1;
@@ -87,11 +91,12 @@ init_lowdchannel(void)
 	stinf = (stack_info_t *)&frame->data.p;
 	mISDNprint_stack_info(stdout, stinf);
 
+#ifdef OBSOLETE
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.extentions = EXT_INST_MIDDLE;
 	iinf.owner = dl3id;
 	iinf.peer = dl2id;
-	iinf.stat = IF_DOWN;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_DOWN;
 	ret = mISDN_write_frame(hid, buffer, dl3id,
 		MGR_SETIF | REQUEST, 0, sizeof(interface_info_t),
 		&iinf, TIMEOUT_1SEC);
@@ -102,16 +107,17 @@ init_lowdchannel(void)
 		frame->len);
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.owner = dl2id;
-	iinf.stat = IF_UP;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_UP;
 	ret = mISDN_get_interface_info(hid, &iinf);
 	fprintf(stdout, "l2 up   own(%x) -> peer(%x)\n",
 		iinf.owner, iinf.peer);
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.owner = dl2id;
-	iinf.stat = IF_DOWN;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_DOWN;
 	ret = mISDN_get_interface_info(hid, &iinf);
 	fprintf(stdout, "l2 down own(%x) -> peer(%x)\n",
 		iinf.owner, iinf.peer);
+#endif
 	return(0);
 }
 
@@ -165,7 +171,7 @@ send_lowdchannel(int len)
 	int	ret;
 
 	if (!l2activ) {
-		ret = mISDN_write_frame(hid, buffer, dl3id | IF_DOWN,
+		ret = mISDN_write_frame(hid, buffer, dl3id | FLG_MSG_TARGET | FLG_MSG_DOWN,
 			DL_ESTABLISH | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
 		fprintf(stderr, "estab req ret(%d)\n", ret);
 		ret = mISDN_read(hid, buffer, 1024, TIMEOUT_10SEC);
@@ -181,7 +187,7 @@ send_lowdchannel(int len)
 			}
 		}
 	}
-	ret = mISDN_write_frame(hid, buffer, dl3id | IF_DOWN,
+	ret = mISDN_write_frame(hid, buffer, dl3id | FLG_MSG_TARGET | FLG_MSG_DOWN,
 		DL_DATA | REQUEST, 0, len, msg, TIMEOUT_1SEC);
 	return(ret);
 }

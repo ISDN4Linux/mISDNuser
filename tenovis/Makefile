@@ -10,6 +10,11 @@ PROGS	:= testlib tstlib
 
 all: sublib $(PROGS)
 
+install:
+	for i in $(PROGS) ; do \
+		install -m 755 $$i $(INSTALL_PREFIX)/usr/bin ;\
+	done
+
 testlib: testlib.o $(TENOVISLIB) $(mISDNLIB)
 
 tstlib: tstlib.o $(TENOVISLIB) $(mISDNLIB)
@@ -28,6 +33,7 @@ subdirs:
 clean:
 	make TARGET=$@ subdirs
 	rm -f *.o *~ DEADJOE
+	rm -f testlib tstlib
 
 distclean: clean
 	make TARGET=$@ subdirs

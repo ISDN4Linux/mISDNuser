@@ -24,8 +24,8 @@ debug_init(unsigned int mask, char *dfile, char *wfile, char *efile)
 	} else {
 		if (!debug_file) {
 			debug_file = stdout;
-			fprintf(debug_file,
-				"%s: using stdout for debug log\n", __FUNCTION__);
+//			fprintf(debug_file,
+//				"%s: using stdout for debug log\n", __FUNCTION__);
 		}
 	}
 	if (wfile) {
@@ -42,8 +42,8 @@ debug_init(unsigned int mask, char *dfile, char *wfile, char *efile)
 	} else {
 		if (!warn_file) {
 			warn_file = stderr;
-			fprintf(warn_file,
-				"%s: using stderr for warning log\n", __FUNCTION__);
+//			fprintf(warn_file,
+//				"%s: using stderr for warning log\n", __FUNCTION__);
 		}
 	}
 	if (efile) {
@@ -60,25 +60,25 @@ debug_init(unsigned int mask, char *dfile, char *wfile, char *efile)
 	} else {
 		if (!error_file) {
 			error_file = stderr;
-			fprintf(error_file,
-				"%s: using stderr for error log\n", __FUNCTION__);
+//			fprintf(error_file,
+//				"%s: using stderr for error log\n", __FUNCTION__);
 		}
 	}
 	debug_mask = mask;
-	fprintf(debug_file, "%s: debug_mask = %x\n", __FUNCTION__, debug_mask);
+//	fprintf(debug_file, "%s: debug_mask = %x\n", __FUNCTION__, debug_mask);
 	return(0);
 }
 
 void
 debug_close(void)
 {
-	fprintf(debug_file, "%s: debug channel now closed\n", __FUNCTION__);
+//	fprintf(debug_file, "%s: debug channel now closed\n", __FUNCTION__);
 	if (debug_file && (debug_file != stdout))
 		fclose(debug_file);
-	fprintf(warn_file, "%s:  warn channel now closed\n", __FUNCTION__);
+//	fprintf(warn_file, "%s:  warn channel now closed\n", __FUNCTION__);
 	if (warn_file && (warn_file != stderr))
 		fclose(warn_file);
-	fprintf(error_file, "%s: error channel now closed\n", __FUNCTION__);
+//	fprintf(error_file, "%s: error channel now closed\n", __FUNCTION__);
 	if (error_file && (error_file != stderr))
 		fclose(error_file);
 }

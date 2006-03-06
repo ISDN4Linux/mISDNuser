@@ -47,13 +47,13 @@ manager2stack(void *dat, void *arg)
 {
 	net_stack_t	*nst = dat;
 	msg_t		*msg = arg;
-	mISDN_head_t	*hh;
+	mISDNuser_head_t	*hh;
 
 	dprint(DBGM_MAN, "%s:dat(%p) arg(%p)\n", __FUNCTION__,
 		dat, arg);
 	if (!nst | !arg)
 		return(-EINVAL);
-	hh = (mISDN_head_t *)msg->data;
+	hh = (mISDNuser_head_t *)msg->data;
 	dprint(DBGM_MAN, "%s: prim(%x) dinfo(%x) msg->len(%d)\n", __FUNCTION__,
 		hh->prim, hh->dinfo, msg->len);
 	if (hh->prim == (CC_NEW_CR | INDICATION)) /* high prio */
@@ -68,11 +68,11 @@ static int
 stack2manager(void *dat, void *arg) {
 	manager_t 	*mgr = dat;
 	msg_t		*msg = arg;
-	mISDN_head_t	*hh;
+	mISDNuser_head_t	*hh;
 
 	if (!msg || !mgr)
 		return(-EINVAL);
-	hh = (mISDN_head_t *)msg->data;
+	hh = (mISDNuser_head_t *)msg->data;
 	dprint(DBGM_MAN, "%s: prim(%x) dinfo(%x) msg->len(%d) bid(%x/%x)\n", __FUNCTION__,
 		hh->prim, hh->dinfo, msg->len, mgr->bc[0].l3id, mgr->bc[1].l3id);
 	if (hh->prim == (CC_SETUP | INDICATION)) {
@@ -80,7 +80,7 @@ stack2manager(void *dat, void *arg) {
 		RELEASE_COMPLETE_t	*rc;
 		unsigned char		cause[4];
 
-		setup = (SETUP_t*)(msg->data + mISDN_HEADER_LEN);
+		setup = (SETUP_t*)(msg->data + mISDNUSER_HEAD_SIZE);
 		pthread_mutex_lock(&mgr->bc[0].lock);
 		if (mgr->bc[0].cstate == BC_CSTATE_NULL) {
 			mgr->bc[0].cstate = BC_CSTATE_ICALL;
@@ -108,7 +108,7 @@ stack2manager(void *dat, void *arg) {
 			cause[2] = 0x80 | CAUSE_NO_CHANNEL;
 		prep_l3data_msg(CC_RELEASE_COMPLETE | REQUEST, hh->dinfo,
 			sizeof(RELEASE_COMPLETE_t), 3, msg);
-		rc = (RELEASE_COMPLETE_t *)(msg->data + mISDN_HEADER_LEN);
+		rc = (RELEASE_COMPLETE_t *)(msg->data + mISDNUSER_HEAD_SIZE);
 		rc->CAUSE = msg_put(msg, 3);
 		memcpy(rc->CAUSE, &cause, 3);
 		if (manager2stack(mgr->nst, msg))

@@ -27,7 +27,7 @@ DL3open(void)
 		return(fid);
 	dev = get_tdevice(fid);
 	if (dev) {
-		fprintf(stderr, "%s: device %d (%p) has allready fid(%d)\n",
+		fprintf(stderr, "%s device %d (%p) has allready fid(%d)\n",
 			__FUNCTION__, dev->fid, dev, fid);
 		close(fid);
 		errno = EBUSY;
@@ -107,7 +107,7 @@ extern	int	DL3write(int DL3fd, const void *buf, size_t count)
 	}
 	if (!count)
 		return(0);
-	ret = mISDN_write_frame(dev->fid, dev->buf.p, dev->tlid | IF_UP,
+	ret = mISDN_write_frame(dev->fid, dev->buf.p, dev->tlid | FLG_MSG_TARGET | FLG_MSG_UP,
 		DL_DATA | INDICATION, 0, count, (void *)buf, TIMEOUT_1SEC);
 	return(ret);
 }
@@ -154,7 +154,7 @@ extern	size_t	DL3read(int DL3fd, void *buf, size_t count)
 #endif
 	if (ret <= 0)
 		return(ret);
-	if (dev->buf.f->addr == (dev->tlid | IF_UP)) {
+	if (dev->buf.f->addr == (dev->tlid | FLG_MSG_TARGET | FLG_MSG_UP)) {
 		if (dev->buf.f->prim == (DL_DATA | REQUEST)) {
 			if (dev->buf.f->len > count) {
 				errno = ENOSPC;

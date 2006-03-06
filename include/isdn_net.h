@@ -97,6 +97,11 @@ struct _manager	{
 #define FLG_NST_READER_ABORT	1
 #define FLG_NST_TERMINATION	2
 
+#define FEATURE_NET_HOLD	0x00000001
+#define FEATURE_NET_PTP		0x00000002
+#define FEATURE_NET_CRLEN2	0x00000004
+#define FEATURE_NET_EXTCID	0x00000008
+
 struct _net_stack {
 	int			device;
 	int			cardnr;
@@ -126,6 +131,7 @@ struct _net_stack {
 	struct _itimer		*tlist;
 	void			*l2fsm;
 	void			*teifsm;
+	u_long			feature;
 };
 
 struct _nr_list {
@@ -199,11 +205,18 @@ extern	void		display_NR_IE(u_char *, char *, char *);
 
 extern	int		match_nr(manager_t *mgr, unsigned char *nx, nr_list_t **nrx);
 
+typedef struct _mISDNuser_head {
+	u_int	prim;
+	int	dinfo;
+} mISDNuser_head_t;
+
+#define mISDNUSER_HEAD_SIZE	sizeof(mISDNuser_head_t)
+
 /* interface msg help routines */
 
 static inline void mISDN_newhead(u_int prim, int dinfo, msg_t *msg)
 {
-	mISDN_head_t *hh = (mISDN_head_t *)msg->data;
+	mISDNuser_head_t *hh = (mISDNuser_head_t *)msg->data;
 
 	hh->prim = prim;
 	hh->dinfo = dinfo;
@@ -220,7 +233,7 @@ static inline int if_newhead(void *arg, ifunc_t func, u_int prim, int dinfo,
 
 static inline void mISDN_addhead(u_int prim, int dinfo, msg_t *msg)
 {
-	mISDN_head_t *hh = (mISDN_head_t *)msg_push(msg, mISDN_HEADER_LEN);
+	mISDNuser_head_t *hh = (mISDNuser_head_t *)msg_push(msg, mISDNUSER_HEAD_SIZE);
 
 	hh->prim = prim;
 	hh->dinfo = dinfo;
@@ -242,12 +255,12 @@ static inline msg_t *create_link_msg(u_int prim, int dinfo,
 {
 	msg_t	*msg;
 
-	if (!(msg = alloc_msg(len + mISDN_HEADER_LEN + reserve))) {
+	if (!(msg = alloc_msg(len + mISDNUSER_HEAD_SIZE + reserve))) {
 		wprint("%s: no msg size %d+%d+%d\n", __FUNCTION__,
-			len, mISDN_HEADER_LEN, reserve);
+			len, mISDNUSER_HEAD_SIZE, reserve);
 		return(NULL);
 	} else
-		msg_reserve(msg, reserve + mISDN_HEADER_LEN);
+		msg_reserve(msg, reserve + mISDNUSER_HEAD_SIZE);
 	if (len)
 		memcpy(msg_put(msg, len), arg, len);
 	mISDN_addhead(prim, dinfo, msg);
@@ -271,10 +284,10 @@ static inline int if_link(void *farg, ifunc_t func, u_int prim, int dinfo, int l
 static inline msg_t *prep_l3data_msg(u_int prim, int dinfo, int ssize, int dsize, msg_t *old)
 {
 	if (!old) {
-		old = alloc_msg(ssize + dsize + mISDN_HEADER_LEN + DEFAULT_HEADROOM);
+		old = alloc_msg(ssize + dsize + mISDNUSER_HEAD_SIZE + DEFAULT_HEADROOM);
 		if (!old) {
 			wprint("%s: no msg size %d+%d+%d\n", __FUNCTION__,
-				ssize, dsize, mISDN_HEADER_LEN + DEFAULT_HEADROOM);
+				ssize, dsize, mISDNUSER_HEAD_SIZE + DEFAULT_HEADROOM);
 			return(NULL);
 		}
 	} else {
@@ -282,8 +295,8 @@ static inline msg_t *prep_l3data_msg(u_int prim, int dinfo, int ssize, int dsize
 		old->tail = old->data;
 		old->len = 0;
 	}
-	memset(msg_put(old, ssize + mISDN_HEADER_LEN), 0,
-		ssize + mISDN_HEADER_LEN);
+	memset(msg_put(old, ssize + mISDNUSER_HEAD_SIZE), 0,
+		ssize + mISDNUSER_HEAD_SIZE);
 	mISDN_newhead(prim, dinfo, old);
 	return(old);
 }

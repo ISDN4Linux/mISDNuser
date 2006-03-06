@@ -146,17 +146,17 @@ static __inline__ unsigned char *msg_push(msg_t *msg, unsigned int len)
 }
 
 
-static __inline__ unsigned char *__msg_pull(msg_t *msg, unsigned int len)
+static __inline__ char *__msg_pull(msg_t *msg, unsigned int len)
 {
 	msg->len-=len;
-	return msg->data+=len;
+	return 	(char *)(msg->data+=len);
 }
 
 static __inline__ unsigned char * msg_pull(msg_t *msg, unsigned int len)
 {
 	if (len > (unsigned int)msg->len)
 		return NULL;
-	return __msg_pull(msg,len);
+	return (unsigned char *)__msg_pull(msg,len);
 }
 
 static __inline__ int msg_headroom(msg_t *msg)

@@ -1,8 +1,16 @@
 
-all: libisdnnet.a
+all: libisdnnet.a libisdnnet.so
+
+install:
+	install -m 644 libisdnnet.so $(INSTALL_PREFIX)/usr/lib
+	cp *.h $(INSTALL_PREFIX)/usr/include/mISDNuser/
 
 ISDNNETOBJ = net_if.o isdn_debug.o isdn_msg.o fsm.o net_l2.o tei.o net_l3.o \
 		manager.o tone.o bchannel.o g711.o
+
+libisdnnet.so: $(ISDNNETOBJ)
+	rm -f $@
+	$(CC) -shared -Xlinker -x -o $@ $(ISDNNETOBJ)
 
 libisdnnet.a: $(ISDNNETOBJ)
 	rm -f $@
@@ -34,6 +42,7 @@ g711.o: g711.c $(INCLUDEDIR)/g711.h
 
 clean:
 	rm -f *.o *~ DEADJOE
+	rm -f libisdnnet.a
 
 distclean: clean
 	rm -f *.a

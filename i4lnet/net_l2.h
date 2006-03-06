@@ -1,4 +1,4 @@
-/* $Id: net_l2.h,v 1.2 2004/07/04 14:08:14 jolly Exp $
+/* $Id: net_l2.h,v 1.3 2006/03/06 13:08:28 keil Exp $
  *
  * Layer 2 defines
  *
@@ -9,7 +9,6 @@
 #ifndef NET_L2_H
 #define NET_L2_H
 
-#include <asm/bitops.h>
 #include "mISDNlib.h"
 #include "isdn_net.h"
 #include "fsm.h"
@@ -61,6 +60,7 @@ static inline int CES(layer2_t *l2) {
 }
 
 /* from mISDN_l2.c */
+extern int	tei0_active(layer2_t *l2);
 extern layer2_t	*new_dl2(net_stack_t *nst, int tei);
 extern int	tei_l2(layer2_t *l2, msg_t *msg);
 extern int	Isdnl2Init(net_stack_t *nst);
@@ -117,4 +117,31 @@ extern void TEIFree(net_stack_t *nst);
 #define FLG_LAPD_NET	18
 #define FLG_TEI_T201_1	19
 
+
+/* Simple replacement for the NON-ATOMIC routines which asm/bitops.h
+   was providing. */
+static inline int test_bit(int bit, unsigned long *word)
+{
+	return !!((*word) & (1<<bit));
+}
+static inline int test_and_clear_bit(int bit, unsigned long *word)
+{
+	int ret = !!((*word) & (1<<bit));
+	*word &= ~(1<<bit);
+	return ret;
+}
+static inline int test_and_set_bit(int bit, unsigned long *word)
+{
+	int ret = !!((*word) & (1<<bit));
+	*word |= 1<<bit;
+	return ret;
+}
+static inline void clear_bit(int bit, unsigned long *word)
+{
+	*word &= ~(1<<bit);
+}	
+static inline void set_bit(int bit, unsigned long *word)
+{
+	*word |= 1<<bit;
+}	
 #endif

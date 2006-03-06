@@ -14,6 +14,7 @@ tenovis_intern.o : tenovis_intern.c tenovis.h tenovis_int.h \
 
 clean:
 	rm -f *.o *~ DEADJOE
+	rm -f libtenovis.a
 
 distclean: clean
 	rm -f *.a

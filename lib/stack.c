@@ -121,6 +121,8 @@ mISDN_get_stack_info(int fid, int stack, void *info, size_t max_len)
 	ret = mISDN_read_frame(fid, info, max_len,
 		stack, MGR_GETSTACK | CONFIRM, TIMEOUT_1SEC);
 	clear_wrrd_atomic(fid);
+	if (ret == mISDN_HEADER_LEN)
+		ret = ((iframe_t *)info)->len;
 	return(ret);
 }
 
@@ -136,6 +138,8 @@ mISDNprint_stack_info(FILE *file, stack_info_t *s_info)
 	for(i=0;i<s_info->instcnt;i++)
 		fprintf(file, "   inst%d %08x\n", i, s_info->inst[i]);
 	fprintf(file, "     mgr %08x\n", s_info->mgr);
+	fprintf(file, "  master %08x\n", s_info->master);
+	fprintf(file, "   clone %08x\n", s_info->clone);
 	for(i=0;i<s_info->childcnt;i++)
 		fprintf(file, "  child%d %08x\n", i, s_info->child[i]);
 }

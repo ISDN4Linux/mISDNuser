@@ -40,24 +40,27 @@ typedef struct _devinfo {
 	int	cardnr;
 	int	func;
 	char	phonenr[32];
-	int	d_stid;
-	int	layer1;
-	int	layer2;
-	int	layer3;
-	int	b_stid[2];
-	int	b_adress[2];
-	int     b_l2[2];
+	u_int	d_stid;
+	u_int	layer1;
+	u_int	layer2;
+	u_int	layer3;
+	u_int	layer4;
+	u_int	l3_id;
+	u_int	idcnt;
+	u_int	entity;
+	u_int	b_stid[2];
+	u_int	b_adress[2];
+	u_int	b_l2[2];
 	int	used_bchannel;
 	int	save;
 	int	play;
 	FILE	*fplay;
 	int	flag;
 	int	val;
-	int	cr;
 	int	si;
-	int	bl1_prot;
-	int	bl2_prot;
-	int	bl3_prot;
+	u_int	bl1_prot;
+	u_int	bl2_prot;
+	u_int	bl3_prot;
 } devinfo_t;
 
 #define FLG_SEND_TONE		0x0001
@@ -78,15 +81,154 @@ static char tt_char[] = "0123456789ABCD*#";
 
 #define PLAY_SIZE 64
 
-#define	MsgHead(ptr, cref, mty) \
-	*ptr++ = 0x8; \
-	if (cref == -1) { \
-		*ptr++ = 0x0; \
-	} else { \
-		*ptr++ = 0x1; \
-		*ptr++ = cref^0x80; \
-	} \
-	*ptr++ = mty
+/* this should be moved into library context */
+#ifndef MOVED_TO_LIB
+static signed char _mISDN_l3_ie2pos[128] = {
+			-1,-1,-1,-1, 0,-1,-1,-1, 1,-1,-1,-1,-1,-1,-1,-1,
+			 2,-1,-1,-1, 3,-1,-1,-1, 4,-1,-1,-1, 5,-1, 6,-1,
+			 7,-1,-1,-1,-1,-1,-1, 8, 9,10,-1,-1,11,-1,-1,-1,
+			-1,-1,-1,-1,12,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+			13,-1,14,15,16,17,18,19,-1,-1,-1,-1,20,21,-1,-1,
+			-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+			-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,22,23,-1,-1,
+			24,25,-1,-1,26,-1,-1,-1,27,28,-1,-1,29,30,31,-1
+};
+			
+static unsigned char _mISDN_l3_pos2ie[32] = {
+			0x04, 0x08, 0x10, 0x14, 0x18, 0x1c, 0x1e, 0x20,
+			0x27, 0x28, 0x29, 0x2c, 0x34, 0x40, 0x42, 0x43,
+			0x44, 0x45, 0x46, 0x47, 0x4c, 0x4d, 0x6c, 0x6d,
+			0x70, 0x71, 0x74, 0x78, 0x79, 0x7c, 0x7d, 0x7e
+};
+
+signed int
+mISDN_l3_ie2pos(u_char c)
+{
+	if (c>0x7f)
+		return(-1);
+	return(_mISDN_l3_ie2pos[c]);
+}
+
+unsigned char
+mISDN_l3_pos2ie(int pos)
+{
+	return(_mISDN_l3_pos2ie[pos]);
+}
+
+void
+mISDN_initQ931_info(Q931_info_t *qi) {
+	memset(qi, 0, sizeof(Q931_info_t));
+};
+
+int mISDN_get_free_ext_ie(Q931_info_t *qi)
+{
+	int	i;
+
+	for (i = 0; i < 8; i++) {
+		if (qi->ext[i].ie.off == 0)
+			return(i);
+	}
+	return (-1);
+}
+
+int
+mISDN_AddvarIE(Q931_info_t *qi, u_char *p, u_char *ie)
+{
+	u_char		*ps;
+	ie_info_t	*ies;
+	int		l;
+
+	ies = &qi->bearer_capability;
+	ps = (u_char *) qi;
+	ps += L3_EXTRA_SIZE;
+	if (*ie & 0x80) { /* one octett IE */
+		if (*ie == IE_MORE_DATA)
+			ies = &qi->more_data;
+		else if (*ie == IE_COMPLETE)
+			ies = &qi->sending_complete;
+		else if ((*ie & 0xf0) == IE_CONGESTION)
+			ies = &qi->congestion_level;
+		else {
+			return(-1);
+		}
+		l = 1;
+	} else {
+		if (_mISDN_l3_ie2pos[*ie]<0) {
+			return(-2);
+		}
+		ies += _mISDN_l3_ie2pos[*ie];
+		if (ies->off) {
+			while (ies->repeated)
+				ies = &qi->ext[ies->ridx].ie;;
+			l = mISDN_get_free_ext_ie(qi);
+			if (l < 0) { // overflow
+				return(-3);
+			}
+			ies->ridx = l;
+			ies->repeated = 1;
+			ies = &qi->ext[l].ie;
+			ies->cs_flg = 0;
+			qi->ext[l].v.codeset = 0;
+			qi->ext[l].v.val = *ie;
+		}
+		l = ie[1] + 2;
+	}
+	ies->off = (u16)(p - ps);
+	memcpy(p, ie, l);
+	return(l);
+}
+
+int
+mISDN_AddIE(Q931_info_t *qi, u_char *p, u_char ie, u_char *iep)
+{
+	u_char		*ps;
+	ie_info_t	*ies;
+	int		l;
+
+	if (ie & 0x80) { /* one octett IE */
+		if (ie == IE_MORE_DATA)
+			ies = &qi->more_data;
+		else if (ie == IE_COMPLETE)
+			ies = &qi->sending_complete;
+		else if ((ie & 0xf0) == IE_CONGESTION)
+			ies = &qi->congestion_level;
+		else {
+			return(-1);
+		}
+		l = 0;
+	} else {
+		if (!iep || !iep[0])
+			return(-3);
+		ies = &qi->bearer_capability;
+		if (_mISDN_l3_ie2pos[ie]<0) {
+			return(-2);
+		}
+		ies += _mISDN_l3_ie2pos[ie];
+		if (ies->off) {
+			while (ies->repeated)
+				ies = &qi->ext[ies->ridx].ie;;
+			l = mISDN_get_free_ext_ie(qi);
+			if (l < 0) { // overflow
+				return(-3);
+			}
+			ies->ridx = l;
+			ies->repeated = 1;
+			ies = &qi->ext[l].ie;
+			ies->cs_flg = 0;
+			qi->ext[l].v.codeset = 0;
+			qi->ext[l].v.val = ie;
+		}
+		l = iep[0] + 1;
+	}
+	ps = (u_char *) qi;
+	ps += L3_EXTRA_SIZE;
+	ies->off = (u16)(p - ps);
+	*p++ = ie;
+	if (l)
+		memcpy(p, iep, l);
+	return(l+1);
+}
+#endif /* MOVED_TO_LIB */
 
 int play_msg(devinfo_t *di) {
 	unsigned char buf[PLAY_SIZE+mISDN_HEADER_LEN];
@@ -154,7 +296,6 @@ int setup_bchannel(devinfo_t *di) {
 	int ret;
 	layer_info_t li;
 
-
 	if ((di->used_bchannel<0) || (di->used_bchannel>1)) {
 		fprintf(stdout, "wrong channel %d\n", di->used_bchannel);
 		return(0);
@@ -212,34 +353,55 @@ int setup_bchannel(devinfo_t *di) {
 }
 
 int send_SETUP(devinfo_t *di, int SI, char *PNr) {
-	char  *msg, buf[1024];
-	char *np,*p;
+	unsigned char *np, *p, *msg, buf[1024],ie[64];
+	Q931_info_t *qi;
 	int len, ret;
 
+	di->idcnt++;
+	if (di->idcnt >0x7fff)
+		di->idcnt = 1;
+	di->l3_id = (di->entity << 16) | di->idcnt;
+	ret = mISDN_write_frame(di->device, buf, di->layer4 | FLG_MSG_DOWN,
+		CC_NEW_CR | REQUEST, di->l3_id, 0, NULL, TIMEOUT_1SEC);
+	if (VerifyOn>3)
+		fprintf(stdout,"CC_NEW_CR | REQUEST l3_id %x ret=%d\n", di->l3_id, ret);
 	p = msg = buf + mISDN_HEADER_LEN;
-	MsgHead(p, di->cr, MT_SETUP);
-	*p++ = 0xa1; /* complete indicator */
-	*p++ = IE_BEARER;
-	if (SI == 1) { /* Audio */
-		*p++ = 0x3;	/* Length                               */
-		*p++ = 0x90;	/* Coding Std. CCITT, 3.1 kHz audio     */
-		*p++ = 0x90;	/* Circuit-Mode 64kbps                  */
-		*p++ = 0xa3;	/* A-Law Audio                          */
-	} else { /* default Datatransmission 64k */
-		*p++ = 0x2;	/* Length                               */
-		*p++ = 0x88;	/* Coding Std. CCITT, unrestr. dig. Inf */
-		*p++ = 0x90;	/* Circuit-Mode 64kbps                  */
+	qi = (Q931_info_t *)p;
+	mISDN_initQ931_info(qi);
+	qi->type = MT_SETUP;
+	p += L3_EXTRA_SIZE;
+	p++; /* needed to avoid offset 0 in IE array */
+	len = mISDN_AddIE(qi, p, IE_COMPLETE, NULL);
+	if (len<0) {
+		fprintf(stdout,"Add IE_COMPLETE error %d\n", len);
+		return(len);
 	}
-	*p++ = IE_CALLED_PN;
-	np = PNr;
-	*p++ = strlen(np) + 1;
+	p += len;
+	if (SI == 1) { /* Audio */
+		len = mISDN_AddIE(qi, p, IE_BEARER, (unsigned char*)"\x3\x90\x90\xa3");
+	} else { /* default Datatransmission 64k */
+		len = mISDN_AddIE(qi, p, IE_BEARER, (unsigned char*)"\x2\x88\x90");
+	}
+	if (len<0) {
+		fprintf(stdout,"Add IE_BEARER error %d\n", len);
+		return(len);
+	}
+	p += len;
+	np = ie;
+	*np++ = strlen(PNr) + 1;
 	/* Classify as AnyPref. */
-	*p++ = 0x81;		/* Ext = '1'B, Type = '000'B, Plan = '0001'B. */
-	while (*np)
-		*p++ = *np++ & 0x7f;
+	*np++ = 0x81;            /* Ext = '1'B, Type = '000'B, Plan = '0001'B. */
+	while (*PNr)
+		*np++ = *PNr++ & 0x7f;
+	len = mISDN_AddIE(qi, p, IE_CALLED_PN, ie);
+	if (len<0) {
+		fprintf(stdout,"Add IE_CALLED_PNerror %d\n", len);
+		return(len);
+	}
+	p += len;
 	len = p - msg;
-	ret = mISDN_write_frame(di->device, buf, di->layer3 | FLG_MSG_DOWN,
-		DL_DATA | REQUEST, 0, len, msg, TIMEOUT_1SEC);
+	ret = mISDN_write_frame(di->device, buf, di->layer4 | FLG_MSG_DOWN,
+		CC_SETUP | REQUEST, di->l3_id, len, msg, TIMEOUT_1SEC);
 	return(ret);
 }
 
@@ -282,6 +444,14 @@ int deactivate_bchan(devinfo_t *di) {
 	ret = mISDN_clear_stack(di->device, di->b_stid[di->used_bchannel]);
 	if (VerifyOn>3)
 		fprintf(stdout,"clear_stack ret=%d\n", ret);
+	ret = mISDN_write_frame(di->device, buf, di->b_adress[di->used_bchannel] | FLG_MSG_DOWN,
+		MGR_DELLAYER | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
+	if (VerifyOn>3)
+		fprintf(stdout,"ret=%d\n", ret);
+	ret = mISDN_write_frame(di->device, buf, di->b_l2[di->used_bchannel] | FLG_MSG_DOWN,
+		MGR_DELLAYER | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
+	if (VerifyOn>3)
+		fprintf(stdout,"ret=%d\n", ret);
 	return(ret);
 }
 
@@ -301,11 +471,10 @@ int send_touchtone(devinfo_t *di, int tone) {
 }
 
 int read_mutiplexer(devinfo_t *di) {
-	unsigned char	*p, *msg, buf[MAX_REC_BUF];
+	unsigned char	buf[MAX_REC_BUF];
 	iframe_t	*rfrm;
 	int		timeout = TIMEOUT_10SEC;
 	int		ret = 0;
-	int		len;
 
 	rfrm = (iframe_t *)buf;
 	/* Main loop */
@@ -347,7 +516,7 @@ start_again:
 							rfrm->len, rfrm->data.i);
 				}
 			/* D-Channel related messages */  
-			} else if ((ret > 19) && (buf[19] == MT_CONNECT) &&
+			} else if ((rfrm->prim == (CC_CONNECT | INDICATION)) &&
 				(di->flag & FLG_CALL_ORGINATE)) {
 				/* We got connect, so bring B-channel up */
 				if (!(di->flag & FLG_BCHANNEL_EARLY)) {
@@ -357,13 +526,6 @@ start_again:
 						di->flag |= FLG_BCHANNEL_DOACTIVE;
 				}
 				/* send a CONNECT_ACKNOWLEDGE */
-				p = msg = buf + mISDN_HEADER_LEN;
-				MsgHead(p, di->cr, MT_CONNECT_ACKNOWLEDGE);
-				len = p - msg;
-				ret = mISDN_write_frame(di->device, buf,
-					di->layer3 | FLG_MSG_DOWN, DL_DATA | REQUEST,
-					0, len, msg, TIMEOUT_1SEC);
-				/* if here is outgoing data, send first part */
 				switch (di->func) {
 					case 0:
 					case 2:
@@ -382,7 +544,7 @@ start_again:
 						timeout = 1*TIMEOUT_1SEC;
 						break;
 				}
-			} else if ((ret > 19) && (buf[19] == MT_CONNECT_ACKNOWLEDGE) &&
+			} else if ((rfrm->prim == (CC_CONNECT_ACKNOWLEDGE | INDICATION)) &&
 				(!(di->flag & FLG_CALL_ORGINATE))) {
 				/* We got connect ack, so bring B-channel up */
 				if (!(di->flag & FLG_BCHANNEL_EARLY)) {
@@ -410,25 +572,15 @@ start_again:
 						timeout = 1*TIMEOUT_1SEC;
 						break;
 				}
-			} else if ((ret > 19) && (buf[19] == MT_DISCONNECT)) {
+			} else if (rfrm->prim == (CC_DISCONNECT | INDICATION)) {
 				/* send a RELEASE */
-				p = msg = buf + mISDN_HEADER_LEN;
-				MsgHead(p, di->cr, MT_RELEASE);
-				len = p - msg;
 				ret = mISDN_write_frame(di->device, buf,
-					di->layer3 | FLG_MSG_DOWN, DL_DATA | REQUEST,
-					0, len, msg, TIMEOUT_1SEC);
-			} else if ((ret > 19) && (buf[19] == MT_RELEASE)) {
+					di->layer4 | FLG_MSG_DOWN, CC_RELEASE | REQUEST,
+					di->l3_id, 0, NULL, TIMEOUT_1SEC);
+			} else if (rfrm->prim == (CC_RELEASE | INDICATION)) {
 				/* on a disconnecting msg leave loop */
-				/* send a RELEASE_COMPLETE */
-				p = msg = buf + mISDN_HEADER_LEN;
-				MsgHead(p, di->cr, MT_RELEASE_COMPLETE);
-				len = p - msg;
-				ret = mISDN_write_frame(di->device, buf,
-					di->layer3 | FLG_MSG_DOWN, DL_DATA | REQUEST,
-					0, len, msg, TIMEOUT_1SEC);
 				return(2);
-			} else if ((ret > 19) && (buf[19] == MT_RELEASE_COMPLETE)) {
+			} else if (rfrm->prim == (CC_RELEASE_COMPLETE | INDICATION)) {
 				/* on a disconnecting msg leave loop */
 				return(1);
 			}
@@ -440,12 +592,9 @@ start_again:
 			send_touchtone(di, tt_char[di->val]);
 		} else {
 			/* After last tone disconnect */
-			p = msg = buf + mISDN_HEADER_LEN;
-			MsgHead(p, di->cr, MT_DISCONNECT);
-			len = p - msg;
 			ret = mISDN_write_frame(di->device, buf,
-				di->layer3 | FLG_MSG_DOWN, DL_DATA | REQUEST,
-				0, len, msg, TIMEOUT_1SEC);
+				di->layer4 | FLG_MSG_DOWN, CC_DISCONNECT | REQUEST,
+				di->l3_id, 0, NULL, TIMEOUT_1SEC);
 			di->flag &= ~FLG_SEND_TONE;
 		}
 		goto start_again;
@@ -471,41 +620,44 @@ start_again:
 }
 
 int do_connection(devinfo_t *di) {
-	unsigned char *p, *msg, buf[1024];
+	unsigned char *p, buf[1024];
 	iframe_t *rfrm;
-	int len, idx, ret = 0;
+	Q931_info_t	*qi;
+	int ret = 0;
 	int bchannel;
 
 	rfrm = (iframe_t *)buf;
 
 	if (strlen(di->phonenr)) {
 		di->flag |= FLG_CALL_ORGINATE;
-		di->cr = 0x81;
-		send_SETUP(di, di->si, di->phonenr);
+//		di->cr = 0x81;
+		ret = send_SETUP(di, di->si, di->phonenr);
+		if (ret) {
+			return(1);
+		}
 	}
 	bchannel= -1;
 	/* Wait for a SETUP message or a CALL_PROCEEDING */
 	while ((ret = mISDN_read(di->device, buf, 1024, 3*TIMEOUT_10SEC))) {
 		if (VerifyOn>3)
-			fprintf(stdout,"readloop ret=%d\n", ret);
-		if (ret >= 20) {
-			if (((!(di->flag & FLG_CALL_ORGINATE)) &&
-				(buf[19] == MT_SETUP)) ||
-				((di->flag & FLG_CALL_ORGINATE) &&
-				(buf[19] == MT_CALL_PROCEEDING))) {
-				if (!(di->flag & FLG_CALL_ORGINATE))
-					di->cr = buf[18];
-	 			idx = 20;
-				while (idx<ret) {
-					if (buf[idx] == IE_CHANNEL_ID) {
-						bchannel=buf[idx+2] & 0x3;
-						break;
-					} else if (!(buf[idx] & 0x80)) {
-						/* variable len IE */
-						idx++;
-						idx += buf[idx];
-					}
-					idx++;
+			fprintf(stdout,"readloop ret=%d addr(%08x) prim=%x dinfo=%x\n",
+				ret, rfrm->addr, rfrm->prim, rfrm->dinfo);
+		if (ret >= 16) {
+			if ((!(di->flag & FLG_CALL_ORGINATE)) &&
+				(rfrm->prim == (CC_NEW_CR | INDICATION))) {
+				di->l3_id = rfrm->dinfo;
+				if (VerifyOn>3)
+					fprintf(stdout,"new layer3 process id %x\n", di->l3_id);
+			} else if (((!(di->flag & FLG_CALL_ORGINATE)) && (rfrm->prim == (CC_SETUP | INDICATION))) ||
+				((di->flag & FLG_CALL_ORGINATE) && (rfrm->prim == (CC_PROCEEDING | INDICATION)))) {
+				p = buf + mISDN_HEADER_LEN;
+				qi = (Q931_info_t *)p;
+				p += L3_EXTRA_SIZE;
+				if (qi->channel_id.off > 0) {
+					bchannel = p[qi->channel_id.off + 2] & 0x3;
+				} else {
+					fprintf(stdout,"no bchannel IE found\n");
+					return(2);
 				}
 				break;
 			}
@@ -540,22 +692,16 @@ int do_connection(devinfo_t *di) {
 				break;
 		}
 		if (!(di->flag & FLG_CALL_ORGINATE)) {
-			p = msg = buf + mISDN_HEADER_LEN;
-			MsgHead(p, di->cr, MT_CONNECT);
-			len = p - msg;
 			ret = mISDN_write_frame(di->device, buf,
-				di->layer3 | FLG_MSG_DOWN, DL_DATA | REQUEST,
-				0, len, msg, TIMEOUT_1SEC);
+				di->layer4 | FLG_MSG_DOWN, CC_CONNECT | REQUEST,
+				di->l3_id, 0, NULL, TIMEOUT_1SEC);
 		}
 		if (!read_mutiplexer(di)) { /* timed out */
 			/* send a RELEASE_COMPLETE */
 			fprintf(stdout,"read_mutiplexer timed out sending RELEASE_COMPLETE\n");
-			p = msg = buf + mISDN_HEADER_LEN;;
-			MsgHead(p, di->cr, MT_RELEASE_COMPLETE);
-			len = p - msg;
 			ret = mISDN_write_frame(di->device, buf,
-				di->layer3 | FLG_MSG_DOWN, DL_DATA | REQUEST,
-				0, len, msg, TIMEOUT_1SEC);
+				di->layer4 | FLG_MSG_DOWN, CC_RELEASE_COMPLETE | REQUEST,
+				di->l3_id, 0, NULL, TIMEOUT_1SEC);
 		}
 		deactivate_bchan(di);
 	} else {
@@ -578,19 +724,40 @@ clean_up:
 	ret = mISDN_read(di->device, buf, 1024, TIMEOUT_10SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"read ret=%d\n", ret);
+	ret = mISDN_write_frame(di->device, buf, di->layer3,
+		MGR_DELENTITY | REQUEST, di->entity, 0, NULL, TIMEOUT_1SEC);
+	if (VerifyOn>3)
+		fprintf(stdout,"MGR_DELENTITY | REQUEST ret=%d\n", ret);
+	while((ret = mISDN_read(di->device, buf, 1024, TIMEOUT_10SEC))) {
+		if (VerifyOn>3)
+			fprintf(stdout,"MGR_DELENTITY | REQUEST read ret=%d\n", ret);
+		if (rfrm->prim == (MGR_DELENTITY | CONFIRM)) {
+			if (VerifyOn>4)
+				fprintf(stdout,"entity(%x) removed\n", di->entity);
+			break;
+		} else {
+			if (VerifyOn)
+				fprintf(stdout,"read prim %x instead of MGR_DELENTITY | CONFIRM (%x)\n",
+					rfrm->prim, (MGR_DELENTITY | CONFIRM));
+		}
+	}
+	if (!ret) {
+		fprintf(stdout,"MGR_DELENTITY | REQUEST read timed out\n");
+		return(6);
+	}
 	return(0);
 }
 
 
 
 int
-add_dlayer3(devinfo_t *di, int prot)
+add_dlayer4(devinfo_t *di, int prot)
 {
 	layer_info_t li;
 	stack_info_t si;
 	int lid, stid, ret;
 
-	if (di->layer3) {
+	if (di->layer4) {
 		memset(&si, 0, sizeof(stack_info_t));
 		si.extentions = EXT_STACK_CLONE;
 		si.mgr = -1;
@@ -615,25 +782,31 @@ add_dlayer3(devinfo_t *di, int prot)
 			return(11);
 		}
 		di->layer2 = li.clone;
+		di->layer3 = 0;
 		di->d_stid = stid;
 	}
+	if (!di->layer3) {
+		/* search for DSS1 */
+		fprintf(stdout, "currently L3 must already exist\n");
+		return (12); /* currently not implemented */
+	}
 	memset(&li, 0, sizeof(layer_info_t));
-	strcpy(&li.name[0], "user L3");
+	strcpy(&li.name[0], "user L4");
 	li.object_id = -1;
 	li.extentions = 0;
-	li.pid.protocol[3] = prot;
-	li.pid.layermask = ISDN_LAYER(3);
+	li.pid.protocol[4] = prot;
+	li.pid.layermask = ISDN_LAYER(4);
 	li.st = di->d_stid;
 	ret = mISDN_new_layer(di->device, &li);
 	if (ret)
 		return(12);
-	di->layer3 = li.id;
+	di->layer4 = li.id;
 	if (VerifyOn>1)
-		fprintf(stdout,"new layer3 id %08x\n", di->layer3);
-	if (!di->layer3)
+		fprintf(stdout,"new layer3 id %08x\n", di->layer4);
+	if (!di->layer4)
 		return(13);
 	
-	ret = mISDN_register_layer(di->device, di->d_stid, di->layer3);
+	ret = mISDN_register_layer(di->device, di->d_stid, di->layer4);
 	if (ret) {
 		fprintf(stdout, "register_layer ret(%d)\n", ret);
 		return(14);
@@ -644,32 +817,12 @@ add_dlayer3(devinfo_t *di, int prot)
 		return(15);
 	}
 	di->layer3 = lid;
-#ifdef OBSOLATE
-	/* 
-	 * EXT_IF_CREATE | EXT_IF_EXCLUSIV sorgen dafuer, das wenn die L3
-	 * Schnittstelle schon benutzt ist, eine neue L2 Instanz erzeugt
-	 * wird
-	 */
-   	
-	ii.extentions = EXT_IF_CREATE | EXT_IF_EXCLUSIV;
-	ii.owner = di->layer3;
-	ii.peer = di->layer2;
-	ii.stat = FLG_MSG_DOWN;
-	ret = mISDN_connect(di->device, &ii);
-	if (ret)
-		return(13);
-	ii.owner = di->layer3;
-	ii.stat = FLG_MSG_TARGET | FLG_MSG_DOWN;
-	ret = mISDN_get_interface_info(di->device, &ii);
-	if (ret != 0)
-		return(14);
-	if (ii.peer == di->layer2)
-		fprintf(stdout, "Layer 2 not cloned\n");
-	else
-		fprintf(stdout, "Layer 2 %08x cloned from %08x\n",
-			ii.peer, di->layer2);
-	di->layer2 = ii.peer;
-#endif
+	lid = mISDN_get_layerid(di->device, di->d_stid, 4);
+	if (lid<0) {
+		fprintf(stdout,"cannot get layer4 (%d)\n", lid);
+		return(16);
+	}
+	di->layer4 = lid;
 	return(0);
 }
 
@@ -678,7 +831,7 @@ int do_setup(devinfo_t *di) {
 	iframe_t *frm = (iframe_t *)buf;
 	int i, ret = 0;
 	stack_info_t *stinf;
-	status_info_t *si;
+//	status_info_t *si;
 
 	di->bl2_prot = ISDN_PID_L2_B_TRANS;
 	di->bl3_prot = ISDN_PID_L3_B_TRANS;
@@ -764,7 +917,16 @@ int do_setup(devinfo_t *di) {
 		fprintf(stdout,"layer3 id %08x\n", di->layer3);
 
 
-	ret = add_dlayer3(di, ISDN_PID_L3_DSS1USER);
+	di->layer4 = mISDN_get_layerid(di->device, di->d_stid, 4);
+	if (di->layer4<0) {
+		fprintf(stdout,"cannot get layer4\n");
+		di->layer4 = 0;
+	}
+	if (VerifyOn>1)
+		fprintf(stdout,"layer4 id %08x\n", di->layer4);
+
+
+	ret = add_dlayer4(di, ISDN_PID_L4_CAPI20);
 	if (ret)
 		return(ret);
 
@@ -777,6 +939,29 @@ int do_setup(devinfo_t *di) {
 	if (VerifyOn>1)
 		mISDNprint_stack_info(stdout, stinf);
 
+	ret = mISDN_write_frame(di->device, buf, di->layer3,
+		MGR_NEWENTITY | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
+	if (VerifyOn>3)
+		fprintf(stdout,"MGR_NEWENTITY | REQUEST ret=%d\n", ret);
+	while((ret = mISDN_read(di->device, buf, 1024, TIMEOUT_10SEC))) {
+		if (VerifyOn>3)
+			fprintf(stdout,"MGR_NEWENTITY | REQUEST read ret=%d\n", ret);
+		if (frm->prim == (MGR_NEWENTITY | CONFIRM)) {
+			di->entity = frm->dinfo;
+			if (VerifyOn>4)
+				fprintf(stdout,"entity = %x\n", di->entity);
+			break;
+		} else {
+			if (VerifyOn)
+				fprintf(stdout,"read prim %x instead of MGR_NEWENTITY | CONFIRM (%x)\n",
+					frm->prim, (MGR_NEWENTITY | CONFIRM));
+		}
+	}
+	if (!ret) {
+		fprintf(stdout,"MGR_NEWENTITY | REQUEST read timed out\n");
+		return(6);
+	}
+#ifdef OBSOLATE
 	ret = mISDN_write_frame(di->device, buf, di->layer3 | FLG_MSG_DOWN,
 		DL_ESTABLISH | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
 	if (VerifyOn>3)
@@ -804,7 +989,8 @@ int do_setup(devinfo_t *di) {
 	} else
 		fprintf(stdout,"mISDN_get_status_info ret(%d)\n", ret);
 	sleep(1);
-	return(0);
+#endif
+ 	return(0);
 }
 
 int main(argc,argv)

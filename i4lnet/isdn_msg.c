@@ -63,9 +63,8 @@ alloc_msg(int size)
 	m->tail = m->data;
 	m->end  = m->head + m->size;
 	m->len = 0;
-	dprint(DBGM_MSG,"%s: %d msg(%p) at %p %p\n", __FUNCTION__,
-		alloc_msg_cnt, m, __builtin_return_address(0),
-		__builtin_return_address(1));
+	dprint(DBGM_MSG,"%s: %d msg(%p)\n", __FUNCTION__,
+		alloc_msg_cnt, m);
 	return(m);
 }
 
@@ -76,9 +75,9 @@ free_msg(msg_t *msg) {
 		wprint("free NULL msg\n");
 		return;
 	}
-	dprint(DBGM_MSG,"%s: %d/%d msg(%p) at %p %p\n", __FUNCTION__,
-		alloc_msg_cnt, free_queue->len, msg,
-		__builtin_return_address(0), __builtin_return_address(1));
+	dprint(DBGM_MSG,"%s: %d/%d msg(%p) \n", __FUNCTION__,
+		alloc_msg_cnt, free_queue->len, msg);
+
 	if (msg->list) {
 		if  (msg->list == free_queue)
 			wprint("%s: free twice msg(%p)\n", __FUNCTION__,

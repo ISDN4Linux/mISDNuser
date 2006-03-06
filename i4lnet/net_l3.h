@@ -1,4 +1,4 @@
-/* $Id: net_l3.h,v 1.2 2004/07/04 14:08:14 jolly Exp $
+/* $Id: net_l3.h,v 1.3 2006/03/06 13:08:29 keil Exp $
  *
  * Layer 3 defines
  *
@@ -49,8 +49,8 @@ struct _layer3_proc {
 struct _layer3 {
 	layer3_t	*prev;
 	layer3_t	*next;
-	msg_queue_t	squeue;
-	int		l2_state;
+	msg_queue_t	squeue0;
+	int		l2_state0;
 	int		next_cr;
 	int		debug;
 	net_stack_t	*nst;
@@ -146,7 +146,6 @@ typedef struct _PROGRESS {
 	u_char *PROGRESS;
 	u_char *DISPLAY;
 	u_char *HLC;
-	u_char *USER_USER;
 } PROGRESS_t;
 
 typedef struct _RELEASE {

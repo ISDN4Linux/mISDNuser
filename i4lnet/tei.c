@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.3 2004/07/08 00:46:41 keil Exp $
+/* $Id: tei.c,v 1.4 2006/03/06 13:08:29 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 // #include "debug.h"
 // #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.3 $";
+const char *tei_revision = "$Revision: 1.4 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -245,12 +245,12 @@ tei_id_ver_tout(struct FsmInst *fi, int event, void *arg)
 int
 l2_tei(teimgr_t *tm, msg_t *msg)
 {
-	mISDN_head_t	*hh;
+	mISDNuser_head_t	*hh;
 	int		ret = -EINVAL;
 
 	if (!tm || !msg)
 		return(ret);
-	hh = (mISDN_head_t *)msg->data;
+	hh = (mISDNuser_head_t *)msg->data;
 	dprint(DBGM_TEI, "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (msg->len < mISDN_FRAME_MIN)
 		return(ret);
@@ -330,13 +330,13 @@ create_teimgr(layer2_t *l2) {
 int
 tei_mux(net_stack_t *nst, msg_t *msg)
 {
-	mISDN_head_t	*hh;
+	mISDNuser_head_t	*hh;
 	u_char		*dp;
 	int 		mt;
 	layer2_t	*l2;
 	unsigned int	ri, ai;
 
-	hh = (mISDN_head_t *)msg->data;
+	hh = (mISDNuser_head_t *)msg->data;
 	dprint(DBGM_TEI, "%s: prim(%x) len(%d)\n", __FUNCTION__,
 		hh->prim, msg->len);
 	if (msg->len < mISDN_FRAME_MIN)
@@ -346,7 +346,7 @@ tei_mux(net_stack_t *nst, msg_t *msg)
 			hh->prim);
 		return(-EINVAL);
 	}
-	msg_pull(msg, mISDN_HEADER_LEN);
+	msg_pull(msg, mISDNUSER_HEAD_SIZE);
 	if (msg->len < 8) {
 		wprint("short tei mgr frame %d/8\n", msg->len);
 		return(-EINVAL);

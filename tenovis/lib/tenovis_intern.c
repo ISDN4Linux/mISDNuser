@@ -77,7 +77,7 @@ free_tdevice(tenovisdev_t *dev)
 	pthread_mutex_unlock(&dev->mutex);
 	ret = pthread_mutex_destroy(&dev->mutex);
 	if (ret)
-		fprintf(stderr, "%s: mutex destroy returns %d\n",
+		fprintf(stderr, "%s mutex destroy returns %d\n",
 			__FUNCTION__, ret);
 	ret = mISDN_close(dev->fid);
 	free(dev);
@@ -90,7 +90,9 @@ setup_tdevice(tenovisdev_t *dev)
 	int			ret;
 	stack_info_t		*stinf;
 	layer_info_t		linf;
+#ifdef OBSOLETE
 	interface_info_t	iinf;
+#endif
 
 	ret = mISDN_write_frame(dev->fid, dev->buf.p, 0,
 		MGR_SETDEVOPT | REQUEST, FLG_mISDNPORT_ONEFRAME,
@@ -131,30 +133,32 @@ setup_tdevice(tenovisdev_t *dev)
 	fprintf(stdout, " dl2id = %08x\n", dev->dl2id);
 	fprintf(stdout, " dl3id = %08x\n", dev->dl3id);
 	fprintf(stdout, " dl4id = %08x\n", dev->dl4id);
+#ifdef #OBSOLETE
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.owner = dev->dl2id;
-	iinf.stat = IF_UP;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_UP;
 	ret = mISDN_get_interface_info(dev->fid, &iinf);
 	fprintf(stdout, "l2 up   own(%x) -> peer(%x)\n",
 		iinf.owner, iinf.peer);
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.owner = dev->dl2id;
-	iinf.stat = IF_DOWN;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_DOWN;
 	ret = mISDN_get_interface_info(dev->fid, &iinf);
 	fprintf(stdout, "l2 down own(%x) -> peer(%x)\n",
 		iinf.owner, iinf.peer);
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.owner = dev->dl3id;
-	iinf.stat = IF_UP;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_UP;
 	ret = mISDN_get_interface_info(dev->fid, &iinf);
 	fprintf(stdout, "l3 up   own(%x) -> peer(%x)\n",
 		iinf.owner, iinf.peer);
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.owner = dev->dl3id;
-	iinf.stat = IF_DOWN;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_DOWN;
 	ret = mISDN_get_interface_info(dev->fid, &iinf);
 	fprintf(stdout, "l3 down own(%x) -> peer(%x)\n",
 		iinf.owner, iinf.peer);
+#endif
 #endif
 	memset(&linf, 0, sizeof(layer_info_t));
 	strcpy(&linf.name[0], "tenovis L2");
@@ -170,11 +174,12 @@ setup_tdevice(tenovisdev_t *dev)
 	stinf = (stack_info_t *)&dev->buf.f->data.p;
 	mISDNprint_stack_info(stdout, stinf);
 #endif
+#ifdef OBSOLETE
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.extentions = EXT_INST_MIDDLE;
 	iinf.owner = dev->tlid;
 	iinf.peer = dev->dl3id;
-	iinf.stat = IF_UP;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_UP;
 	ret = mISDN_write_frame(dev->fid, dev->buf.p, dev->tlid,
 		MGR_SETIF | REQUEST, 0, sizeof(interface_info_t),
 		&iinf, TIMEOUT_1SEC);
@@ -191,7 +196,7 @@ setup_tdevice(tenovisdev_t *dev)
 	iinf.extentions = EXT_INST_MIDDLE;
 	iinf.owner = dev->tlid;
 	iinf.peer = dev->dl2id;
-	iinf.stat = IF_DOWN;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_DOWN;
 	ret = mISDN_write_frame(dev->fid, dev->buf.p, dev->tlid,
 		MGR_SETIF | REQUEST, 0, sizeof(interface_info_t),
 		&iinf, TIMEOUT_1SEC);
@@ -205,28 +210,29 @@ setup_tdevice(tenovisdev_t *dev)
 		dev->buf.f->len);
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.owner = dev->dl2id;
-	iinf.stat = IF_UP;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_UP;
 	ret = mISDN_get_interface_info(dev->fid, &iinf);
 	fprintf(stdout, "l2 up   own(%x) -> peer(%x)\n",
 		iinf.owner, iinf.peer);
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.owner = dev->dl2id;
-	iinf.stat = IF_DOWN;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_DOWN;
 	ret = mISDN_get_interface_info(dev->fid, &iinf);
 	fprintf(stdout, "l2 down own(%x) -> peer(%x)\n",
 		iinf.owner, iinf.peer);
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.owner = dev->dl3id;
-	iinf.stat = IF_UP;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_UP;
 	ret = mISDN_get_interface_info(dev->fid, &iinf);
 	fprintf(stdout, "l3 up   own(%x) -> peer(%x)\n",
 		iinf.owner, iinf.peer);
 	memset(&iinf, 0, sizeof(interface_info_t));
 	iinf.owner = dev->dl3id;
-	iinf.stat = IF_DOWN;
+	iinf.stat = FLG_MSG_TARGET | FLG_MSG_DOWN;
 	ret = mISDN_get_interface_info(dev->fid, &iinf);
 	fprintf(stdout, "l3 down own(%x) -> peer(%x)\n",
 		iinf.owner, iinf.peer);
+#endif
 #endif
 	return(0);
 }
@@ -267,11 +273,11 @@ intern_read(tenovisdev_t *dev)
 	fprintf(stdout, __FUNCTION__" addr(%x) prim(%x)\n",
 		dev->buf.f->addr, dev->buf.f->prim);
 #endif
-	if (dev->buf.f->addr == (dev->tlid | IF_UP)) {
+	if (dev->buf.f->addr == (dev->tlid | FLG_MSG_TARGET | FLG_MSG_UP)) {
 		if (dev->buf.f->prim == (DL_ESTABLISH | REQUEST)) {
 			dev->Flags |= TN_FLG_L2_ACTIV;
 			ret = mISDN_write_frame(dev->fid, dev->buf.p,
-				dev->tlid | IF_UP, DL_ESTABLISH | CONFIRM,
+				dev->tlid | FLG_MSG_TARGET | FLG_MSG_UP, DL_ESTABLISH | CONFIRM,
 				0, 0, NULL, TIMEOUT_1SEC);
 #ifdef PRINTDEBUG
 			fprintf(stdout, __FUNCTION__": estab cnf ret(%d)\n",
@@ -280,7 +286,7 @@ intern_read(tenovisdev_t *dev)
 		} else if (dev->buf.f->prim == (DL_RELEASE | REQUEST)) {
 			dev->Flags &= ~TN_FLG_L2_ACTIV;
 			ret = mISDN_write_frame(dev->fid, dev->buf.p,
-				dev->tlid | IF_UP, DL_RELEASE | CONFIRM,
+				dev->tlid | FLG_MSG_TARGET | FLG_MSG_UP, DL_RELEASE | CONFIRM,
 				0, 0, NULL, TIMEOUT_1SEC);
 #ifdef PRINTDEBUG
 			fprintf(stdout, __FUNCTION__": rel cnf ret(%d)\n",

@@ -52,11 +52,11 @@ int download_firmware(devinfo_t *di, int size) {
 	int *adr, l;
 
 	frm->prim = PH_CONTROL | REQUEST;
-	frm->dinfo = 0;
-	frm->addr = di->b_adress[di->used_bchannel] | IF_DOWN;
-	frm->len = 8;
+	frm->dinfo = HW_FIRM_START;
+	frm->addr = di->b_adress[di->used_bchannel] | FLG_MSG_TARGET | FLG_MSG_DOWN;
+	frm->len = 4;
 	adr = (int *)&frm->data.i;
-	*adr++ = HW_FIRM_START;
+//	*adr++ = HW_FIRM_START;
 	*adr++ = size;
 
 	ret = mISDN_write(di->device, buf, frm->len+mISDN_HEADER_LEN, 100000);
@@ -76,11 +76,11 @@ int download_firmware(devinfo_t *di, int size) {
 		if (l+cnt >=size)
 			l = size - cnt;
 		frm->prim = PH_CONTROL | REQUEST;
-		frm->dinfo = 0;
-		frm->addr = di->b_adress[di->used_bchannel] | IF_DOWN;
-		frm->len = l + 8;
+		frm->dinfo = HW_FIRM_DATA;
+		frm->addr = di->b_adress[di->used_bchannel] | FLG_MSG_TARGET | FLG_MSG_DOWN;
+		frm->len = l + 4;
 		adr = (int *)&frm->data.i;
-		*adr++ = HW_FIRM_DATA;
+//		*adr++ = HW_FIRM_DATA;
 		*adr++ = l;
 		memcpy(adr, firmware + cnt, l);
 		ret = mISDN_write(di->device, buf, frm->len+mISDN_HEADER_LEN, 100000);
@@ -95,11 +95,11 @@ int download_firmware(devinfo_t *di, int size) {
 		cnt += l;
 	}
 	frm->prim = PH_CONTROL | REQUEST;
-	frm->dinfo = 0;
-	frm->addr = di->b_adress[di->used_bchannel] | IF_DOWN;
-	frm->len = 4;
-	adr = (int *)&frm->data.i;
-	*adr++ = HW_FIRM_END;
+	frm->dinfo = HW_FIRM_END;
+	frm->addr = di->b_adress[di->used_bchannel] | FLG_MSG_TARGET | FLG_MSG_DOWN;
+	frm->len = 0;
+//	adr = (int *)&frm->data.i;
+//	*adr++ = HW_FIRM_END;
 	ret = mISDN_write(di->device, buf, frm->len+mISDN_HEADER_LEN, 100000);
 	if (ret < 0)
 		fprintf(stdout,"send_data write error %d %s\n", errno,
@@ -142,6 +142,7 @@ int do_setup(devinfo_t *di, int cardnr) {
 	if (VerifyOn>1)
 		mISDNprint_stack_info(stdout, stinf);
 	di->d_stid = stinf->id;
+	fprintf(stdout,"stid(%08x) childcnt(%d)\n", stinf->id, stinf->childcnt);
 	for (i=0;i<2;i++) {
 		if (stinf->childcnt>i)
 			di->b_stid[i] = stinf->child[i];
@@ -159,14 +160,21 @@ int do_setup(devinfo_t *di, int cardnr) {
 	li.pid.layermask = ISDN_LAYER(3);
 	li.st = di->b_stid[di->used_bchannel];
 	ret = mISDN_new_layer(di->device, &li);
-	if (ret<=0) {
+	if (ret) {
 		fprintf(stdout, "new_layer ret(%d)\n", ret);
 		return(4);
 	}
-	di->b_adress[di->used_bchannel] = ret;
+	di->b_adress[di->used_bchannel] = li.id;
 	if (VerifyOn>2)
 		fprintf(stdout,"b_adress%d %08x\n",
 			di->used_bchannel+1, ret);
+#if 0
+	ret = mISDN_preregister_layer(di->device, di->b_stid[di->used_bchannel], di->b_adress[di->used_bchannel]);
+	if (ret < 0) {
+		fprintf(stdout, "preregister_layer ret(%d)\n", ret);
+		return(5);
+	}
+#endif
 	memset(&pid, 0, sizeof(mISDN_pid_t));
 	pid.protocol[1] = ISDN_PID_L1_B_64TRANS;
 	pid.protocol[2] = ISDN_PID_L2_B_TRANS;
@@ -176,7 +184,12 @@ int do_setup(devinfo_t *di, int cardnr) {
 		di->b_stid[di->used_bchannel], &pid);
 	if (ret) {
 		fprintf(stdout, "set_stack ret(%d)\n", ret);
-		return(5);
+		return(6);
+	}
+	ret = mISDN_get_setstack_ind(di->device, di->b_adress[di->used_bchannel]);
+	if (ret) {
+		fprintf(stdout, "get_setstack_ind ret(%d)\n", ret);
+		return(7);
 	}
 	return(0);
 }

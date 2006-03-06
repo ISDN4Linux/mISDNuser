@@ -177,12 +177,12 @@ route_call(layer4_t *l4)
 
 static int
 manager(net_stack_t *nst, msg_t *msg) {
-	mISDN_head_t	*hh;
+	mISDNuser_head_t	*hh;
 	layer4_t	*l4;
 
 	if (!msg)
 		return(-EINVAL);
-	hh = (mISDN_head_t *)msg->data;
+	hh = (mISDNuser_head_t *)msg->data;
 	msg_pull(msg, mISDN_HEAD_SIZE);
 	fprintf(stderr, "%s: prim(%x) msg->len(%d)\n", __FUNCTION__,
 		hh->prim, msg->len);

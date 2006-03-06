@@ -191,7 +191,7 @@ int play_msg(devinfo_t *di) {
 		*p = Alaw_to_ulaw[*p];
 		p++;
 	}
-	frm->addr = di->b_adress[di->used_bchannel] | IF_DOWN;
+	frm->addr = di->b_adress[di->used_bchannel] | FLG_MSG_TARGET | FLG_MSG_DOWN;
 	frm->prim = DL_DATA | REQUEST;
 	frm->dinfo = 0;
 	frm->len = len;
@@ -226,7 +226,7 @@ int send_data(devinfo_t *di) {
 		len = 1;
 	}
 	
-	frm->addr = di->b_adress[di->used_bchannel] | IF_DOWN;
+	frm->addr = di->b_adress[di->used_bchannel] | FLG_MSG_TARGET | FLG_MSG_DOWN;
 	frm->prim = DL_DATA | REQUEST;
 	frm->dinfo = 0;
 	frm->len = len;
@@ -330,7 +330,7 @@ int send_SETUP(devinfo_t *di, int SI, char *PNr) {
 			*p++ = *np++ & 0x7f;
 	}
 	len = p - msg;
-	ret = mISDN_write_frame(di->device, buf, di->layer3 | IF_DOWN,
+	ret = mISDN_write_frame(di->device, buf, di->layer3 | FLG_MSG_TARGET | FLG_MSG_DOWN,
 		DL_UNITDATA | REQUEST, 0, len, msg, TIMEOUT_1SEC);
 	return(ret);
 }
@@ -341,7 +341,7 @@ int activate_bchan(devinfo_t *di) {
 	int ret;
 
 	ret = mISDN_write_frame(di->device, buf,
-		di->b_adress[di->used_bchannel] | IF_DOWN,
+		di->b_adress[di->used_bchannel] | FLG_MSG_TARGET | FLG_MSG_DOWN,
 		DL_ESTABLISH | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"DL_ESTABLISH write ret=%d\n", ret);
@@ -362,7 +362,7 @@ int deactivate_bchan(devinfo_t *di) {
 	int ret;
 
 	ret = mISDN_write_frame(di->device, buf,
-		di->b_adress[di->used_bchannel] | IF_DOWN,
+		di->b_adress[di->used_bchannel] | FLG_MSG_TARGET | FLG_MSG_DOWN,
 		DL_RELEASE | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"DL_RELEASE write ret=%d\n", ret);
@@ -385,7 +385,7 @@ int send_touchtone(devinfo_t *di, int tone) {
 		fprintf(stdout,"send_touchtone %c\n", DTMF_TONE_MASK & tone);
 	tval = DTMF_TONE_VAL | tone;
 	ret = mISDN_write_frame(di->device, &frm,
-		di->b_adress[di->used_bchannel] | IF_DOWN,
+		di->b_adress[di->used_bchannel] | FLG_MSG_TARGET | FLG_MSG_DOWN,
 		PH_CONTROL | REQUEST, 0, 4, &tval, TIMEOUT_1SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"tt send ret=%d\n", ret);
@@ -410,7 +410,7 @@ start_again:
 			if (VerifyOn>4)
 				fprintf(stdout,"readloop addr(%x) prim(%x) len(%d)\n",
 					rfrm->addr, rfrm->prim, rfrm->len);
-			if (rfrm->addr == (di->b_adress[di->used_bchannel] | IF_DOWN)) {
+			if (rfrm->addr == (di->b_adress[di->used_bchannel] | FLG_MSG_TARGET | FLG_MSG_DOWN)) {
 				/* B-Channel related messages */
 				if (rfrm->prim == (DL_DATA | INDICATION)) {
 					/* received data, save it */
@@ -452,7 +452,7 @@ start_again:
 				MsgHead(p, di->cr, MT_CONNECT_ACKNOWLEDGE);
 				len = p - msg;
 				ret = mISDN_write_frame(di->device, buf,
-					di->layer3 | IF_DOWN, DL_DATA | REQUEST,
+					di->layer3 | FLG_MSG_TARGET | FLG_MSG_DOWN, DL_DATA | REQUEST,
 					0, len, msg, TIMEOUT_1SEC);
 				/* if here is outgoing data, send first part */
 				switch (di->func) {
@@ -483,7 +483,7 @@ start_again:
 				MsgHead(p, di->cr, MT_RELEASE);
 				len = p - msg;
 				ret = mISDN_write_frame(di->device, buf,
-					di->layer3 | IF_DOWN, DL_DATA | REQUEST,
+					di->layer3 | FLG_MSG_TARGET | FLG_MSG_DOWN, DL_DATA | REQUEST,
 					0, len, msg, TIMEOUT_1SEC);
 			} else if ((ret > 19) && (buf[19] == MT_RELEASE)) {
 				/* on a disconnecting msg leave loop */
@@ -492,7 +492,7 @@ start_again:
 				MsgHead(p, di->cr, MT_RELEASE_COMPLETE);
 				len = p - msg;
 				ret = mISDN_write_frame(di->device, buf,
-					di->layer3 | IF_DOWN, DL_DATA | REQUEST,
+					di->layer3 | FLG_MSG_TARGET | FLG_MSG_DOWN, DL_DATA | REQUEST,
 					0, len, msg, TIMEOUT_1SEC);
 				return(2);
 			} else if ((ret > 19) && (buf[19] == MT_RELEASE_COMPLETE)) {
@@ -511,7 +511,7 @@ start_again:
 			MsgHead(p, di->cr, MT_DISCONNECT);
 			len = p - msg;
 			ret = mISDN_write_frame(di->device, buf,
-				di->layer3 | IF_DOWN, DL_DATA | REQUEST,
+				di->layer3 | FLG_MSG_TARGET | FLG_MSG_DOWN, DL_DATA | REQUEST,
 				0, len, msg, TIMEOUT_1SEC);
 			di->flag &= ~FLG_SEND_TONE;
 		}
@@ -614,7 +614,7 @@ int do_connection(devinfo_t *di) {
 			*p++ = ts->tm_min;
 			len = p - msg;
 			ret = mISDN_write_frame(di->device, buf,
-				di->layer3 | IF_DOWN, DL_DATA | REQUEST,
+				di->layer3 | FLG_MSG_TARGET | FLG_MSG_DOWN, DL_DATA | REQUEST,
 				0, len, msg, TIMEOUT_1SEC);
 		}
 		if (!read_mutiplexer(di)) { /* timed out */
@@ -624,7 +624,7 @@ int do_connection(devinfo_t *di) {
 			MsgHead(p, di->cr, MT_RELEASE_COMPLETE);
 			len = p - msg;
 			ret = mISDN_write_frame(di->device, buf,
-				di->layer3 | IF_DOWN, DL_DATA | REQUEST,
+				di->layer3 | FLG_MSG_TARGET | FLG_MSG_DOWN, DL_DATA | REQUEST,
 				0, len, msg, TIMEOUT_1SEC);
 		}
 		deactivate_bchan(di);
@@ -633,7 +633,7 @@ int do_connection(devinfo_t *di) {
 	}
 clean_up:
 	sleep(1);
-	ret = mISDN_write_frame(di->device, buf, di->layer3 | IF_DOWN,
+	ret = mISDN_write_frame(di->device, buf, di->layer3 | FLG_MSG_TARGET | FLG_MSG_DOWN,
 		DL_RELEASE | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"ret=%d\n", ret);
@@ -641,7 +641,7 @@ clean_up:
 	if (VerifyOn>3)
 		fprintf(stdout,"read ret=%d\n", ret);
 	sleep(1);
-	ret = mISDN_write_frame(di->device, buf, di->layer3 | IF_DOWN,
+	ret = mISDN_write_frame(di->device, buf, di->layer3 | FLG_MSG_TARGET | FLG_MSG_DOWN,
 		MGR_DELLAYER | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"ret=%d\n", ret);
@@ -658,7 +658,9 @@ add_dlayer3(devinfo_t *di, int prot)
 {
 	layer_info_t li;
 	stack_info_t si;
+#ifdef OBSOLETE
 	interface_info_t ii;
+#endif
 	int lid, ret;
 
 	if (di->layer3) {
@@ -687,6 +689,7 @@ add_dlayer3(devinfo_t *di, int prot)
 	if (!di->layer3)
 		return(13);
 	
+#ifdef OBSOLETE
 	/* 
 	 * EXT_IF_CREATE | EXT_IF_EXCLUSIV sorgen dafuer, das wenn die L3
 	 * Schnittstelle schon benutzt ist, eine neue L2 Instanz erzeugt
@@ -696,12 +699,12 @@ add_dlayer3(devinfo_t *di, int prot)
 	ii.extentions = EXT_IF_CREATE | EXT_IF_EXCLUSIV;
 	ii.owner = di->layer3;
 	ii.peer = di->layer2;
-	ii.stat = IF_DOWN;
+	ii.stat = FLG_MSG_TARGET | FLG_MSG_DOWN;
 	ret = mISDN_connect(di->device, &ii);
 	if (ret)
 		return(13);
 	ii.owner = di->layer3;
-	ii.stat = IF_DOWN;
+	ii.stat = FLG_MSG_TARGET | FLG_MSG_DOWN;
 	ret = mISDN_get_interface_info(di->device, &ii);
 	if (ret != 0)
 		return(14);
@@ -711,6 +714,7 @@ add_dlayer3(devinfo_t *di, int prot)
 		fprintf(stdout, "Layer 2 %08x cloned from %08x\n",
 			ii.peer, di->layer2);
 	di->layer2 = ii.peer;
+#endif
 	return(0);
 }
 
@@ -778,7 +782,7 @@ int do_setup(devinfo_t *di) {
 	ret = add_dlayer3(di, ISDN_PID_L3_DSS1NET);
 	if (ret)
 		return(ret);
-	ret = mISDN_write_frame(di->device, buf, di->layer3 | IF_DOWN,
+	ret = mISDN_write_frame(di->device, buf, di->layer3 | FLG_MSG_TARGET | FLG_MSG_DOWN,
 		DL_ESTABLISH | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"dl_etablish write ret=%d\n", ret);
