@@ -576,7 +576,7 @@ add_dlayer3(devinfo_t *di, int prot)
 #ifdef OBSOLETE
 	interface_info_t ii;
 #endif
-	int lid, ret;
+	int ret;
 
 	if (di->layer3) {
 		memset(&si, 0, sizeof(stack_info_t));
@@ -597,10 +597,10 @@ add_dlayer3(devinfo_t *di, int prot)
 	li.pid.protocol[3] = prot;
 	li.pid.layermask = ISDN_LAYER(3);
 	li.st = di->d_stid;
-	lid = mISDN_new_layer(di->device, &li);
-	if (lid<0)
+	ret = mISDN_new_layer(di->device, &li);
+	if (ret<0)
 		return(12);
-	di->layer3 = lid;
+	di->layer3 = li.id;
 	if (!di->layer3)
 		return(13);
 	
