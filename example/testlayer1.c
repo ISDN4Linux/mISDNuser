@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <string.h>
 #include <signal.h>
+#include <sys/time.h>
 #include "mISDNlib.h"
 
 void usage(pname) 
@@ -39,6 +40,7 @@ typedef struct _devinfo {
 	int	b_stid[2];
 	int	layer1;
 	int	layer2;
+	int	unconfirmed;
 } devinfo_t;
 
 
@@ -177,55 +179,83 @@ int do_setup(devinfo_t *di) {
 	return(10);
 }
 
+int printhexdata(FILE *f, int len, u_char *p)
+{
+        while(len--) {
+        	fprintf(f, "0x%02x", *p++);
+        	if (len)
+        		fprintf(f, " ");
+	}
+	fprintf(f, "\n");
+	return(0);
+}
+
 void main_data_loop(devinfo_t *di)
 {
 	unsigned char buf[1024];
+	unsigned char tx_buf[1024];
+	struct timeval tp;
+	long a, b;
 	
         iframe_t *frm = (iframe_t *)buf;
         int ret, i;
-        unsigned char *p;
-                
-	/* test sending a trash frame... */ 
-	/*
-	unsigned char tx_buf[1024];
+        
+        gettimeofday(&tp, 0);
+        b = ((unsigned)tp.tv_sec)*1000000+((unsigned)tp.tv_usec);
 	
-	msg[0] = 0x01;
-	msg[1] = 0x02;
-	msg[2] = 0x03;
-	msg[3] = 0x04;
-	msg[4] = 0x05;
-
-	ret = mISDN_write_frame(di->device, buf, di->layer2 | FLG_MSG_DOWN,
-        	PH_DATA | REQUEST, 0, 5, msg, 0);
-	if (ret>0) {
-		fprintf(stdout,"unable to send data (0x%x)\n", ret);
-	}
-	*/
-
         printf ("waiting for data (use CTRL-C to cancel) ...\n");
         while (1)  {
-        	ret = mISDN_read(di->device, buf, 1024, 10);
+        	/* read data */
+        	ret = mISDN_read(di->device, buf, 1024, 0);
         	if (ret >= mISDN_HEADER_LEN) {
-        		p = buf + mISDN_HEADER_LEN;
         		
         		switch(frm->prim) {
         			case (PH_DATA | INDICATION) :
+        				// layer1 gives rx frame
         				printf ("(PH_DATA | INDICATION) : \n\t");
-		        		for (i=0; i < frm->len; i++) {
-        					printf ("0x%02x ", *(p+i));
-						if ((!((i+1) % 8)) && (i<frm->len))
-							printf ("\n\t");
-					}
-					printf ("\n\n");
+					printhexdata(stdout, frm->len, buf + mISDN_HEADER_LEN);
+					break;
+					
+				case (PH_DATA | CONFIRM) :
+					// layer1 confirmes tx frame
+					di->unconfirmed--;
 					break;
 				default:
 					printf ("unhandled prim(0x%x) len(0x%x)\n", frm->prim, frm->len);
         		}
         	}
-        }
+        	
+        	/* write data */
+        	gettimeofday(&tp, 0);
+        	a = ((unsigned)tp.tv_sec)*1000000+((unsigned)tp.tv_usec);
+        	
+        	if ((a-b)>1000000) {
+        		printf(".\n");
+        		i=0;
+        		
+        		/* send fake d-channel frame, here Tei request */
+			tx_buf[i++] = 0xfC;
+			tx_buf[i++] = 0xff;
+			tx_buf[i++] = 0x03;
+			tx_buf[i++] = 0x0f;
+			tx_buf[i++] = 0xe9;
+			tx_buf[i++] = 0x69;
+			tx_buf[i++] = 0x01;
+			tx_buf[i++] = 0xff;
+
+			ret = mISDN_write_frame(di->device, buf, di->layer2 | FLG_MSG_DOWN,
+				PH_DATA | REQUEST, 0, 8, tx_buf, 10);
+			if (ret>0) {
+				fprintf(stdout,"unable to send data (0x%x)\n", ret);
+			} else {
+				di->unconfirmed++;
+			}
+        		
+        		b = a;
+        	}
+	}
 }
         
-
 
 int main(argc,argv)
 int argc;
@@ -235,7 +265,7 @@ char *argv[];
 	char sw;
 	int err;
 
-	fprintf(stdout,"\n\nTest-L1 $Revision: 1.1 $\n");
+	fprintf(stdout,"\n\nTest-L1 $Revision: 1.2 $\n");
 	memset(&mISDN, 0, sizeof(mISDN));
 	mISDN.cardnr = 1;
 	mISDN.func = 0;
