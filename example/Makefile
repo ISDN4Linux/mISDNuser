@@ -1,5 +1,5 @@
 LIBINCL	:= $(INCLUDEDIR)/mISDNlib.h
-PROGS	:= testcon testcon_l2 testlayer3 loadfirm sendhwctrl
+PROGS	:= testcon testcon_l2 testlayer3 loadfirm sendhwctrl testlayer1
 # PROGS   := testcon testnet loadfirm logger
 
 all: $(PROGS)
@@ -20,6 +20,8 @@ testcon_l2: testcon_l2.o $(mISDNLIB)
 loadfirm: loadfirm.o $(mISDNLIB)
 
 sendhwctrl: sendhwctrl.o $(mISDNLIB)
+
+testlayer1: testlayer1.o $(mISDNLIB)
 
 logger: logger.o $(mISDNLIB)
 
