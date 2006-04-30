@@ -46,6 +46,8 @@ all: test_misdn_includes
 install_path:
 	mkdir -p $(INSTALL_PREFIX)/usr/bin/
 	mkdir -p $(INSTALL_PREFIX)/usr/include/mISDNuser/
+	mkdir -p $(INSTALL_PREFIX)/usr/lib/
+
 
 install: install_path all
 	make TARGET=install subdirs
