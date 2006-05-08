@@ -1,5 +1,5 @@
 LIBINCL	:= $(INCLUDEDIR)/mISDNlib.h
-PROGS	:= testcon testcon_l2 testlayer3 loadfirm sendhwctrl testlayer1
+PROGS	:= testcon testcon_l2 testlayer3 loadfirm sendhwctrl testlayer1 misdnportinfo
 # PROGS   := testcon testnet loadfirm logger
 
 all: $(PROGS)
@@ -8,6 +8,8 @@ install:
 	for i in $(PROGS) ; do \
 		install -m 755 $$i $(INSTALL_PREFIX)/usr/bin ;\
 	done
+
+misdnportinfo: misdnportinfo.o $(mISDNLIB)
 
 testcon: testcon.o $(mISDNLIB)
 
@@ -24,6 +26,8 @@ sendhwctrl: sendhwctrl.o $(mISDNLIB)
 testlayer1: testlayer1.o $(mISDNLIB)
 
 logger: logger.o $(mISDNLIB)
+
+misdnportinfo.o : misdnportinfo.c $(LIBINCL)
 
 
 testcon.o : testcon.c ../include/l3dss1.h $(LIBINCL)
