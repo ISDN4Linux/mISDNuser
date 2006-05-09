@@ -1,6 +1,6 @@
 
 
-#include <mISDNuser/mISDNlib.h>
+#include "mISDNlib.h"
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
