@@ -1,4 +1,4 @@
-/* $Id: net_l3.c,v 1.6 2006/03/06 13:08:28 keil Exp $
+/* $Id: net_l3.c,v 1.7 2006/06/15 16:08:43 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -16,7 +16,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l3_revision = "$Revision: 1.6 $";
+const char *l3_revision = "$Revision: 1.7 $";
 
 #define PROTO_DIS_EURO	8
 
@@ -1976,6 +1976,20 @@ dprint(DBGM_L3, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
 }
 
 static void
+l3dss1_t305(layer3_proc_t *pc, int pr, void *arg)
+{
+	int t = 0x305;
+
+	StopAllL3Timer(pc);
+
+
+	newl3state(pc, 19);
+		l3dss1_message(pc, MT_RELEASE);
+	test_and_clear_bit(FLG_L3P_TIMER308_1, &pc->Flags);
+	L3AddTimer(&pc->timer1, T308, 0x308);
+}
+
+static void
 l3dss1_t308(layer3_proc_t *pc, int pr, void *arg)
 {
 	if (!test_and_set_bit(FLG_L3P_TIMER308_1, &pc->Flags)) {
@@ -2268,6 +2282,8 @@ machen
 	 CC_NOTIFY | REQUEST, l3dss1_notify_req},
 	{SBIT(2),
 	 CC_T302, l3dss1_t302},
+	{SBIT(12),
+	 CC_T305, l3dss1_t305},
 	{SBIT(6),
 	 CC_T303, l3dss1_t303},
 	{SBIT(19),
