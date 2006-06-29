@@ -1,4 +1,5 @@
 #include <stdarg.h>
+#include <time.h>
 #include "isdn_debug.h"
 
 
@@ -88,9 +89,16 @@ dprint(unsigned int mask, const char *fmt, ...)
 {
 	int	ret = 0;
 	va_list	args;
+	time_t tm = time(NULL);
+	char *tmp=ctime(&tm),*p;
+	
+	p=strchr(tmp,'\n');
+	if (p) *p=':';
 
 	va_start(args, fmt);
 	if (debug_mask & mask) {
+		if (debug_file != stdout)
+			fprintf(debug_file, "%s ",tmp);
 		ret = vfprintf(debug_file, fmt, args);
 		if (debug_file != stdout)
 			fflush(debug_file);
