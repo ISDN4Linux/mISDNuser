@@ -1,4 +1,4 @@
-/* $Id: net_l2.c,v 1.5 2006/07/18 13:50:03 crich Exp $
+/* $Id: net_l2.c,v 1.6 2006/07/18 16:14:50 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l2_revision = "$Revision: 1.5 $";
+const char *l2_revision = "$Revision: 1.6 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -1873,7 +1873,7 @@ l2from_up(net_stack_t *nst, msg_t *msg) {
 		hh->prim, hh->dinfo);
 	l2 = select_l2(nst, SAPITEI(hh->dinfo));
 	if (!l2) {
-		dprint(DBGM_L2, l2->nst->cardnr, "%s: no l2 for sapi(%d) tei(%d)\n", __FUNCTION__,
+		dprint(DBGM_L2, nst->cardnr, "%s: no l2 for sapi(%d) tei(%d)\n", __FUNCTION__,
 			SAPITEI(hh->dinfo));
 		return(-ENXIO);
 	}
