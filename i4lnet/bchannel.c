@@ -41,7 +41,7 @@ setup_bchannel(bchannel_t *bc) {
 		eprint("wrong channel %d\n", bc->channel);
 		return(-EINVAL);
 	}
-	dprint(DBGM_BC,"%s:ch%d bst(%d)\n", __FUNCTION__,
+	dprint(DBGM_BC, -1,"%s:ch%d bst(%d)\n", __FUNCTION__,
 		bc->channel, bc->bstate);
 	if ((bc->bstate != BC_BSTATE_NULL) &&
 		(bc->bstate != BC_BSTATE_CLEANUP))
@@ -76,7 +76,7 @@ setup_bchannel(bchannel_t *bc) {
 static int
 activate_bchannel(bchannel_t *bc)
 {
-	dprint(DBGM_BC,"%s:ch%d bst(%d)\n", __FUNCTION__,
+	dprint(DBGM_BC, -1,"%s:ch%d bst(%d)\n", __FUNCTION__,
 		bc->channel, bc->bstate);
 	if (!bc->b_addr) {
 		wprint("%s:ch%d not setup\n", __FUNCTION__,
@@ -97,7 +97,7 @@ activate_bchannel(bchannel_t *bc)
 static int
 deactivate_bchannel(bchannel_t *bc)
 {
-	dprint(DBGM_BC,"%s:ch%d bst(%d)\n", __FUNCTION__,
+	dprint(DBGM_BC, -1,"%s:ch%d bst(%d)\n", __FUNCTION__,
 		bc->channel, bc->bstate);
 	if (!bc->b_addr) {
 		wprint("%s:ch%d not setup\n", __FUNCTION__,
@@ -120,7 +120,7 @@ bc_cleanup(bchannel_t *bc)
 {
 	int	ret;
 
-	dprint(DBGM_BC,"%s:ch%d bst(%d)\n", __FUNCTION__,
+	dprint(DBGM_BC, -1,"%s:ch%d bst(%d)\n", __FUNCTION__,
 		bc->channel, bc->bstate);
 	if (!bc->b_addr) {
 		wprint("%s:ch%d not setup\n", __FUNCTION__,
@@ -167,7 +167,7 @@ clear_bc(bchannel_t *bc)
 
 static int
 do_b_activated(bchannel_t *bc, mISDNuser_head_t *hh, msg_t *msg) {
-	dprint(DBGM_BC,"%s:ch%d state(%d/%d) Flags(%x) smsg(%p)\n", __FUNCTION__,
+	dprint(DBGM_BC, -1,"%s:ch%d state(%d/%d) Flags(%x) smsg(%p)\n", __FUNCTION__,
 		bc->channel, bc->cstate, bc->bstate, bc->Flags, bc->smsg);
 	clear_ibuffer(bc->rbuf);
 	if (!(bc->Flags & FLG_BC_KEEP_SEND))
@@ -182,7 +182,7 @@ do_b_activated(bchannel_t *bc, mISDNuser_head_t *hh, msg_t *msg) {
 
 static int
 do_b_deactivated(bchannel_t *bc, mISDNuser_head_t *hh, msg_t *msg) {
-	dprint(DBGM_BC,"%s:ch%d Flags(%x) smsg(%p)\n", __FUNCTION__,
+	dprint(DBGM_BC, -1,"%s:ch%d Flags(%x) smsg(%p)\n", __FUNCTION__,
 		bc->channel, bc->Flags, bc->smsg);
 	bc_cleanup(bc);
 	free_msg(msg);
@@ -205,7 +205,7 @@ do_b_setup_conf(bchannel_t *bc, mISDNuser_head_t *hh, msg_t *msg)
 static int
 do_b_cleanup_conf(bchannel_t *bc, mISDNuser_head_t *hh, msg_t *msg)
 {
-	dprint(DBGM_BC,"%s:ch%d bst(%d)\n", __FUNCTION__,
+	dprint(DBGM_BC, -1,"%s:ch%d bst(%d)\n", __FUNCTION__,
 		bc->channel, bc->bstate);
 	bc->b_addr = 0;
 	if (bc->cstate == BC_CSTATE_NULL) {
@@ -236,7 +236,7 @@ do_b_data_ind(bchannel_t *bc, mISDNuser_head_t *hh, msg_t *msg)
 
 	if (bc->bstate != BC_BSTATE_ACTIV)
 		return(-EBUSY);
-	dprint(DBGM_BCDATA, "%s:ch%d get %d bytes\n", __FUNCTION__,
+	dprint(DBGM_BCDATA, -1, "%s:ch%d get %d bytes\n", __FUNCTION__,
 		bc->channel, msg->len);
 	if (bc->rbuf) {
 		len = ibuf_freecount(bc->rbuf);
@@ -249,7 +249,7 @@ do_b_data_ind(bchannel_t *bc, mISDNuser_head_t *hh, msg_t *msg)
 			sem_post(bc->rbuf->rsem);
 	} else
 		ret = -EINVAL;
-	dprint(DBGM_BCDATA, "%s: finish ret %d\n", __FUNCTION__, ret);
+	dprint(DBGM_BCDATA, -1, "%s: finish ret %d\n", __FUNCTION__, ret);
 	if (bc->Flags & FLG_BC_RECORD) {
 		if (bc->Flags & FLG_BC_RECORDING) {
 			write(bc->rrid, msg->data, msg->len);
@@ -280,7 +280,7 @@ b_send(bchannel_t *bc)
 		goto out;
 	if (len > MAX_DATA_SIZE)
 		len = MAX_DATA_SIZE;
-	dprint(DBGM_BCDATA, "%s:ch%d %d bytes\n", __FUNCTION__, bc->channel, len);
+	dprint(DBGM_BCDATA, -1, "%s:ch%d %d bytes\n", __FUNCTION__, bc->channel, len);
 	bc->smsg = prep_l3data_msg(PH_DATA | REQUEST, bc->b_addr | FLG_MSG_DOWN,
 		0, len, NULL);
 	if (!bc->smsg) {
@@ -322,10 +322,10 @@ add_nr(bchannel_t *bc, unsigned char *cpn)
 			memcpy(bc->nr + bc->nr[0] + 1, cpn + 2, *cpn -1);
 			bc->nr[0] += *cpn -1;
 		} else
-			dprint(DBGM_BC,"%s: cpn len %d\n", __FUNCTION__, *cpn);
+			dprint(DBGM_BC, -1,"%s: cpn len %d\n", __FUNCTION__, *cpn);
 	} else if (*cpn)
 		memcpy(bc->nr, cpn, *cpn + 1);
-	dprint(DBGM_BC,"%s: nr:%s\n", __FUNCTION__, &bc->nr[2]);
+	dprint(DBGM_BC, -1,"%s: nr:%s\n", __FUNCTION__, &bc->nr[2]);
 	return(0);
 }
 
@@ -337,7 +337,7 @@ send_setup_ack(bchannel_t *bc)
 	int			len, ret;
 	unsigned char		*p;
 	
-	dprint(DBGM_BC,"%s: bc%d l3id(%x)\n", __FUNCTION__,
+	dprint(DBGM_BC, -1,"%s: bc%d l3id(%x)\n", __FUNCTION__,
 		bc->channel, bc->l3id);
 	msg = prep_l3data_msg(CC_SETUP_ACKNOWLEDGE | REQUEST, bc->l3id,
 		sizeof(SETUP_ACKNOWLEDGE_t), 128, NULL);
@@ -384,7 +384,7 @@ send_setup(bchannel_t *bc)
 	unsigned char	*p;
 	
 	if (bc->cstate != BC_CSTATE_OCALL) {
-		dprint(DBGM_BC,"%s: bc%d state(%d/%d) not OCALL\n", __FUNCTION__,
+		dprint(DBGM_BC, -1,"%s: bc%d state(%d/%d) not OCALL\n", __FUNCTION__,
 			bc->channel, bc->cstate, bc->bstate);
 		return(-EINVAL);
 	}
@@ -403,7 +403,7 @@ send_setup(bchannel_t *bc)
 			bc->bc[3] = 0xa3;
 			break;
 		default:
-			dprint(DBGM_BC,"%s: no protocol %x\n", __FUNCTION__,
+			dprint(DBGM_BC, -1,"%s: no protocol %x\n", __FUNCTION__,
 				bc->l1_prot);
 			free_msg(msg);
 			return(-ENOPROTOOPT);
@@ -494,7 +494,7 @@ send_proceeding(bchannel_t *bc)
 	if (bc->manager->application) {
 		bc->Flags |= FLG_BC_APPLICATION;
 		len = bc->manager->application(bc->manager, PR_APP_ICALL, bc);
-		dprint(DBGM_BC, "%s: bc%d application ret(%d)\n", __FUNCTION__,
+		dprint(DBGM_BC, -1, "%s: bc%d application ret(%d)\n", __FUNCTION__,
 			bc->channel, len);
 	}	
 	return(ret);
@@ -508,7 +508,7 @@ send_alert(bchannel_t *bc)
 	int		len, ret;
 	unsigned char	*p;
 	
-	dprint(DBGM_BC, "%s: bc%d flg(%x) display(%s)\n", __FUNCTION__,
+	dprint(DBGM_BC, -1, "%s: bc%d flg(%x) display(%s)\n", __FUNCTION__,
 		bc->channel, bc->Flags, bc->display);
 	msg = prep_l3data_msg(CC_ALERTING | REQUEST, bc->l3id,
 		sizeof(ALERTING_t), 128, NULL);
@@ -879,7 +879,7 @@ info_ind(bchannel_t *bc, void *arg)
 		set_tone(bc, FLG_BC_TONE_SILENCE);
 		add_nr(bc, info->CALLED_PN);
 		ret = match_nr(bc->manager, bc->nr, &bc->usednr);
-		dprint(DBGM_BC, "%s: match_nr ret(%d)\n", __FUNCTION__,
+		dprint(DBGM_BC, -1, "%s: match_nr ret(%d)\n", __FUNCTION__,
 			ret);
 		if (!ret) {
 			send_proceeding(bc); 
@@ -951,7 +951,7 @@ setup_ind(bchannel_t *bc, int l3id, void *arg)
 		bc->Flags |= FLG_BC_PROGRESS;
 		add_nr(bc, setup->CALLED_PN);
 		ret = match_nr(bc->manager, bc->nr, &bc->usednr);
-		dprint(DBGM_BC, "%s: match_nr ret(%d)\n", __FUNCTION__,
+		dprint(DBGM_BC, -1, "%s: match_nr ret(%d)\n", __FUNCTION__,
 			ret);
 		if (!ret) {
 			send_proceeding(bc); 
@@ -983,7 +983,7 @@ conn_ind(bchannel_t *bc, void *arg)
 	if ((bc->Flags & FLG_BC_APPLICATION) && bc->manager->application) {
 		setup_bchannel(bc);
 		ret = bc->manager->application(bc->manager, PR_APP_CONNECT, bc);
-		dprint(DBGM_BC, "%s: bc%d application ret(%d)\n", __FUNCTION__,
+		dprint(DBGM_BC, -1, "%s: bc%d application ret(%d)\n", __FUNCTION__,
 			bc->channel, ret);
 		if (!ret) {
 			send_connect_ack(bc);
@@ -1011,7 +1011,7 @@ alert_ind(bchannel_t *bc, void *arg)
 		bc->uu[0] = 0;
 	if ((bc->Flags & FLG_BC_APPLICATION) && bc->manager->application) {
 		ret = bc->manager->application(bc->manager, PR_APP_ALERT, bc);
-		dprint(DBGM_BC, "%s: bc%d application ret(%d)\n", __FUNCTION__,
+		dprint(DBGM_BC, -1, "%s: bc%d application ret(%d)\n", __FUNCTION__,
 			bc->channel, ret);
 	}	
 	return(0);
@@ -1031,7 +1031,7 @@ facility_ind(bchannel_t *bc, void *arg)
 	}
 	if ((bc->Flags & FLG_BC_APPLICATION) && bc->manager->application) {
 		ret = bc->manager->application(bc->manager, PR_APP_FACILITY, bc);
-		dprint(DBGM_BC, "%s: bc%d application ret(%d)\n", __FUNCTION__,
+		dprint(DBGM_BC, -1, "%s: bc%d application ret(%d)\n", __FUNCTION__,
 			bc->channel, ret);
 	}	
 	return(0);
@@ -1051,7 +1051,7 @@ userinfo_ind(bchannel_t *bc, void *arg)
 	}
 	if ((bc->Flags & FLG_BC_APPLICATION) && bc->manager->application) {
 		ret = bc->manager->application(bc->manager, PR_APP_USERUSER, bc);
-		dprint(DBGM_BC, "%s: bc%d application ret(%d)\n", __FUNCTION__,
+		dprint(DBGM_BC, -1, "%s: bc%d application ret(%d)\n", __FUNCTION__,
 			bc->channel, ret);
 	}	
 	return(0);
@@ -1066,12 +1066,12 @@ disc_ind(bchannel_t *bc, void *arg)
 
 	if (disc->CAUSE) {
 		if (disc->CAUSE[0] >1) {
-			dprint(DBGM_BC, "%s: loc(%d) cause(%d)\n", __FUNCTION__,
+			dprint(DBGM_BC, -1, "%s: loc(%d) cause(%d)\n", __FUNCTION__,
 				disc->CAUSE[1] & 0xf, disc->CAUSE[2] & 0x7f);
 			bc->cause_loc = disc->CAUSE[1] & 0xf;
 			bc->cause_val = disc->CAUSE[2] & 0x7f;
 		} else {
-			dprint(DBGM_BC, "%s: cause len %d\n", __FUNCTION__,
+			dprint(DBGM_BC, -1, "%s: cause len %d\n", __FUNCTION__,
 				disc->CAUSE[0]);
 			cause = CAUSE_INVALID_CONTENTS;
 		}
@@ -1096,7 +1096,7 @@ disc_ind(bchannel_t *bc, void *arg)
 		bc->uu[0] = 0;
 	if ((bc->Flags & FLG_BC_APPLICATION) && bc->manager->application) {
 		ret = bc->manager->application(bc->manager, PR_APP_HANGUP, bc);
-		dprint(DBGM_BC, "%s: bc%d application ret(%d)\n", __FUNCTION__,
+		dprint(DBGM_BC, -1, "%s: bc%d application ret(%d)\n", __FUNCTION__,
 			bc->channel, ret);
 	}	
 	return(0);
@@ -1119,7 +1119,7 @@ rel_ind(bchannel_t *bc, void *arg)
 			bc->uu[0] = 0;
 		if (rel->CAUSE) {
 			if (rel->CAUSE[0] > 1) {
-				dprint(DBGM_BC, "%s: loc(%d) cause(%d)\n", __FUNCTION__,
+				dprint(DBGM_BC, -1, "%s: loc(%d) cause(%d)\n", __FUNCTION__,
 					rel->CAUSE[1] & 0xf, rel->CAUSE[2] & 0x7f);
 				bc->cause_loc = rel->CAUSE[1] & 0xf;
 				bc->cause_val = rel->CAUSE[2] & 0x7f;
@@ -1128,7 +1128,7 @@ rel_ind(bchannel_t *bc, void *arg)
 	}
 	if ((bc->Flags & FLG_BC_APPLICATION) && bc->manager->application) {
 		ret = bc->manager->application(bc->manager, PR_APP_CLEAR, bc);
-		dprint(DBGM_BC, "%s: bc%d application ret(%d)\n", __FUNCTION__,
+		dprint(DBGM_BC, -1, "%s: bc%d application ret(%d)\n", __FUNCTION__,
 			bc->channel, ret);
 	}	
 	clear_bc(bc);
@@ -1155,7 +1155,7 @@ relcmpl_ind(bchannel_t *bc, void *arg)
 			bc->uu[0] = 0;
 		if (rc->CAUSE) {
 			if (rc->CAUSE[0] > 1) {
-				dprint(DBGM_BC, "%s: loc(%d) cause(%d)\n", __FUNCTION__,
+				dprint(DBGM_BC, -1, "%s: loc(%d) cause(%d)\n", __FUNCTION__,
 					rc->CAUSE[1] & 0xf, rc->CAUSE[2] & 0x7f);
 				bc->cause_loc = rc->CAUSE[1] & 0xf;
 				bc->cause_val = rc->CAUSE[2] & 0x7f;
@@ -1164,7 +1164,7 @@ relcmpl_ind(bchannel_t *bc, void *arg)
 	}
 	if ((bc->Flags & FLG_BC_APPLICATION) && bc->manager->application) {
 		ret = bc->manager->application(bc->manager, PR_APP_CLEAR, bc);
-		dprint(DBGM_BC, "%s: bc%d application ret(%d)\n", __FUNCTION__,
+		dprint(DBGM_BC, -1, "%s: bc%d application ret(%d)\n", __FUNCTION__,
 			bc->channel, ret);
 	}	
 	clear_bc(bc);
@@ -1179,11 +1179,11 @@ relcr_ind(bchannel_t *bc, void *arg)
 {
 	int	ret, *err = arg;
 	
-	dprint(DBGM_BC, "%s: bc%d cause(%x)\n", __FUNCTION__,
+	dprint(DBGM_BC, -1, "%s: bc%d cause(%x)\n", __FUNCTION__,
 		bc->channel, *err);
 	if ((bc->Flags & FLG_BC_APPLICATION) && bc->manager->application) {
 		ret = bc->manager->application(bc->manager, PR_APP_CLEAR, bc);
-		dprint(DBGM_BC, "%s: bc%d application ret(%d)\n", __FUNCTION__,
+		dprint(DBGM_BC, -1, "%s: bc%d application ret(%d)\n", __FUNCTION__,
 			bc->channel, ret);
 	}
 	if (bc->cstate != BC_CSTATE_NULL) {
@@ -1200,7 +1200,7 @@ cleanup_bchannel(void *arg)
 {
 	bchannel_t	*bc = arg;
 
-	dprint(DBGM_BC,"%s: bc %d\n", __FUNCTION__, bc->channel);
+	dprint(DBGM_BC, -1,"%s: bc %d\n", __FUNCTION__, bc->channel);
 	pthread_mutex_lock(&bc->lock);
 	msg_queue_purge(&bc->workq);
 	bc->smsg = NULL;
@@ -1213,7 +1213,7 @@ cleanup_bchannel(void *arg)
 		if (!sem_trywait(&bc->work))
 			break;
 	pthread_mutex_unlock(&bc->lock);
-	dprint(DBGM_BC,"%s: bc %d end\n", __FUNCTION__, bc->channel);
+	dprint(DBGM_BC, -1,"%s: bc %d end\n", __FUNCTION__, bc->channel);
 }
 
 static void *
@@ -1225,7 +1225,7 @@ main_bc_task(void *arg)
 	mISDNuser_head_t	*hh;
 
 	pthread_cleanup_push(cleanup_bchannel, (void *)bc);
-	dprint(DBGM_BC,"%s bc %d\n", __FUNCTION__, bc->channel);
+	dprint(DBGM_BC, -1,"%s bc %d\n", __FUNCTION__, bc->channel);
 	while(1) {
 		
 		sem_wait(&bc->work);
@@ -1241,7 +1241,7 @@ main_bc_task(void *arg)
 		if (msg) {
 			hh = (mISDNuser_head_t *)msg->data;
 			msg_pull(msg, mISDNUSER_HEAD_SIZE);
-			dprint(DBGM_BC,"%s: bc%d st(%d/%d) prim(%x) dinfo(%x) len(%d)\n", __FUNCTION__,
+			dprint(DBGM_BC, -1,"%s: bc%d st(%d/%d) prim(%x) dinfo(%x) len(%d)\n", __FUNCTION__,
 				bc->channel, bc->cstate, bc->bstate, hh->prim, hh->dinfo, msg->len);
 			ret = -EINVAL;
 			switch(hh->prim) {
@@ -1365,7 +1365,7 @@ init_bchannel(bchannel_t *bc, int channel)
 	pthread_mutex_init(&bc->lock, NULL);
 	sem_init (&bc->work, 0, 0);
 	ret = pthread_create(&bc->tid, NULL, main_bc_task, (void *)bc);
-	dprint(DBGM_BC, "%s: create bc%d thread %ld ret %d\n", __FUNCTION__,
+	dprint(DBGM_BC, -1, "%s: create bc%d thread %ld ret %d\n", __FUNCTION__,
 		channel, bc->tid, ret);
 	return(0);
 }
@@ -1373,7 +1373,7 @@ init_bchannel(bchannel_t *bc, int channel)
 int
 term_bchannel(bchannel_t *bc)
 {
-	dprint(DBGM_BC, "%s: bc%d\n", __FUNCTION__, bc->channel);
+	dprint(DBGM_BC, -1, "%s: bc%d\n", __FUNCTION__, bc->channel);
 	bc->Flags |= FLG_BC_TERMINATE;
 	sem_post(&bc->work);
 	return(0);

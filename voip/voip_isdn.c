@@ -55,18 +55,18 @@ read_rec_ctrlfile(void)
 	manager_t	*mgr = voip.mgr_lst;
 
 	if (RecordCtrlFile[0] == 0) {
-		dprint(DBGM_TOPLEVEL, "%s: no RecordCtrlFile\n", __FUNCTION__);
+		dprint(DBGM_TOPLEVEL, -1, "%s: no RecordCtrlFile\n", __FUNCTION__);
 		return(-ENOENT);
 	}
 	f = fopen(RecordCtrlFile, "r");
 	if (!f) {
-		dprint(DBGM_TOPLEVEL, "%s: cannot open %s: %s\n", __FUNCTION__,
+		dprint(DBGM_TOPLEVEL, -1, "%s: cannot open %s: %s\n", __FUNCTION__,
 			RecordCtrlFile, strerror(errno));
 		return(-errno);
 	}
 	while(mgr) {
 		opt = getnext_record(f);
-		dprint(DBGM_TOPLEVEL, "%s: mgr %p ch1: %d\n", __FUNCTION__,
+		dprint(DBGM_TOPLEVEL, -1, "%s: mgr %p ch1: %d\n", __FUNCTION__,
 			mgr, opt);
 		if (opt) {
 			mgr->bc[0].Flags |= FLG_BC_RECORD;
@@ -74,7 +74,7 @@ read_rec_ctrlfile(void)
 			mgr->bc[0].Flags &= ~FLG_BC_RECORD;
 		}
 		opt = getnext_record(f);
-		dprint(DBGM_TOPLEVEL, "%s: mgr %p ch2: %d\n", __FUNCTION__,
+		dprint(DBGM_TOPLEVEL, -1, "%s: mgr %p ch2: %d\n", __FUNCTION__,
 			mgr, opt);
 		if (opt) {
 			mgr->bc[1].Flags |= FLG_BC_RECORD;
@@ -90,7 +90,7 @@ read_rec_ctrlfile(void)
 static void
 sig_usr1_handler(int sig)
 {
-	dprint(DBGM_TOPLEVEL, "%s: got sig(%d)\n", __FUNCTION__, sig);
+	dprint(DBGM_TOPLEVEL, -1, "%s: got sig(%d)\n", __FUNCTION__, sig);
 	read_rec_ctrlfile();
 	signal(SIGUSR1, sig_usr1_handler);
 }
@@ -100,26 +100,26 @@ static void
 sig_segfault(int sig, siginfo_t *si, void *arg) {
 	int	i,*ip = arg;
 
-	dprint(DBGM_TOPLEVEL, "segfault %d, %p, %p\n",
+	dprint(DBGM_TOPLEVEL, -1, "segfault %d, %p, %p\n",
 		sig, si, arg);
 	if (si) {
-		dprint(DBGM_TOPLEVEL, "si: sig(%d) err(%d) code(%d) pid(%d)\n",
+		dprint(DBGM_TOPLEVEL, -1, "si: sig(%d) err(%d) code(%d) pid(%d)\n",
 			si->si_signo, si->si_errno, si->si_code, si->si_pid);
-		dprint(DBGM_TOPLEVEL, "si: status(%x) value(%x)\n",
+		dprint(DBGM_TOPLEVEL, -1, "si: status(%x) value(%x)\n",
 			si->si_status, si->si_value.sival_int);
-		dprint(DBGM_TOPLEVEL, "si: int(%x) ptr(%p) addr(%p)\n",
+		dprint(DBGM_TOPLEVEL, -1, "si: int(%x) ptr(%p) addr(%p)\n",
 			si->si_int, si->si_ptr, si->si_addr);
 	}
 	if (ip) {
 		ip -= 10;
 		for(i=0;i<20;i++)
-			dprint(DBGM_TOPLEVEL, "ip %3d: %x\n", i-10, ip[i]);
+			dprint(DBGM_TOPLEVEL, -1, "ip %3d: %x\n", i-10, ip[i]);
 	}
 	ip = (int *)si;
 	if (ip) {
 		ip -= 10;
 		for(i=0;i<20;i++)
-			dprint(DBGM_TOPLEVEL, "si %3d: %x\n", i-10, ip[i]);
+			dprint(DBGM_TOPLEVEL, -1, "si %3d: %x\n", i-10, ip[i]);
 	}
 
 }
@@ -132,7 +132,7 @@ term_handler(int sig)
 	manager_t	*mgr = voip.mgr_lst;
 
 	tid = pthread_self();
-	dprint(DBGM_TOPLEVEL,"signal %d received from thread %ld\n", sig, tid);
+	dprint(DBGM_TOPLEVEL, -1,"signal %d received from thread %ld\n", sig, tid);
 	voip.flags |= AP_FLG_VOIP_ABORT;
 	while(mgr) {
 		term_netstack(mgr->nst);
@@ -151,11 +151,11 @@ child_handler(int sig)
 	pid_t		pid;
 	int		stat;
 
-	dprint(DBGM_TOPLEVEL,"signal %d received\n", sig);
+	dprint(DBGM_TOPLEVEL, -1,"signal %d received\n", sig);
 	while (mgr) {
 		if (mgr->bc[0].pid) {
 			pid = waitpid(mgr->bc[0].pid, &stat, WNOHANG);
-			dprint(DBGM_TOPLEVEL,  "%s: waitpid(%d) stat(%x) ret(%d)\n", __FUNCTION__,
+			dprint(DBGM_TOPLEVEL, -1,  "%s: waitpid(%d) stat(%x) ret(%d)\n", __FUNCTION__,
 				mgr->bc[0].pid, stat, pid);
 			if (mgr->bc[0].pid == pid) {
 				mgr->bc[0].pid = 0;
@@ -165,7 +165,7 @@ child_handler(int sig)
 		}
 		if (mgr->bc[1].pid) {
 			pid = waitpid(mgr->bc[1].pid, &stat, WNOHANG);
-			dprint(DBGM_TOPLEVEL,  "%s: waitpid(%d) stat(%x) ret(%d)\n", __FUNCTION__,
+			dprint(DBGM_TOPLEVEL, -1,  "%s: waitpid(%d) stat(%x) ret(%d)\n", __FUNCTION__,
 				mgr->bc[1].pid, stat, pid);
 			if (mgr->bc[1].pid == pid) {
 				mgr->bc[1].pid = 0;
@@ -189,7 +189,7 @@ read_audio(void *arg)
 	int		ret,i;
 
 	tid = pthread_self();
-	dprint(DBGM_TOPLEVEL,  "%s: tid %ld\n", __FUNCTION__, tid);
+	dprint(DBGM_TOPLEVEL, -1,  "%s: tid %ld\n", __FUNCTION__, tid);
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	while(1) {
@@ -199,7 +199,7 @@ read_audio(void *arg)
 		FD_SET(ia->data, &efd);
 		ret = select(ia->data +1, &rfd, NULL, &efd, NULL);
 		if (ret < 0) {
-			dprint(DBGM_TOPLEVEL,  "%s: select error %d %s\n", __FUNCTION__,
+			dprint(DBGM_TOPLEVEL, -1,  "%s: select error %d %s\n", __FUNCTION__,
 				errno, strerror(errno));
 			if (errno == EAGAIN)
 				continue;
@@ -209,18 +209,18 @@ read_audio(void *arg)
 		if (FD_ISSET(ia->data, &rfd)) {
 			ret = read(ia->data, ia->rtmp, MAX_AUDIO_READ);
 			if (ret < 0) {
-				dprint(DBGM_TOPLEVEL,  "%s: read error %d %s\n", __FUNCTION__,
+				dprint(DBGM_TOPLEVEL, -1,  "%s: read error %d %s\n", __FUNCTION__,
 					errno, strerror(errno));
 				if (errno == EAGAIN)
 					continue;
 				continue;
 			}
 			if (!ret) {
-				dprint(DBGM_TOPLEVEL,  "%s: zero read\n", __FUNCTION__);
+				dprint(DBGM_TOPLEVEL, -1,  "%s: zero read\n", __FUNCTION__);
 				continue;
 			}
 			if (ret > ibuf_freecount(ia->rbuf)) {
-				dprint(DBGM_TOPLEVEL,  "%s: rbuf overflow %d/%d\n", __FUNCTION__,
+				dprint(DBGM_TOPLEVEL, -1,  "%s: rbuf overflow %d/%d\n", __FUNCTION__,
 					ret, ibuf_freecount(ia->rbuf));
 				ret = ibuf_freecount(ia->rbuf);
 			}
@@ -231,7 +231,7 @@ read_audio(void *arg)
 				sem_post(ia->rbuf->rsem);
 		}
 		if (FD_ISSET(ia->data, &efd)) {
-			dprint(DBGM_TOPLEVEL,  "%s: exception\n", __FUNCTION__);
+			dprint(DBGM_TOPLEVEL, -1,  "%s: exception\n", __FUNCTION__);
 			break;
 		}
 	}
@@ -246,7 +246,7 @@ work_audio(void *arg)
 	int		ret, i;
 
 	tid = pthread_self();
-	dprint(DBGM_TOPLEVEL,  "%s: tid %ld\n", __FUNCTION__, tid);
+	dprint(DBGM_TOPLEVEL, -1,  "%s: tid %ld\n", __FUNCTION__, tid);
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	while(1) {
@@ -287,7 +287,7 @@ setup_voip(iapplication_t *ap, bchannel_t *bc)
 	isound_t	*ia;
 	int		ret;
 
-	dprint(DBGM_APPL, "%s(%p, %p)\n", __FUNCTION__, ap, bc);
+	dprint(DBGM_APPL, -1, "%s(%p, %p)\n", __FUNCTION__, ap, bc);
 	if (!bc)
 		return(-EINVAL);
 	if (!ap)
@@ -311,7 +311,7 @@ setup_voip(iapplication_t *ap, bchannel_t *bc)
 	bc->sbuf->wsem = &ia->work;
 	bc->rbuf->rsem = &ia->work;
 	ret = pthread_create(&ap->tid, NULL, voip_sender, (void *)ap);
-	dprint(DBGM_APPL,  "%s: create voip_sender %ld ret %d\n", __FUNCTION__,
+	dprint(DBGM_APPL, -1,  "%s: create voip_sender %ld ret %d\n", __FUNCTION__,
 		ap->tid, ret);
 	return(ret);
 }
@@ -322,7 +322,7 @@ close_voip(iapplication_t *ap, bchannel_t *bc)
 	isound_t	*ia;
 	int		ret, *retval;
 
-	dprint(DBGM_APPL, "%s(%p, %p)\n", __FUNCTION__, ap, bc);
+	dprint(DBGM_APPL, -1, "%s(%p, %p)\n", __FUNCTION__, ap, bc);
 	if (!bc)
 		return(-EINVAL);
 	if (!ap)
@@ -333,10 +333,10 @@ close_voip(iapplication_t *ap, bchannel_t *bc)
 	if (!ia)
 		return(-EINVAL);
 	ret = pthread_cancel(ap->tid);
-	dprint(DBGM_APPL, "%s: cancel sender ret(%d)\n", __FUNCTION__,
+	dprint(DBGM_APPL, -1, "%s: cancel sender ret(%d)\n", __FUNCTION__,
 		ret);
 	ret = pthread_join(ap->tid, (void *)&retval);
-	dprint(DBGM_APPL, "%s: join sender ret(%d) rval(%p)\n", __FUNCTION__,
+	dprint(DBGM_APPL, -1, "%s: join sender ret(%d) rval(%p)\n", __FUNCTION__,
 		ret, retval);
 	ia->sbuf = NULL;
 	ia->rbuf = NULL;
@@ -346,7 +346,7 @@ close_voip(iapplication_t *ap, bchannel_t *bc)
 		free_ibuffer(bc->rbuf);
 	bc->rbuf = NULL;
 	ret = sem_destroy(&ia->work);
-	dprint(DBGM_APPL, "%s: sem_destroy work %d\n", __FUNCTION__,
+	dprint(DBGM_APPL, -1, "%s: sem_destroy work %d\n", __FUNCTION__,
 		ret);
 	free(ia);
 	return(0);
@@ -379,7 +379,7 @@ setup_audio(iapplication_t *ap, bchannel_t *bc)
 	ia->data = open("/dev/audio", O_RDWR | O_NONBLOCK);
 	if (ia->data < 0) {
 		free(ia);
-		dprint(DBGM_TOPLEVEL,  "%s: open rdwr %d %s\n", __FUNCTION__,
+		dprint(DBGM_TOPLEVEL, -1,  "%s: open rdwr %d %s\n", __FUNCTION__,
 			errno, strerror(errno));
 		return(-errno);
 	}
@@ -389,10 +389,10 @@ setup_audio(iapplication_t *ap, bchannel_t *bc)
 	bc->sbuf->wsem = &ia->work;
 	bc->rbuf->rsem = &ia->work;
 	ret = pthread_create(&ia->rd_t, NULL, read_audio, (void *)ia);
-	dprint(DBGM_TOPLEVEL,  "%s: create rd_t %ld ret %d\n", __FUNCTION__,
+	dprint(DBGM_TOPLEVEL, -1,  "%s: create rd_t %ld ret %d\n", __FUNCTION__,
 		ia->rd_t, ret);
 	ret = pthread_create(&ia->wr_t, NULL, work_audio, (void *)ia);
-	dprint(DBGM_TOPLEVEL,  "%s: create wr_t %ld ret %d\n", __FUNCTION__,
+	dprint(DBGM_TOPLEVEL, -1,  "%s: create wr_t %ld ret %d\n", __FUNCTION__,
 		ia->wr_t, ret);
 	return(0);
 }
@@ -413,16 +413,16 @@ close_audio(iapplication_t *ap, bchannel_t *bc)
 		return(-EINVAL);
 	close(ia->data);
 	ret = pthread_cancel(ia->rd_t);
-	dprint(DBGM_TOPLEVEL, "%s: cancel rd_t ret(%d)\n", __FUNCTION__,
+	dprint(DBGM_TOPLEVEL, -1, "%s: cancel rd_t ret(%d)\n", __FUNCTION__,
 		ret);
 	ret = pthread_cancel(ia->wr_t);
-	dprint(DBGM_TOPLEVEL, "%s: cancel wr_t ret(%d)\n", __FUNCTION__,
+	dprint(DBGM_TOPLEVEL, -1, "%s: cancel wr_t ret(%d)\n", __FUNCTION__,
 		ret);
 	ret = pthread_join(ia->rd_t, (void *)&retval);
-	dprint(DBGM_TOPLEVEL, "%s: join rd_t ret(%d) rval(%p)\n", __FUNCTION__,
+	dprint(DBGM_TOPLEVEL, -1, "%s: join rd_t ret(%d) rval(%p)\n", __FUNCTION__,
 		ret, retval);
 	ret = pthread_join(ia->wr_t, (void *)&retval);
-	dprint(DBGM_TOPLEVEL, "%s: join wr_t ret(%d) rval(%p)\n", __FUNCTION__,
+	dprint(DBGM_TOPLEVEL, -1, "%s: join wr_t ret(%d) rval(%p)\n", __FUNCTION__,
 		ret, retval);
 	ia->sbuf = NULL;
 	ia->rbuf = NULL;
@@ -432,7 +432,7 @@ close_audio(iapplication_t *ap, bchannel_t *bc)
 		free_ibuffer(bc->rbuf);
 	bc->rbuf = NULL;
 	ret = sem_destroy(&ia->work);
-	dprint(DBGM_TOPLEVEL, "%s: sem_destroy work %d\n", __FUNCTION__,
+	dprint(DBGM_TOPLEVEL, -1, "%s: sem_destroy work %d\n", __FUNCTION__,
 		ret);
 	free(ia);
 	return(0);
@@ -456,7 +456,7 @@ route_call(iapplication_t *ap, bchannel_t *bc)
 		ap->mode = AP_MODE_INTERN_CALL;
 		ret = ap->mgr->app_bc(ap->mgr, PR_APP_OCHANNEL, &newbc);
 		if (0 >= ret)
-			dprint(DBGM_TOPLEVEL,  "%s: no free channel ret(%d)\n", __FUNCTION__,
+			dprint(DBGM_TOPLEVEL, -1,  "%s: no free channel ret(%d)\n", __FUNCTION__,
 				ret);
 		if (!newbc) {
 			bc->cause_loc = CAUSE_LOC_PNET_LOCUSER;
@@ -661,33 +661,33 @@ open_recfiles(iapplication_t *ap, bchannel_t *bc)
 	if (!bc)
 		return(-EINVAL);
 	if (!RecordFilePath[0]) {
-		dprint(DBGM_TOPLEVEL, "%s: RecordFilePath not set\n", __FUNCTION__);
+		dprint(DBGM_TOPLEVEL, -1, "%s: RecordFilePath not set\n", __FUNCTION__);
 		return(-EINVAL);
 	}
 	gettimeofday(&tv, NULL);
 	sprintf(filename, "%s%08lx_%02d.r",
 		RecordFilePath, tv.tv_sec, bc->channel);
-	dprint(DBGM_TOPLEVEL, "%s: rf.r:%s\n", __FUNCTION__,
+	dprint(DBGM_TOPLEVEL, -1, "%s: rf.r:%s\n", __FUNCTION__,
 		filename);
 	if (bc->rrid > 0)
 		close(bc->rrid);
 	bc->rrid = open(filename, O_WRONLY|O_CREAT|O_TRUNC,S_IRWXU);
 	if (bc->rrid < 0) {
 		ret = -errno;
-		dprint(DBGM_TOPLEVEL, "%s: rf.r error %s\n", __FUNCTION__,
+		dprint(DBGM_TOPLEVEL, -1, "%s: rf.r error %s\n", __FUNCTION__,
 			strerror(errno));
 
 		return(ret);
 	}
 	filename[strlen(filename)-1] = 's';
-	dprint(DBGM_TOPLEVEL, "%s: rf.s:%s\n", __FUNCTION__,
+	dprint(DBGM_TOPLEVEL, -1, "%s: rf.s:%s\n", __FUNCTION__,
 		filename);
 	if (bc->rsid > 0)
 		close(bc->rsid);
 	bc->rsid = open(filename, O_WRONLY|O_CREAT|O_TRUNC,S_IRWXU);
 	if (bc->rsid < 0) {
 		ret = -errno;
-		dprint(DBGM_TOPLEVEL, "%s: rf.s error %s\n", __FUNCTION__,
+		dprint(DBGM_TOPLEVEL, -1, "%s: rf.s error %s\n", __FUNCTION__,
 			strerror(errno));
 		close(bc->rrid);
 		bc->rrid = -1;
@@ -788,7 +788,7 @@ char *argv[];
 		global_debug, rtp_port);
 	nr = voip.mgr_lst->nrlist;
 	while(nr) {
-		dprint(DBGM_TOPLEVEL, "nr(%s) len(%d) flg(%x) typ(%d) name(%s)\n",
+		dprint(DBGM_TOPLEVEL, -1, "nr(%s) len(%d) flg(%x) typ(%d) name(%s)\n",
 			nr->nr, nr->len, nr->flags, nr->typ, nr->name);
 		nr = nr->next;
 	}

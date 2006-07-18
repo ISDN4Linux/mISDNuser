@@ -22,7 +22,7 @@ match_nr(manager_t *mgr, unsigned char *nx, nr_list_t **nrx)
 		return(3);
 	while(nr) {
 		p = nx + 2;
-		dprint(DBGM_MAN,"%s: cpn(%s) nr(%s)\n", __FUNCTION__,
+		dprint(DBGM_MAN, -1,"%s: cpn(%s) nr(%s)\n", __FUNCTION__,
 			p, nr->nr);
 		for(i=0;i<nr->len;i++) {
 			if (*p != nr->nr[i])
@@ -49,12 +49,12 @@ manager2stack(void *dat, void *arg)
 	msg_t		*msg = arg;
 	mISDNuser_head_t	*hh;
 
-	dprint(DBGM_MAN, "%s:dat(%p) arg(%p)\n", __FUNCTION__,
+	dprint(DBGM_MAN, -1, "%s:dat(%p) arg(%p)\n", __FUNCTION__,
 		dat, arg);
 	if (!nst | !arg)
 		return(-EINVAL);
 	hh = (mISDNuser_head_t *)msg->data;
-	dprint(DBGM_MAN, "%s: prim(%x) dinfo(%x) msg->len(%d)\n", __FUNCTION__,
+	dprint(DBGM_MAN, -1, "%s: prim(%x) dinfo(%x) msg->len(%d)\n", __FUNCTION__,
 		hh->prim, hh->dinfo, msg->len);
 	if (hh->prim == (CC_NEW_CR | INDICATION)) /* high prio */
 		msg_queue_head(&nst->wqueue, arg);
@@ -73,7 +73,7 @@ stack2manager(void *dat, void *arg) {
 	if (!msg || !mgr)
 		return(-EINVAL);
 	hh = (mISDNuser_head_t *)msg->data;
-	dprint(DBGM_MAN, "%s: prim(%x) dinfo(%x) msg->len(%d) bid(%x/%x)\n", __FUNCTION__,
+	dprint(DBGM_MAN, -1, "%s: prim(%x) dinfo(%x) msg->len(%d) bid(%x/%x)\n", __FUNCTION__,
 		hh->prim, hh->dinfo, msg->len, mgr->bc[0].l3id, mgr->bc[1].l3id);
 	if (hh->prim == (CC_SETUP | INDICATION)) {
 		SETUP_t			*setup;
@@ -133,7 +133,7 @@ appl2bc(manager_t *mgr, int prim, void *arg)
 	bchannel_t	*bc = arg;
 	msg_t		*msg;
 
-	dprint(DBGM_MAN, "%s(%p,%x,%p)\n", __FUNCTION__,
+	dprint(DBGM_MAN, -1, "%s(%p,%x,%p)\n", __FUNCTION__,
 		 mgr, prim, arg);
 	if (!mgr || !bc)
 		return(-EINVAL);
@@ -262,17 +262,17 @@ cleanup_manager(manager_t *mgr)
 {
 	int	ret, *retv;
 
-	dprint(DBGM_MAN,"%s\n", __FUNCTION__);
+	dprint(DBGM_MAN, -1,"%s\n", __FUNCTION__);
 	term_bchannel(&mgr->bc[0]);
 	term_bchannel(&mgr->bc[1]);
 	cleanup_Isdnl3(mgr->nst);
 	cleanup_Isdnl2(mgr->nst);
 	do_net_stack_cleanup(mgr->nst);
 	ret = pthread_join(mgr->bc[0].tid, (void *)&retv);
-	dprint(DBGM_MAN,"%s: join ret(%d) bc1 retv(%p)\n", __FUNCTION__,
+	dprint(DBGM_MAN, -1,"%s: join ret(%d) bc1 retv(%p)\n", __FUNCTION__,
 		ret, retv);
 	ret = pthread_join(mgr->bc[1].tid, (void *)&retv);
-	dprint(DBGM_MAN,"%s: join ret(%d) bc2 retv(%p)\n", __FUNCTION__,
+	dprint(DBGM_MAN, -1,"%s: join ret(%d) bc2 retv(%p)\n", __FUNCTION__,
 		ret, retv);
 	while(mgr->nrlist) {
 		nr_list_t *nr = mgr->nrlist;

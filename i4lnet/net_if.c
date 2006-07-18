@@ -41,7 +41,7 @@ do_net_stack_setup(net_stack_t	*nst)
 	for (i=1; i<=cnt; i++) {
 		ret = mISDN_get_stack_info(nst->device, i, buf, 1024);
 		if (ret<=0)
-			dprint(DBGM_NET, "cannot get stackinfo err: %d\n", ret);
+			dprint(DBGM_NET, nst->cardnr, "cannot get stackinfo err: %d\n", ret);
 		stinf = (stack_info_t *)&frm->data.p;
 //		mISDNprint_stack_info(stdout, stinf);
 		if ((stinf->pid.protocol[0] == ISDN_PID_L0_NT_S0) &&
@@ -51,14 +51,14 @@ do_net_stack_setup(net_stack_t	*nst)
 				nst->d_stid = stinf->id;
 				nst->b_stid[0] = stinf->child[0];
 				nst->b_stid[1] = stinf->child[1];
-				dprint(DBGM_NET, "bst1 %x bst2 %x\n",
+				dprint(DBGM_NET, nst->cardnr, "bst1 %x bst2 %x\n",
 					nst->b_stid[0], nst->b_stid[1]);
 				break;
 			} else
-				dprint(DBGM_NET, "stack %d instcnt is %d\n",
+				dprint(DBGM_NET, nst->cardnr, "stack %d instcnt is %d\n",
 					i, stinf->instcnt);
 		} else
-			dprint(DBGM_NET, "stack %d protocol %x\n",
+			dprint(DBGM_NET, nst->cardnr, "stack %d protocol %x\n",
 				i, stinf->pid.protocol[0]);
 	}
 	if (i>cnt) {
@@ -72,7 +72,7 @@ do_net_stack_setup(net_stack_t	*nst)
 		eprint("no layer1 id found\n");
 		return(-EINVAL);
 	}
-	dprint(DBGM_NET, "found NT card stack card%d dst(%x) l1(%x)\n",
+	dprint(DBGM_NET, nst->cardnr, "found NT card stack card%d dst(%x) l1(%x)\n",
 		nst->cardnr, nst->d_stid, nst->l1_id);
 	memset(&li, 0, sizeof(layer_info_t));
 	strcpy(&li.name[0], "net l2");
@@ -101,7 +101,7 @@ do_net_stack_setup(net_stack_t	*nst)
 		return(ret);
 	}
 #endif
-	dprint(DBGM_NET, "add nt net layer2  %x\n",
+	dprint(DBGM_NET, nst->cardnr, "add nt net layer2  %x\n",
 		nst->l2_id);
 	msg_queue_init(&nst->down_queue);
 	msg_queue_init(&nst->rqueue);
@@ -175,9 +175,9 @@ init_timer(itimer_t *it, net_stack_t *nst)
 		}
 		nst->tlist = it;
 	}
-	dprint(DBGM_NET, "init timer(%x)\n", it->id);
+	dprint(DBGM_NET, nst->cardnr, "init timer(%x)\n", it->id);
 	if (test_bit(FLG_TIMER_RUNING, &it->Flags))
-		dprint(DBGM_NET, "init timer(%x) while running\n", it->id);
+		dprint(DBGM_NET, nst->cardnr, "init timer(%x) while running\n", it->id);
 	ret = mISDN_write_frame(it->nst->device, &frm, it->id,
 		MGR_INITTIMER | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
 	if (ret)
@@ -219,7 +219,7 @@ add_timer(itimer_t *it)
 		return(-ENODEV);
 	if (timer_pending(it))
 		return(-EBUSY);
-	dprint(DBGM_NET, "add timer(%x)\n", it->id);
+	dprint(DBGM_NET, it->nst->cardnr, "add timer(%x)\n", it->id);
 	test_and_set_bit(FLG_TIMER_RUNING, &it->Flags);
 	ret = mISDN_write_frame(it->nst->device, &frm, it->id,
 		MGR_ADDTIMER | REQUEST, it->expires, 0, NULL, TIMEOUT_1SEC);
@@ -239,7 +239,7 @@ del_timer(itimer_t *it)
 		return(-ENODEV);
 	if (!get_timer(it->nst, it->id))
 		return(-ENODEV);
-	dprint(DBGM_NET, "del timer(%x)\n", it->id);
+	dprint(DBGM_NET, it->nst->cardnr, "del timer(%x)\n", it->id);
 	test_and_clear_bit(FLG_TIMER_RUNING, &it->Flags);
 	ret = mISDN_write_frame(it->nst->device, &frm, it->id,
 		MGR_DELTIMER | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
@@ -264,7 +264,7 @@ handle_timer(net_stack_t *nst, int id)
 	it = get_timer(nst, id);
 	if (!it)
 		return(-ENODEV);
-//	dprint(DBGM_NET, "handle timer(%x)\n", it->id);
+//	dprint(DBGM_NET, nst->cardnr, "handle timer(%x)\n", it->id);
 	test_and_clear_bit(FLG_TIMER_RUNING, &it->Flags);
 	if (it->function)
 		ret = it->function(it->data);
@@ -278,7 +278,7 @@ write_dmsg(net_stack_t *nst, msg_t *msg)
 	mISDNuser_head_t	*hh;
 
 	hh = (mISDNuser_head_t *)msg->data;
-	dprint(DBGM_NET, "%s: msg(%p) len(%d) pr(%x) di(%x)\n", __FUNCTION__,
+	dprint(DBGM_NET, nst->cardnr, "%s: msg(%p) len(%d) pr(%x) di(%x)\n", __FUNCTION__,
 		msg, msg->len, hh->prim, hh->dinfo);
 	msg_pull(msg, mISDNUSER_HEAD_SIZE);
 	frm = (iframe_t *)msg_push(msg, mISDN_HEADER_LEN);
@@ -302,7 +302,7 @@ write_dmsg(net_stack_t *nst, msg_t *msg)
 int
 phd_conf(net_stack_t *nst, iframe_t *frm, msg_t *msg)
 {
-	dprint(DBGM_NET, "%s: di(%x)\n", __FUNCTION__, frm->dinfo);
+	dprint(DBGM_NET, nst->cardnr, "%s: di(%x)\n", __FUNCTION__, frm->dinfo);
 	if (frm->dinfo == (int)nst->phd_down_msg) {
 		free_msg(msg);
 		nst->phd_down_msg = msg_dequeue(&nst->down_queue);
@@ -345,14 +345,14 @@ do_net_read(net_stack_t *nst)
 	__msg_trim(msg, ret);
 	frm = (iframe_t *)msg->data;
 	
-	dprint(DBGM_NET,"%s: prim(%x) addr(%x)\n", __FUNCTION__,
+	dprint(DBGM_NET, nst->cardnr,"%s: prim(%x) addr(%x)\n", __FUNCTION__,
 		frm->prim, frm->addr);
 	switch (frm->prim) {
 		case MGR_INITTIMER | CONFIRM:
 		case MGR_ADDTIMER | CONFIRM:
 		case MGR_DELTIMER | CONFIRM:
 		case MGR_REMOVETIMER | CONFIRM:
-//			dprint(DBGM_NET, "timer(%x) cnf(%x)\n",
+//			dprint(DBGM_NET, nst->cardnr, "timer(%x) cnf(%x)\n",
 //				frm->addr, frm->prim);
 			free_msg(msg);
 			return(0);
@@ -387,7 +387,7 @@ do_readmsg(net_stack_t *nst, msg_t *msg)
 		return(-EINVAL);
 	frm = (iframe_t *)msg->data;
 	
-	dprint(DBGM_NET,"%s: prim(%x) addr(%x)\n", __FUNCTION__,
+	dprint(DBGM_NET, nst->cardnr,"%s: prim(%x) addr(%x)\n", __FUNCTION__,
 		frm->prim, frm->addr);
 	if (frm->prim == (MGR_TIMER | INDICATION)) {
 		mISDN_write_frame(nst->device, msg->data, frm->addr,
@@ -411,7 +411,7 @@ do_readmsg(net_stack_t *nst, msg_t *msg)
 	} else if (nst->b_stid[1] == frm->addr) {
 		ret = b_message(nst, 1, frm, msg);
 	} else if (frm->prim == (MGR_DELLAYER | CONFIRM)) {
-		dprint(DBGM_NET,"%s: MGR_DELLAYER CONFIRM addr(%x)\n", __FUNCTION__,
+		dprint(DBGM_NET, nst->cardnr,"%s: MGR_DELLAYER CONFIRM addr(%x)\n", __FUNCTION__,
 			frm->addr);
 		free_msg(msg);
 		return(0);
@@ -434,7 +434,7 @@ setup_bchannel(net_stack_t *nst, mISDNuser_head_t *hh, msg_t *msg) {
 		return(-EINVAL);
 	}
 	ch = hh->dinfo -1;
-	dprint(DBGM_NET,"%s:ch%d\n", __FUNCTION__, hh->dinfo);
+	dprint(DBGM_NET, nst->cardnr,"%s:ch%d\n", __FUNCTION__, hh->dinfo);
 	msg_pull(msg, mISDNUSER_HEAD_SIZE);
 	id = (int *)msg->data;
 	nst->bcid[ch] = *id;
@@ -463,7 +463,7 @@ setup_bchannel(net_stack_t *nst, mISDNuser_head_t *hh, msg_t *msg) {
 	}
 	if (ret) {
 		nst->b_addr[ch] = ret;
-		dprint(DBGM_NET,"%s: b_address%d %08x\n", __FUNCTION__,
+		dprint(DBGM_NET, nst->cardnr,"%s: b_address%d %08x\n", __FUNCTION__,
 			hh->dinfo, ret);
 		ret = mISDN_set_stack(nst->device, nst->b_stid[ch],
 			pid);
@@ -507,7 +507,7 @@ cleanup_bc(net_stack_t *nst, mISDNuser_head_t *hh, msg_t *msg)
 		free_msg(msg);
 		return(0);
 	}
-	dprint(DBGM_NET,"%s:ch%d\n", __FUNCTION__, ch + 1);
+	dprint(DBGM_NET, nst->cardnr,"%s:ch%d\n", __FUNCTION__, ch + 1);
 	mISDN_clear_stack(nst->device, nst->b_stid[ch]);
 	if (nst->b_addr[ch])
 		mISDN_write_frame(nst->device, buf, nst->b_addr[ch],
@@ -525,7 +525,7 @@ l1_request(net_stack_t *nst, mISDNuser_head_t *hh, msg_t *msg)
 	iframe_t	*frm;
 
 	hh = (mISDNuser_head_t *)msg->data;
-	dprint(DBGM_NET, "%s: msg(%p) len(%d) pr(%x) di(%x)\n", __FUNCTION__,
+	dprint(DBGM_NET, nst->cardnr, "%s: msg(%p) len(%d) pr(%x) di(%x)\n", __FUNCTION__,
 		msg, msg->len, hh->prim, hh->dinfo);
 	msg_pull(msg, mISDNUSER_HEAD_SIZE);
 	frm = (iframe_t *)msg_push(msg, mISDN_HEADER_LEN);
@@ -550,7 +550,7 @@ do_writemsg(net_stack_t *nst, msg_t *msg)
 	if (!nst || !msg)
 		return(-EINVAL);
 	hh = (mISDNuser_head_t *)msg->data;
-	dprint(DBGM_NET,"%s: prim(%x) dinfo(%x)\n", __FUNCTION__,
+	dprint(DBGM_NET, nst->cardnr,"%s: prim(%x) dinfo(%x)\n", __FUNCTION__,
 		hh->prim, hh->dinfo);
 	if ((hh->prim & LAYER_MASK) == MSG_L1_PRIM) {
 		ret = l1_request(nst, hh, msg);
@@ -593,11 +593,11 @@ main_readloop(void *arg)
 
 
 	tid = pthread_self();
-	dprint(DBGM_NET, "%s: tid %ld\n", __FUNCTION__, tid);
+	dprint(DBGM_NET, nst->cardnr, "%s: tid %ld\n", __FUNCTION__, tid);
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	while(lp) {
-//		dprint(DBGM_NET, "%s: begin dev %d\n", __FUNCTION__, nst->device);
+//		dprint(DBGM_NET, nst->cardnr, "%s: begin dev %d\n", __FUNCTION__, nst->device);
 		maxfd = nst->device;
 		FD_ZERO(&rfd);
 		FD_SET(nst->device, &rfd);
@@ -610,7 +610,7 @@ restart:
 			if (errno == EINTR) {
 				if (test_bit(FLG_NST_TERMINATION, &nst->flag))
 					break;
-				dprint(DBGM_NET, "%s: select restart\n", __FUNCTION__);
+				dprint(DBGM_NET, nst->cardnr, "%s: select restart\n", __FUNCTION__);
 				goto restart;
 			}
 			wprint("%s: error(%d) in select %s\n", __FUNCTION__,
@@ -621,15 +621,15 @@ restart:
 			if (FD_ISSET(nst->device, &rfd)) {
 				ret = do_net_read(nst);
 				if (ret) {
-					dprint(DBGM_NET, "%s: rdfunc ret(%d)\n", __FUNCTION__, ret);
+					dprint(DBGM_NET, nst->cardnr, "%s: rdfunc ret(%d)\n", __FUNCTION__, ret);
 				}
 			}
 			if (FD_ISSET(nst->device, &efd)) {
-				dprint(DBGM_NET, "%s: exception\n", __FUNCTION__);
+				dprint(DBGM_NET, nst->cardnr, "%s: exception\n", __FUNCTION__);
 			}
 		}
 	}
-	dprint(DBGM_NET,"%s: fall trough, abort\n", __FUNCTION__);
+	dprint(DBGM_NET, nst->cardnr,"%s: fall trough, abort\n", __FUNCTION__);
 	pthread_mutex_lock(&nst->lock);
 	test_and_set_bit(FLG_NST_READER_ABORT, &nst->flag);
 	pthread_mutex_unlock(&nst->lock);
@@ -646,10 +646,10 @@ do_netthread(void *arg) {
 
 	/* create reader thread */
 	tid = pthread_self();
-	dprint(DBGM_NET, "%s: tid %ld\n", __FUNCTION__, tid);
+	dprint(DBGM_NET, nst->cardnr, "%s: tid %ld\n", __FUNCTION__, tid);
 	ret = pthread_create(&nst->reader, NULL, main_readloop, (void *)nst);
 	tid = pthread_self();
-	dprint(DBGM_NET, "%s: tid %ld crated %ld\n", __FUNCTION__, tid, nst->reader);
+	dprint(DBGM_NET, nst->cardnr, "%s: tid %ld crated %ld\n", __FUNCTION__, tid, nst->reader);
 	if (ret) {
 		eprint("%s: cannot create reader %d\n", __FUNCTION__,
 			ret);
@@ -681,20 +681,20 @@ do_netthread(void *arg) {
 		pthread_mutex_lock(&nst->lock);
 		if (test_and_clear_bit(FLG_NST_READER_ABORT, &nst->flag)) {
 			pthread_mutex_unlock(&nst->lock);
-			dprint(DBGM_NET,"%s: reader aborted\n", __FUNCTION__);
+			dprint(DBGM_NET, nst->cardnr,"%s: reader aborted\n", __FUNCTION__);
 			ret = pthread_join(nst->reader, &retval);
-			dprint(DBGM_NET,"%s: join ret(%d) reader retval %p\n", __FUNCTION__,
+			dprint(DBGM_NET, nst->cardnr,"%s: join ret(%d) reader retval %p\n", __FUNCTION__,
 				ret, retval);
 			break;
 		}
 		if (test_bit(FLG_NST_TERMINATION, &nst->flag)) {
 			pthread_mutex_unlock(&nst->lock);
-			dprint(DBGM_NET,"%s: reader cancel\n", __FUNCTION__);
+			dprint(DBGM_NET, nst->cardnr,"%s: reader cancel\n", __FUNCTION__);
 			ret = pthread_cancel(nst->reader);
-			dprint(DBGM_NET,"%s: cancel reader ret(%d)\n", __FUNCTION__,
+			dprint(DBGM_NET, nst->cardnr,"%s: cancel reader ret(%d)\n", __FUNCTION__,
 				ret);
 			ret = pthread_join(nst->reader, &retval);
-			dprint(DBGM_NET,"%s: join ret(%d) reader retval %p\n", __FUNCTION__,
+			dprint(DBGM_NET, nst->cardnr,"%s: join ret(%d) reader retval %p\n", __FUNCTION__,
 				ret, retval);
 			break;
 		}

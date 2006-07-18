@@ -58,7 +58,7 @@ init_voipsocks(vapplication_t *v)
 		perror("binding control socket");
 		return 1;
 	}
-	dprint(DBGM_SOCK, "socket ports #%d/#%d\n",
+	dprint(DBGM_SOCK, -1, "socket ports #%d/#%d\n",
 		ntohs(v->daddr.sin_port), ntohs(v->caddr.sin_port));
 	return(0);
 }
@@ -75,7 +75,7 @@ SendBye(iapplication_t *ia, char *bye)
 	if (ia->Flags & (AP_FLG_VOIP_SENT_BYE | AP_FLG_VOIP_PEER_BYE))
 		return(0);
 	len = rtp_make_bye(c->cbuf, c->own_ssrc, bye, 1);
-	dprint(DBGM_SOCK, "C socket send %d bytes to %s\n",
+	dprint(DBGM_SOCK, -1, "C socket send %d bytes to %s\n",
 		len, inet_ntoa(c->cpeer.sin_addr));
 	ia->Flags |= AP_FLG_VOIP_SENT_BYE;
 	if (len) {
@@ -99,7 +99,7 @@ clear_connection(iapplication_t *ia)
 	vconnection_t	*c = ia->con;
 
 	if (c) {
-		dprint(DBGM_SOCK, "clear connection to %s ssrc(%lx/%lx)\n",
+		dprint(DBGM_SOCK, -1, "clear connection to %s ssrc(%lx/%lx)\n",
 			c->rmtname, c->own_ssrc, c->peer_ssrc);
 		if (ia->Flags & AP_FLG_VOIP_PEER_VALID) {
 			msg_queue_purge(&c->aqueue);
@@ -136,7 +136,7 @@ free_application(iapplication_t *ia)
 static void
 close_voipsocks(vapplication_t *v)
 {
-	dprint(DBGM_SOCK, "socket closed\n");
+	dprint(DBGM_SOCK, -1, "socket closed\n");
 	while(v->iapp_lst) {
 		free_application(v->iapp_lst);
 	}
@@ -154,7 +154,7 @@ get_connection(vapplication_t *v,  unsigned long ssrc, int exact)
 	ip = v->iapp_lst;
 	while (ip) {
 		if (ip->con) {
-			dprint(DBGM_SOCK, "ip(%p) %x %s/%s %x/%x\n",
+			dprint(DBGM_SOCK, -1, "ip(%p) %x %s/%s %x/%x\n",
 				ip, ip->Flags,
 				inet_ntoa(v->from.sin_addr),
 				inet_ntoa(ip->con->cpeer.sin_addr),
@@ -330,12 +330,12 @@ play_data(iapplication_t *ip)
 		return(-1);
 	}
 	maxlen = ibuf_freecount(is->rbuf);
-	dprint(DBGM_SOUND, "%s: %d data max(%d)\n", __FUNCTION__,
+	dprint(DBGM_SOUND, -1, "%s: %d data max(%d)\n", __FUNCTION__,
 		ip->con->rlen, maxlen);
 	if (maxlen > ip->con->rlen)
 		maxlen = ip->con->rlen;
 	else if (maxlen < ip->con->rlen) {
-		dprint(DBGM_SOUND, "pb shortage, skip %d bytes (%d/%d/%d/%d/%d)\n",
+		dprint(DBGM_SOUND, -1, "pb shortage, skip %d bytes (%d/%d/%d/%d/%d)\n",
 			ip->con->rlen - maxlen, ip->con->rlen, maxlen,
 			is->rbuf->ridx, is->rbuf->widx, is->rbuf->size);
 		wprint("playbuffer shortage, skip %d bytes\n",
@@ -363,14 +363,14 @@ receive_data(vapplication_t *v) {
 	rh = (rtp_hdr_t *)&v->buf.d;
 	ver = (v->buf.d[0] >> 6) & 3;
 	if (ver != RTP_VERSION) {
-		dprint(DBGM_SOCK, "rtp version %d\n",
+		dprint(DBGM_SOCK, -1, "rtp version %d\n",
 			ver);
 		return(-3);
 	}
 	ssrc = ntohl(rh->ssrc);
 	iap = get_connection(v, ssrc, 1);
 	if (!iap) { /* data from not known source ignored before a CTRL packet */
-		dprint(DBGM_SOCK, "rtp data ignored from %s ssrc(%lx)\n",
+		dprint(DBGM_SOCK, -1, "rtp data ignored from %s ssrc(%lx)\n",
 			inet_ntoa(v->from.sin_addr), ssrc);
 		return(-4);
 	}
@@ -382,10 +382,10 @@ receive_data(vapplication_t *v) {
 	if (v->buf.d[0] & RTP_PAD_FLAG) {
 		iap->con->rlen -= v->buf.d[v->rlen-1]; 
 	}
-	dprint(DBGM_SOCK, "rtp data len(%d) pl(%x) seq(%d) ts(%lx)\n",
+	dprint(DBGM_SOCK, -1, "rtp data len(%d) pl(%x) seq(%d) ts(%lx)\n",
 		iap->con->rlen, payl, seq, ts);
 	if (iap->con->rlen <= 0) {
-		dprint(DBGM_SOCK, "rtp data len error %d\n", iap->con->rlen);
+		dprint(DBGM_SOCK, -1, "rtp data len error %d\n", iap->con->rlen);
 		return(-5);
 	}
 	iap->con->rbuf = v->buf.d + 4*cc + 12;
@@ -427,7 +427,7 @@ receive_data(vapplication_t *v) {
 			*p++ = linear2alaw(*gp++);
 #endif
 	} else {
-		dprint(DBGM_SOCK, "rtp data payload %x not supported\n", payl);
+		dprint(DBGM_SOCK, -1, "rtp data payload %x not supported\n", payl);
 		return(-7);
 	}
 	return(play_data(iap));
@@ -444,7 +444,7 @@ receive_ctrl(vapplication_t *v) {
 		return(1);
 	ver = (v->buf.d[0] >> 6) & 3;
 	if ((ver != RTP_VERSION) && (ver != 1)) {
-		dprint(DBGM_SOCK, "rtp version %d\n",
+		dprint(DBGM_SOCK, -1, "rtp version %d\n",
 			ver);
 		return(2);
 	}
@@ -452,11 +452,11 @@ receive_ctrl(vapplication_t *v) {
 	iap = get_connection(v, ssrc, 0);
 	if (!iap) { /* New connection */
 		if (isRTCPByepacket(v->buf.d, v->rlen)) {
-			dprint(DBGM_CONN, "bye in new connection from %s ignored\n",
+			dprint(DBGM_CONN, -1, "bye in new connection from %s ignored\n",
 				inet_ntoa(v->from.sin_addr));
 			return(3);
 		}
-		dprint(DBGM_CONN, "new connection from %s ssrc(%x)\n",
+		dprint(DBGM_CONN, -1, "new connection from %s ssrc(%x)\n",
 			inet_ntoa(v->from.sin_addr), ssrc);
 		iap = new_peer_connection(v, ssrc, ver);
 		if (!iap) {
@@ -466,7 +466,7 @@ receive_ctrl(vapplication_t *v) {
 	} else {
 		if (isRTCPByepacket(v->buf.d, v->rlen)) {
 			iap->Flags |= AP_FLG_VOIP_PEER_BYE;
-			dprint(DBGM_CONN, "connection from %s bye\n",
+			dprint(DBGM_CONN, -1, "connection from %s bye\n",
 				inet_ntoa(v->from.sin_addr));
 		}
 	}
@@ -1279,7 +1279,7 @@ SendCtrl(iapplication_t *ia)
 		len = rtp_make_app(c->cbuf, c->own_ssrc, 1, "ISDN",
 			c->amsg->data, c->amsg->len);
 	}
-	dprint(DBGM_SOCK, "C socket send %d bytes to %s\n",
+	dprint(DBGM_SOCK, -1, "C socket send %d bytes to %s\n",
 		len, inet_ntoa(c->cpeer.sin_addr));
 	if (len) {
 		dhexprint(DBGM_CDATA, "send ctrl packet:", c->cbuf, len);
@@ -1314,12 +1314,12 @@ voipscan(void *arg) {
 		}
 		ret = select(v->csock + 1, &fdset, NULL, NULL, &timeout);
 		if (ret < 0) { /* error */
-			dprint(DBGM_SOCK, "socket select errno %d: %s\n",
+			dprint(DBGM_SOCK, -1, "socket select errno %d: %s\n",
 				errno, strerror(errno));
 			continue;
 		}
 		if (ret == 0) { /* timeout */
-			dprint(DBGM_SOCK, "socket select timeout\n");
+			dprint(DBGM_SOCK, -1, "socket select timeout\n");
 			continue;
 		}
 		if (FD_ISSET(v->dsock, &fdset)) { /* data packet */
@@ -1327,28 +1327,28 @@ voipscan(void *arg) {
 			v->rlen = recvfrom(v->dsock, v->buf.d, MAX_NETBUFFER_SIZE,
 				0, (struct sockaddr *) &v->from, &v->fromlen);
 			if (v->rlen <= 0) {
-				dprint(DBGM_SOCK, "D socket rlen(%d)\n",
+				dprint(DBGM_SOCK, -1, "D socket rlen(%d)\n",
 					v->rlen); 
 				continue;
 			}
 			dhexprint(DBGM_DDATA, "data packet:", v->buf.d, v->rlen);
 			ret = receive_data(v);
 			if (ret<0)
-				dprint(DBGM_SOCK, "receive_data ret(%d)\n", ret);
+				dprint(DBGM_SOCK, -1, "receive_data ret(%d)\n", ret);
 		}
 		if (FD_ISSET(v->csock, &fdset)) { /* ctrl packet */
 			v->fromlen = sizeof(struct sockaddr_in);
 			v->rlen = recvfrom(v->csock, v->buf.d, MAX_NETBUFFER_SIZE,
 				0, (struct sockaddr *) &v->from, &v->fromlen);
 			if (v->rlen <= 0) {
-				dprint(DBGM_SOCK, "C socket rlen(%d)\n",
+				dprint(DBGM_SOCK, -1, "C socket rlen(%d)\n",
 					v->rlen); 
 				continue;
 			}
 			dhexprint(DBGM_CDATA, "ctrl packet:", v->buf.d, v->rlen);
 			ret = receive_ctrl(v);
 			if (ret)
-				dprint(DBGM_SOCK, "receive_ctrl ret(%d)\n", ret);
+				dprint(DBGM_SOCK, -1, "receive_ctrl ret(%d)\n", ret);
 		}
 	}
 	close_voipsocks(v);
@@ -1449,11 +1449,11 @@ voip_sender(void *arg)
 	while (!(ap->Flags & AP_FLG_VOIP_ABORT)) {
 		is = ap->data2;
 		if (!is || !is->sbuf) {
-			dprint(DBGM_SOUND, "application data2 NULL\n");
+			dprint(DBGM_SOUND, -1, "application data2 NULL\n");
 			break;
 		}
 		if (!ap->con) {
-			dprint(DBGM_SOUND, "application ap->con NULL\n");
+			dprint(DBGM_SOUND, -1, "application ap->con NULL\n");
 			break;
 		}
 		avail = ibuf_usedcount(is->sbuf);
@@ -1527,9 +1527,9 @@ voip_sender(void *arg)
 			}
 #endif
 			ret = send_sdata(ap);
-			dprint(DBGM_SOUND, "send_sdata ret %d\n", ret);
+			dprint(DBGM_SOUND, -1, "send_sdata ret %d\n", ret);
 			if (ret<=0) {
-				dprint(DBGM_SOUND, "send_sdata ret %d\n", ret);
+				dprint(DBGM_SOUND, -1, "send_sdata ret %d\n", ret);
 				ap->Flags |= AP_FLG_VOIP_ABORT;
 			}
 		} else {

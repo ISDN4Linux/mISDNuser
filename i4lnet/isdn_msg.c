@@ -63,7 +63,7 @@ alloc_msg(int size)
 	m->tail = m->data;
 	m->end  = m->head + m->size;
 	m->len = 0;
-	dprint(DBGM_MSG,"%s: %d msg(%p)\n", __FUNCTION__,
+	dprint(DBGM_MSG, -1,"%s: %d msg(%p)\n", __FUNCTION__,
 		alloc_msg_cnt, m);
 	return(m);
 }
@@ -75,7 +75,7 @@ free_msg(msg_t *msg) {
 		wprint("free NULL msg\n");
 		return;
 	}
-	dprint(DBGM_MSG,"%s: %d/%d msg(%p) \n", __FUNCTION__,
+	dprint(DBGM_MSG, -1,"%s: %d/%d msg(%p) \n", __FUNCTION__,
 		alloc_msg_cnt, free_queue->len, msg);
 
 	if (msg->list) {
@@ -89,7 +89,7 @@ free_msg(msg_t *msg) {
 	}
 	if (free_queue->len>=free_queue->maxlen) {
 		alloc_msg_cnt--;
-		dprint(DBGM_MSG, "free msg no free_queue %d/%d\n",
+		dprint(DBGM_MSG, -1, "free msg no free_queue %d/%d\n",
 			free_queue->len, free_queue->maxlen);
 		free(msg);
 		return;
@@ -101,11 +101,11 @@ msg_t *
 msg_copy(msg_t *msg) {
 	msg_t	*nmsg;
 
-	dprint(DBGM_MSG,"%s: old(%p)\n", __FUNCTION__, msg);
+	dprint(DBGM_MSG, -1,"%s: old(%p)\n", __FUNCTION__, msg);
 	nmsg = alloc_msg(msg->size);
 	if (!nmsg)
 		return(NULL);
-	dprint(DBGM_MSG,"%s: new(%p) size(%d)\n", __FUNCTION__,
+	dprint(DBGM_MSG, -1,"%s: new(%p) size(%d)\n", __FUNCTION__,
 		nmsg, msg->size);
 	memcpy(nmsg, msg, sizeof(msg_t));
 	return(nmsg);

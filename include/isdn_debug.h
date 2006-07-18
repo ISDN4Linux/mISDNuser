@@ -27,7 +27,7 @@
 #define DBGM_TOPLEVEL	0x40000000
 #define DBGM_ALL	0xffffffff
 
-extern	int		dprint(unsigned int mask, const char *fmt, ...);
+extern	int		dprint(unsigned int mask, int port, const char *fmt, ...);
 extern	int		eprint(const char *fmt, ...);
 extern	int		wprint(const char *fmt, ...);
 extern	int		debug_init(unsigned int, char *, char *, char *);

@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.4 2006/03/06 13:08:29 keil Exp $
+/* $Id: tei.c,v 1.5 2006/07/18 13:50:03 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 // #include "debug.h"
 // #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.4 $";
+const char *tei_revision = "$Revision: 1.5 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -129,7 +129,7 @@ put_tei_msg(teimgr_t *tm, u_char m_id, unsigned int ri, u_char tei)
 	bp[7] = (tei << 1) | 1;
 	msg = create_link_msg(MDL_UNITDATA | REQUEST, DINFO_SKB, 8, bp, 0);
 	if (!msg) {
-		dprint(DBGM_TEI, "mISDN: No msg for TEI manager\n");
+		dprint(DBGM_TEI, -1, "mISDN: No msg for TEI manager\n");
 		return;
 	}
 	if (tei_l2(tm->l2, msg))
@@ -251,7 +251,7 @@ l2_tei(teimgr_t *tm, msg_t *msg)
 	if (!tm || !msg)
 		return(ret);
 	hh = (mISDNuser_head_t *)msg->data;
-	dprint(DBGM_TEI, "%s: prim(%x)\n", __FUNCTION__, hh->prim);
+	dprint(DBGM_TEI, -1, "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (msg->len < mISDN_FRAME_MIN)
 		return(ret);
 	switch(hh->prim) {
@@ -276,7 +276,7 @@ tei_debug(struct FsmInst *fi, char *fmt, ...)
 
 	va_start(args, fmt);
 	vsprintf(tbuf, fmt, args);
-	dprint(DBGM_L2, "tei%d %s\n", tm->l2->tei, tbuf);
+	dprint(DBGM_L2, -1, "tei%d %s\n", tm->l2->tei, tbuf);
 	va_end(args);
 }
 
@@ -337,7 +337,7 @@ tei_mux(net_stack_t *nst, msg_t *msg)
 	unsigned int	ri, ai;
 
 	hh = (mISDNuser_head_t *)msg->data;
-	dprint(DBGM_TEI, "%s: prim(%x) len(%d)\n", __FUNCTION__,
+	dprint(DBGM_TEI, -1, "%s: prim(%x) len(%d)\n", __FUNCTION__,
 		hh->prim, msg->len);
 	if (msg->len < mISDN_FRAME_MIN)
 		return(-EINVAL);
@@ -369,7 +369,7 @@ tei_mux(net_stack_t *nst, msg_t *msg)
 		dp++;
 		ai = (unsigned int) *dp++;
 		ai >>= 1;
-		dprint(DBGM_TEI, "tei handler mt %x ri(%x) ai(%d)\n",
+		dprint(DBGM_TEI, -1, "tei handler mt %x ri(%x) ai(%d)\n",
 			mt, ri, ai);
 		if (mt == ID_REQUEST) {
 			if (ai != 127) {

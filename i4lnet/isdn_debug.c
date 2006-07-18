@@ -85,7 +85,7 @@ debug_close(void)
 }
 
 int
-dprint(unsigned int mask, const char *fmt, ...)
+dprint(unsigned int mask, int port, const char *fmt, ...)
 {
 	int	ret = 0;
 	va_list	args;
@@ -98,7 +98,7 @@ dprint(unsigned int mask, const char *fmt, ...)
 	va_start(args, fmt);
 	if (debug_mask & mask) {
 		if (debug_file != stdout)
-			fprintf(debug_file, "%s ",tmp);
+			fprintf(debug_file, "%s P(%2d): ",tmp, port);
 		ret = vfprintf(debug_file, fmt, args);
 		if (debug_file != stdout)
 			fflush(debug_file);

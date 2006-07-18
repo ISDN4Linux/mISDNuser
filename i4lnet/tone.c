@@ -58,7 +58,7 @@ int tone_handler(bchannel_t *bc) {
 	const unsigned char	*tp;
 	int			len;
 
-	dprint(DBGM_TONE, "%s:ch%d Flags %x\n", __FUNCTION__,
+	dprint(DBGM_TONE, -1, "%s:ch%d Flags %x\n", __FUNCTION__,
 		bc->channel, bc->Flags);
 	if (bc->bstate != BC_BSTATE_ACTIV)
 		return(1);
@@ -119,7 +119,7 @@ int tone_handler(bchannel_t *bc) {
 	} else
 		return(4);
 	if (len > ibuf_freecount(bc->sbuf)) {
-		dprint(DBGM_TONE, "%s:ch%d not sbuf %d/%d\n", __FUNCTION__,
+		dprint(DBGM_TONE, -1, "%s:ch%d not sbuf %d/%d\n", __FUNCTION__,
 			bc->channel, len, ibuf_freecount(bc->sbuf));
 		return(5);
 	}

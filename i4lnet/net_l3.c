@@ -1,4 +1,4 @@
-/* $Id: net_l3.c,v 1.8 2006/06/16 10:02:50 crich Exp $
+/* $Id: net_l3.c,v 1.9 2006/07/18 13:50:03 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -16,7 +16,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l3_revision = "$Revision: 1.8 $";
+const char *l3_revision = "$Revision: 1.9 $";
 
 #define PROTO_DIS_EURO	8
 
@@ -89,7 +89,7 @@ display_NR_IE(u_char *p, char *head1, char *head2)
 		while(len--)
 			tp += sprintf(tp, "%c", *p++);
 	}
-	dprint(DBGM_L3, "%s%s %s\n", head1, head2, txt);
+	dprint(DBGM_L3, -1, "%s%s %s\n", head1, head2, txt);
 }
 
 static void
@@ -103,7 +103,7 @@ l3_debug(layer3_t *l3, char *fmt, ...)
 	p += sprintf(p, "l3 ");
 	p += vsprintf(p, fmt, args);
 	va_end(args);
-	dprint(DBGM_L3, "%s\n", buf);
+	dprint(DBGM_L3, l3->nst->cardnr, "%s\n", buf);
 }
 
 static int
@@ -166,7 +166,11 @@ int
 L3AddTimer(L3Timer_t *t, int millisec, int timer_nr)
 {
 	if (timer_pending(&t->tl)) {
-		dprint(DBGM_L3, "L3AddTimer: timer already active!\n");
+		if (t->pc && t->pc->l3)
+			dprint(DBGM_L3, t->pc->l3->nst->cardnr, "L3AddTimer: timer already active!\n");
+		else
+			dprint(DBGM_L3, 0, "L3AddTimer: timer already active!\n");
+			
 		return -1;
 	}
 	init_timer(&t->tl, t->pc->l3->nst);
@@ -181,7 +185,8 @@ StopAllL3Timer(layer3_proc_t *pc)
 {
 	L3DelTimer(&pc->timer1);
 	L3DelTimer(&pc->timer2);
-dprint(DBGM_L3, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
+		
+	dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
 #warning also remove flags:
 	test_and_clear_bit(FLG_L3P_TIMER303_1, &pc->Flags);
 	test_and_clear_bit(FLG_L3P_TIMER308_1, &pc->Flags);
@@ -195,11 +200,11 @@ RemoveAllL3Timer(layer3_proc_t *pc)
 	
 	ret = remove_timer(&pc->timer1.tl);
 	if (ret)
-		dprint(DBGM_L3, "RemoveL3Timer1: ret %d\n", ret);
+		dprint(DBGM_L3, pc->l3->nst->cardnr, "RemoveL3Timer1: ret %d\n", ret);
 	ret = remove_timer(&pc->timer2.tl);
-dprint(DBGM_L3, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
+	dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
 	if (ret)
-		dprint(DBGM_L3, "RemoveL3Timer2: ret %d\n", ret);
+		dprint(DBGM_L3, pc->l3->nst->cardnr, "RemoveL3Timer2: ret %d\n", ret);
 #warning also remove flags:
 	test_and_clear_bit(FLG_L3P_TIMER303_1, &pc->Flags);
 	test_and_clear_bit(FLG_L3P_TIMER308_1, &pc->Flags);
@@ -233,10 +238,10 @@ find_proc(layer3_proc_t *master, int ces, int cr)
 	layer3_proc_t	*p = master;
 	layer3_proc_t	*cp;
 
-	dprint(DBGM_L3, "%s: ces(%x) cr(%x)\n", __FUNCTION__,
+	dprint(DBGM_L3, master?master->l3->nst->cardnr:0, "%s: ces(%x) cr(%x)\n", __FUNCTION__,
 		ces, cr);
 	while(p) {
-		dprint(DBGM_L3, "%s: proc %p ces(%x) cr(%x)\n", __FUNCTION__,
+		dprint(DBGM_L3, p->l3->nst->cardnr, "%s: proc %p ces(%x) cr(%x)\n", __FUNCTION__,
 			p, p->ces, p->callref);
 		if ((p->ces == ces) && (p->callref == cr))
 			break;
@@ -436,7 +441,7 @@ l3dss1_msg_without_setup(layer3_proc_t *pc, u_char cause)
 			l3dss1_message_cause(pc, MT_RELEASE_COMPLETE, cause);
 			break;
 		default:
-			dprint(DBGM_L3, "mISDN l3dss1_msg_without_setup wrong cause %d\n",
+			dprint(DBGM_L3, pc->l3->nst->cardnr, "mISDN l3dss1_msg_without_setup wrong cause %d\n",
 				cause);
 	}
 	send_proc(pc, IMSG_END_PROC, NULL);
@@ -758,7 +763,7 @@ l3dss1_setup(layer3_proc_t *pc, int pr, void *arg)
 	setup->ces = pc->ces;
 	newl3state(pc, 1);
 	L3DelTimer(&pc->timer2);
-dprint(DBGM_L3, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
+	dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
 	L3AddTimer(&pc->timer2, T_CTRL, 0x31f);
 	if (err) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, err);
@@ -957,7 +962,7 @@ l3dss1_setup_acknowledge_i(layer3_proc_t *pc, int pr, void *arg)
 	msg_t			*umsg, *msg = arg;
 	SETUP_ACKNOWLEDGE_t	*sa;
 
-	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, pc->l3->nst->cardnr,"%s\n", __FUNCTION__);
 	if (!pc->master) {
 		L3DelTimer(&pc->timer1);
 		newl3state(pc, 25);
@@ -987,7 +992,7 @@ l3dss1_proceeding_i(layer3_proc_t *pc, int pr, void *arg)
 	msg_t			*umsg, *msg = arg;
 	CALL_PROCEEDING_t	*proc;
 
-	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, pc->l3->nst->cardnr,"%s\n", __FUNCTION__);
 	if (!pc->master) {
 		L3DelTimer(&pc->timer1);
 		newl3state(pc, 9);
@@ -1021,7 +1026,7 @@ l3dss1_alerting_i(layer3_proc_t *pc, int pr, void *arg)
 	msg_t		*umsg, *msg = arg;
 	ALERTING_t	*al;
 
-	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, pc->l3->nst->cardnr,"%s\n", __FUNCTION__);
 	if (!pc->master) {
 		L3DelTimer(&pc->timer1);
 		newl3state(pc, 7);
@@ -1164,7 +1169,7 @@ l3dss1_hold(layer3_proc_t *pc, int pr, void *arg)
 		l3dss1_message_cause(pc, MT_HOLD_REJECT, CAUSE_MT_NOTIMPLEMENTED);
 		return;
 	}
-	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, pc->l3->nst->cardnr,"%s\n", __FUNCTION__);
 #warning TODO: global mask for supported none mandatory services, like HOLD
 	if (pc->hold_state == HOLDAUX_HOLD_IND)
 		return;
@@ -1193,7 +1198,7 @@ l3dss1_retrieve(layer3_proc_t *pc, int pr, void *arg)
 		l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_MT_NOTIMPLEMENTED);
 		return;
 	}
-	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, pc->l3->nst->cardnr,"%s\n", __FUNCTION__);
 	if (pc->hold_state == HOLDAUX_RETR_IND)
 		return;
 	if (pc->hold_state != HOLDAUX_HOLD) {
@@ -1219,7 +1224,7 @@ l3dss1_suspend(layer3_proc_t *pc, int pr, void *arg)
 	msg_t		*umsg, *msg = arg;
 	SUSPEND_t	*susp;
 
-	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, pc->l3->nst->cardnr,"%s\n", __FUNCTION__);
 	umsg = prep_l3data_msg(CC_SUSPEND | INDICATION, pc->ces |
 		(pc->callref << 16), sizeof(SUSPEND_t), msg->len, NULL);
 	if (!umsg)
@@ -1240,7 +1245,7 @@ l3dss1_resume(layer3_proc_t *pc, int pr, void *arg)
 	msg_t		*umsg, *msg = arg;
 	RESUME_t	*res;
 
-	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, pc->l3->nst->cardnr,"%s\n", __FUNCTION__);
 	umsg = prep_l3data_msg(CC_RESUME | INDICATION, pc->ces |
 		(pc->callref << 16), sizeof(RESUME_t), msg->len, NULL);
 	if (!umsg)
@@ -1332,7 +1337,7 @@ static layer3_proc_t
 static void
 l3dss1_setup_acknowledge_m(layer3_proc_t *pc, int pr, void *arg)
 {
-	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, pc->l3->nst->cardnr,"%s\n", __FUNCTION__);
 	L3DelTimer(&pc->timer1);
 	create_child_proc(pc, pr, arg, 25);
 }
@@ -1340,7 +1345,7 @@ l3dss1_setup_acknowledge_m(layer3_proc_t *pc, int pr, void *arg)
 static void
 l3dss1_proceeding_m(layer3_proc_t *pc, int pr, void *arg)
 {
-	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, pc->l3->nst->cardnr,"%s\n", __FUNCTION__);
 	L3DelTimer(&pc->timer1);
 	create_child_proc(pc, pr, arg, 9);
 }
@@ -1348,7 +1353,7 @@ l3dss1_proceeding_m(layer3_proc_t *pc, int pr, void *arg)
 static void
 l3dss1_alerting_m(layer3_proc_t *pc, int pr, void *arg)
 {
-	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, pc->l3->nst->cardnr,"%s\n", __FUNCTION__);
 	L3DelTimer(&pc->timer1);
 	create_child_proc(pc, pr, arg, 7);
 }
@@ -1356,7 +1361,7 @@ l3dss1_alerting_m(layer3_proc_t *pc, int pr, void *arg)
 static void
 l3dss1_connect_m(layer3_proc_t *pc, int pr, void *arg)
 {
-	dprint(DBGM_L3,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, pc->l3->nst->cardnr,"%s\n", __FUNCTION__);
 	L3DelTimer(&pc->timer1);
 	create_child_proc(pc, pr, arg, 8);
 }
@@ -1385,7 +1390,7 @@ l3dss1_release_cmpl_m(layer3_proc_t *pc, int pr, void *arg)
 	if (pc->state == 6) {
 		msg_pull(msg, mISDNUSER_HEAD_SIZE);
 		if ((p = l3dss1_get_cause(pc, msg, NULL))) {
-			dprint(DBGM_L3,"%s cause (%d/%d)\n", __FUNCTION__,
+			dprint(DBGM_L3, pc->l3->nst->cardnr,"%s cause (%d/%d)\n", __FUNCTION__,
 				pc->cause, pc->err);
 			switch(pc->cause) {
 				case CAUSE_USER_BUSY:
@@ -1589,11 +1594,11 @@ l3dss1_setup_req(layer3_proc_t *pc, int pr, void *arg)
 	dhexprint(DBGM_L3DATA, "l3 oframe:", &pc->obuf[0], l);
 #warning testing
 	if (pc->l3->l2_state0 && (pc->l3->nst->feature & FEATURE_NET_PTP)) {
-		dprint(DBGM_L3, "%s: proc(%p) sending SETUP to CES 0\n", __FUNCTION__, pc);
+		dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: proc(%p) sending SETUP to CES 0\n", __FUNCTION__, pc);
 		if (l3_msg(pc->l3, DL_DATA | REQUEST, 0, msg))
 			free_msg(msg);
 	} else {
-		dprint(DBGM_L3, "%s: proc(%p) sending SETUP to broadcast CES\n", __FUNCTION__, pc);
+		dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: proc(%p) sending SETUP to broadcast CES\n", __FUNCTION__, pc);
 		if (l3_msg(pc->l3, DL_UNITDATA | REQUEST, 127, msg))
 			free_msg(msg);
 	}
@@ -1961,7 +1966,7 @@ l3dss1_t303(layer3_proc_t *pc, int pr, void *arg)
 					free_msg(msg);
 			}
 			L3DelTimer(&pc->timer2);
-dprint(DBGM_L3, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
+dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
 			L3AddTimer(&pc->timer2, T312, 0x312);
 			test_and_set_bit(FLG_L3P_TIMER312,
 				&pc->Flags);
@@ -2025,7 +2030,7 @@ l3dss1_t312(layer3_proc_t *pc, int pr, void *arg)
 
 	test_and_clear_bit(FLG_L3P_TIMER312, &pc->Flags);
 	L3DelTimer(&pc->timer2);
-dprint(DBGM_L3, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
+dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
 	l3_debug(pc->l3, "%s: state %d", __FUNCTION__, pc->state);
 	if (pc->state == 22) {
 		StopAllL3Timer(pc);
@@ -2327,7 +2332,7 @@ imsg_intrelease(layer3_proc_t *master, layer3_proc_t *child)
 
 	if ((!master) || (!child))
 		return(-EINVAL);
-	dprint(DBGM_L3, "%s: m/c(%x/%x) state(%d/%d) m->c(%p)\n", __FUNCTION__,
+	dprint(DBGM_L3, master->l3->nst->cardnr, "%s: m/c(%x/%x) state(%d/%d) m->c(%p)\n", __FUNCTION__,
 		master->ces, child->ces, master->state, child->state,
 		master->child);
 	switch (master->state) {
@@ -2345,7 +2350,7 @@ imsg_intrelease(layer3_proc_t *master, layer3_proc_t *child)
 		case 25:
 			if (master->child ||
 				test_bit(FLG_L3P_TIMER312, &master->Flags)) {
-	dprint(DBGM_L3, "%s: JOLLY child=%p, flg=%d\n", __FUNCTION__, master->child, test_bit(FLG_L3P_TIMER312, &master->Flags));
+	dprint(DBGM_L3, master->l3->nst->cardnr, "%s: JOLLY child=%p, flg=%d\n", __FUNCTION__, master->child, test_bit(FLG_L3P_TIMER312, &master->Flags));
 #warning TODO: save cause
 #warning bedenke auch, dass vielleicht overlap sending mit information-messages praktisch wäre (später PTP)
 			} else {
@@ -2542,7 +2547,7 @@ dl_data_mux(layer3_t *l3, mISDNuser_head_t *hh, msg_t *msg)
 
 	if (!l3)
 		return(ret);
-	dprint(DBGM_L3, "%s: len(%d)\n", __FUNCTION__, msg->len);
+	dprint(DBGM_L3, l3->nst->cardnr, "%s: len(%d)\n", __FUNCTION__, msg->len);
 	dhexprint(DBGM_L3DATA, "l3 iframe:", msg->data, msg->len);
 	if (msg->len < 3) {
 		l3_debug(l3, "dss1 frame too short(%d)", msg->len);
@@ -2558,9 +2563,9 @@ dl_data_mux(layer3_t *l3, mISDNuser_head_t *hh, msg_t *msg)
 		free_msg(msg); 
 		return(0);
 	}
-	dprint(DBGM_L3, "%s: dis(%x)\n", __FUNCTION__, msg->data[0]);
+	dprint(DBGM_L3, l3->nst->cardnr, "%s: dis(%x)\n", __FUNCTION__, msg->data[0]);
 	cr = getcallref(msg->data);
-	dprint(DBGM_L3, "%s: cr(%x)\n", __FUNCTION__, cr);
+	dprint(DBGM_L3, l3->nst->cardnr, "%s: cr(%x)\n", __FUNCTION__, cr);
 	if (msg->len < ((msg->data[1] & 0x0f) + 3)) {
 		l3_debug(l3, "dss1 frame too short(%d)", msg->len);
 		free_msg(msg);
@@ -2589,9 +2594,9 @@ dl_data_mux(layer3_t *l3, mISDNuser_head_t *hh, msg_t *msg)
 		free_msg(msg);
 		return(0);
 	}
-	dprint(DBGM_L3, "%s: mt(%x)\n", __FUNCTION__, l3m.mt);
+	dprint(DBGM_L3, l3->nst->cardnr, "%s: mt(%x)\n", __FUNCTION__, l3m.mt);
 	proc = find_proc(l3->proc, hh->dinfo, cr);
-	dprint(DBGM_L3, "%s: proc(%p)\n", __FUNCTION__, proc);
+	dprint(DBGM_L3, l3->nst->cardnr, "%s: proc(%p)\n", __FUNCTION__, proc);
 	if (!proc) {
 		if (l3m.mt == MT_SETUP || l3m.mt == MT_RESUME) {
 			/* Setup/Resume creates a new transaction process */
@@ -2602,7 +2607,7 @@ dl_data_mux(layer3_t *l3, mISDNuser_head_t *hh, msg_t *msg)
 				free_msg(msg);
 				return(0);
 			}
-			dprint(DBGM_L3, "%s: %s\n", __FUNCTION__, (l3m.mt==MT_SETUP)?"MT_SETUP":"MT_RESUME");
+			dprint(DBGM_L3, l3->nst->cardnr, "%s: %s\n", __FUNCTION__, (l3m.mt==MT_SETUP)?"MT_SETUP":"MT_RESUME");
 			if (!(proc = create_proc(l3, hh->dinfo, cr, NULL))) {
 				/* May be to answer with RELEASE_COMPLETE and
 				 * CAUSE 0x2f "Resource unavailable", but this
@@ -2611,10 +2616,10 @@ dl_data_mux(layer3_t *l3, mISDNuser_head_t *hh, msg_t *msg)
 				free_msg(msg);
 				return(0);
 			}
-			dprint(DBGM_L3, "%s: proc(%p)\n", __FUNCTION__, proc);
+			dprint(DBGM_L3, l3->nst->cardnr, "%s: proc(%p)\n", __FUNCTION__, proc);
 			APPEND_TO_LIST(proc, l3->proc);
 		} else {
-			dprint(DBGM_L3, "%s: mt(%x) do not create proc\n", __FUNCTION__,
+			dprint(DBGM_L3, l3->nst->cardnr, "%s: mt(%x) do not create proc\n", __FUNCTION__,
 				l3m.mt);
 #warning TODO: it happens that a response to an outgoing setup is received after connect of another terminal. in this case we must release.
 			free_msg(msg);
@@ -2622,7 +2627,7 @@ dl_data_mux(layer3_t *l3, mISDNuser_head_t *hh, msg_t *msg)
 		}
 	}
 	if ((proc->ces & 0xffffff00) == 0xff00) {
-		dprint(DBGM_L3, "%s: master state %d found\n", __FUNCTION__,
+		dprint(DBGM_L3, l3->nst->cardnr, "%s: master state %d found\n", __FUNCTION__,
 			proc->state);
 		msg_push(msg, mISDNUSER_HEAD_SIZE);
 		send_proc(proc, IMSG_MASTER_L2_DATA, &l3m);
@@ -2639,8 +2644,8 @@ l3_muxer(net_stack_t *nst, msg_t *msg)
 	int		ret = -EINVAL;
 
 	hh = (mISDNuser_head_t *)msg->data;
-	dprint(DBGM_L3, "%s: msg len(%d)\n", __FUNCTION__, msg->len);
-	dprint(DBGM_L3, "%s: pr(%x) di(%x)\n", __FUNCTION__,
+	dprint(DBGM_L3, nst->cardnr, "%s: msg len(%d)\n", __FUNCTION__, msg->len);
+	dprint(DBGM_L3, nst->cardnr, "%s: pr(%x) di(%x)\n", __FUNCTION__,
 		hh->prim, hh->dinfo);
 	msg_pull(msg, mISDNUSER_HEAD_SIZE);
 	if (hh->prim == (DL_DATA | INDICATION)) {
@@ -2662,8 +2667,8 @@ manager_l3(net_stack_t *nst, msg_t *msg)
 	struct _l3_msg	l3m;
 
 	hh = (mISDNuser_head_t *)msg->data;
-	dprint(DBGM_L3, "%s: msg len(%d)\n", __FUNCTION__, msg->len);
-	dprint(DBGM_L3, "%s: pr(%x) di(%x)\n", __FUNCTION__,
+	dprint(DBGM_L3, nst->cardnr, "%s: msg len(%d)\n", __FUNCTION__, msg->len);
+	dprint(DBGM_L3, nst->cardnr, "%s: pr(%x) di(%x)\n", __FUNCTION__,
 		hh->prim, hh->dinfo);
 	msg_pull(msg, mISDNUSER_HEAD_SIZE);
 	proc = find_proc(nst->layer3->proc, hh->dinfo & 0xffff,
@@ -2682,12 +2687,12 @@ manager_l3(net_stack_t *nst, msg_t *msg)
 			proc = create_proc(nst->layer3, hh->dinfo & 0xffff,
 				nst->layer3->next_cr | 0x8000, NULL);
 			if (!proc) {
-				dprint(DBGM_L3, "%s: pr(%x) failed to create proc.\n",
+				dprint(DBGM_L3, nst->cardnr, "%s: pr(%x) failed to create proc.\n",
 					__FUNCTION__, hh->prim);
 				free_msg(msg);
 				return(0);
 			}
-			dprint(DBGM_L3, "%s: proc(%p)\n", __FUNCTION__, proc);
+			dprint(DBGM_L3, nst->cardnr, "%s: proc(%p)\n", __FUNCTION__, proc);
 #warning testing
 #if 0
 printf("check for tei 0 active\n");
@@ -2705,7 +2710,7 @@ printf("check for tei 0 active\n");
 			}
 			proc = p3i;
 			
-			dprint(DBGM_L3, "%s: TEI 0 is active, so we created proc(%p)\n", __FUNCTION__, proc);
+			dprint(DBGM_L3, nst->cardnr, "%s: TEI 0 is active, so we created proc(%p)\n", __FUNCTION__, proc);
 			
 		}
 #endif
@@ -2718,7 +2723,7 @@ printf("check for tei 0 active\n");
 		}
 	}
 	if (!proc) {
-		dprint(DBGM_L3, "%s: pr(%x) no proc id %x found\n", __FUNCTION__,
+		dprint(DBGM_L3, nst->cardnr, "%s: pr(%x) no proc id %x found\n", __FUNCTION__,
 			hh->prim, hh->dinfo);
 		free_msg(msg);
 		return(0);
@@ -2727,7 +2732,7 @@ printf("check for tei 0 active\n");
 	if (msg->len)
 		l3m.msg = msg;
 	else {
-		dprint(DBGM_L3, "%s: pr(%x) id(%x) zero param\n", __FUNCTION__,
+		dprint(DBGM_L3, nst->cardnr, "%s: pr(%x) id(%x) zero param\n", __FUNCTION__,
 			hh->prim, hh->dinfo);
 		l3m.msg = NULL;
 	}
@@ -2738,9 +2743,9 @@ printf("check for tei 0 active\n");
 
 static void
 release_l3(layer3_t *l3) {
-	dprint(DBGM_L3, "%s(%p)\n", __FUNCTION__, l3);
+	dprint(DBGM_L3, l3->nst->cardnr, "%s(%p)\n", __FUNCTION__, l3);
 	while(l3->proc) {
-		dprint(DBGM_L3, "%s: rel_proc ces(%x)\n", __FUNCTION__,
+		dprint(DBGM_L3, l3->nst->cardnr, "%s: rel_proc ces(%x)\n", __FUNCTION__,
 			l3->proc->ces);
 		send_proc(l3->proc, IMSG_END_PROC, NULL);
 	}
@@ -2759,7 +2764,7 @@ mISDN_l3up(layer3_proc_t *l3p, msg_t *msg)
 	if (l3p->l3->nst->l3_manager)
 		err = l3p->l3->nst->l3_manager(l3p->l3->nst->manager, msg);
 	if (err)
-		dprint(DBGM_L3, "%s: error %d\n", __FUNCTION__, err);
+		dprint(DBGM_L3, l3p->l3->nst->cardnr, "%s: error %d\n", __FUNCTION__, err);
 	return(err);
 }
 
@@ -2800,10 +2805,10 @@ remove_proc(layer3_proc_t **procp, int ces)
 		found = 0;
 		proc = *procp;
 		while(proc) {
-			dprint(DBGM_L3, "%s: comparing %s proc(%x) ces(%x)\n", __FUNCTION__,
+			dprint(DBGM_L3, proc->l3->nst->cardnr, "%s: comparing %s proc(%x) ces(%x)\n", __FUNCTION__,
 				(proc->master)?"child":"master", proc, proc->ces);
 			if (proc->ces == ces) {
-				dprint(DBGM_L3, "%s: found proc(%x)\n", __FUNCTION__,
+				dprint(DBGM_L3, proc->l3->nst->cardnr, "%s: found proc(%x)\n", __FUNCTION__,
 					 proc);
 				if (proc->master)
 					send_proc(proc, IMSG_END_PROC_M, NULL);
@@ -2833,7 +2838,7 @@ l3_msg(layer3_t *l3, u_int pr, int dinfo, void *arg)
 	msg_t	*msg = arg, *lmsg = NULL;
 #warning testing
 	int	ces = dinfo & 0xffff;
-	dprint(DBGM_L3, "%s: pr(%x) di(%x) arg(%p)\n", __FUNCTION__,
+	dprint(DBGM_L3, l3->nst->cardnr, "%s: pr(%x) di(%x) arg(%p)\n", __FUNCTION__,
 		pr, dinfo, arg);
 	switch (pr) {
 		case (DL_UNITDATA | REQUEST):
@@ -2956,7 +2961,7 @@ int Isdnl3Init(net_stack_t *nst)
 void cleanup_Isdnl3(net_stack_t *nst)
 {
 	if (nst->layer3) {
-		dprint(DBGM_L3, "%s: l3 list not empty\n", __FUNCTION__);
+		dprint(DBGM_L3, nst->cardnr, "%s: l3 list not empty\n", __FUNCTION__);
 		while(nst->layer3)
 			release_l3(nst->layer3);
 	}

@@ -455,7 +455,7 @@ parse_isdn_packet(iapplication_t *appl, unsigned char *arg) {
 	pc = *p;
 	*p++ = 0; /* to use L3 findie, fake a dummy CR L3 frame */
 	pr = *p++;
-	dprint(DBGM_ISDN,  "%s: pr(%02x) own(%d/%d) peer(%d/%d)\n", __FUNCTION__,
+	dprint(DBGM_ISDN, -1,  "%s: pr(%02x) own(%d/%d) peer(%d/%d)\n", __FUNCTION__,
 		pr, oc, con->oc, pc, con->pc); 
 	a_pc = con->pc;
 	a_pc++;
@@ -496,7 +496,7 @@ parse_isdn_packet(iapplication_t *appl, unsigned char *arg) {
 int
 voip_application_handler(iapplication_t *appl, int prim, unsigned char *arg) {
 
-	dprint(DBGM_APPL,  "%s(%p, %x, %p)\n", __FUNCTION__,
+	dprint(DBGM_APPL, -1,  "%s(%p, %x, %p)\n", __FUNCTION__,
 		appl, prim, arg);
 
 	if (prim == AP_PR_VOIP_NEW) {

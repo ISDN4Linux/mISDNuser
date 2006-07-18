@@ -1,4 +1,4 @@
-/* $Id: net_l2.c,v 1.4 2006/03/06 13:08:28 keil Exp $
+/* $Id: net_l2.c,v 1.5 2006/07/18 13:50:03 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l2_revision = "$Revision: 1.4 $";
+const char *l2_revision = "$Revision: 1.5 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -105,7 +105,7 @@ l2down_msg(layer2_t *l2, msg_t *msg) {
 
 	ret = write_dmsg(l2->nst, msg);
 	if (ret)
-		dprint(DBGM_L2, "l2down_msg: error %d\n", ret);
+		dprint(DBGM_L2, l2->nst->cardnr, "l2down_msg: error %d\n", ret);
 	return(ret);
 }
 
@@ -135,7 +135,7 @@ static int
 l2mgr(layer2_t *l2, u_int prim, void *arg) {
 	long c = (long)arg;
 
-	dprint(DBGM_L2, "l2mgr: prim %x %c\n", prim, (char)c);
+	dprint(DBGM_L2, l2->nst->cardnr, "l2mgr: prim %x %c\n", prim, (char)c);
 	return(0);
 }
 
@@ -182,7 +182,7 @@ ReleaseWin(layer2_t *l2)
 	int cnt;
 
 	if((cnt = freewin(l2)))
-		dprint(DBGM_L2, "isdnl2 freed %d msguffs in release\n", cnt);
+		dprint(DBGM_L2, l2->nst->cardnr, "isdnl2 freed %d msguffs in release\n", cnt);
 }
 
 inline unsigned int
@@ -438,7 +438,7 @@ send_uframe(layer2_t *l2, msg_t *msg, u_char cmd, u_char cr)
 	else if ((msg = alloc_msg(i + mISDNUSER_HEAD_SIZE)))
 		msg_reserve(msg, mISDNUSER_HEAD_SIZE);
 	else {
-		dprint(DBGM_L2,"%s: can't alloc msguff\n", __FUNCTION__);
+		dprint(DBGM_L2, l2->nst->cardnr,"%s: can't alloc msguff\n", __FUNCTION__);
 		return;
 	}
 	memcpy(msg_put(msg, i), tmp, i);
@@ -924,7 +924,7 @@ enquiry_cr(layer2_t *l2, u_char typ, u_char cr, u_char pf)
 	} else
 		tmp[i++] = (l2->vr << 5) | typ | (pf ? 0x10 : 0);
 	if (!(msg = alloc_msg(i + mISDNUSER_HEAD_SIZE))) {
-		dprint(DBGM_L2, "isdnl2 can't alloc sbbuff for enquiry_cr\n");
+		dprint(DBGM_L2, l2->nst->cardnr, "isdnl2 can't alloc sbbuff for enquiry_cr\n");
 		return;
 	} else
 		msg_reserve(msg, mISDNUSER_HEAD_SIZE);
@@ -1294,7 +1294,7 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 		p1 = (l2->vs - l2->va) % 8;
 	p1 = (p1 + l2->sow) % l2->window;
 	if (l2->windowar[p1]) {
-		dprint(DBGM_L2, "isdnl2 try overwrite ack queue entry %d\n",
+		dprint(DBGM_L2, l2->nst->cardnr, "isdnl2 try overwrite ack queue entry %d\n",
 		       p1);
 		free_msg(l2->windowar[p1]);
 	}
@@ -1317,13 +1317,13 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 	if (p1 >= i)
 		memcpy(msg_push(msg, i), header, i);
 	else {
-		dprint(DBGM_L2,
+		dprint(DBGM_L2, l2->nst->cardnr,
 		"isdnl2 pull_iqueue msg header(%d/%d) too short\n", i, p1);
 		omsg = msg;
 		msg = alloc_msg(omsg->len + i + mISDNUSER_HEAD_SIZE);
 		if (!msg) {
 			free_msg(omsg);
-			dprint(DBGM_L2,"%s: no msg mem\n", __FUNCTION__);
+			dprint(DBGM_L2, l2->nst->cardnr,"%s: no msg mem\n", __FUNCTION__);
 			return;
 		}
 		msg_reserve(msg, mISDNUSER_HEAD_SIZE);
@@ -1707,7 +1707,7 @@ ph_data_mux(net_stack_t *nst, iframe_t *frm, msg_t *msg)
 
 	datap = msg_pull(msg, mISDN_HEADER_LEN);
 	if (msg->len <= 2) {
-		dprint(DBGM_L2, "%s: msg (%d) too short\n", __FUNCTION__,
+		dprint(DBGM_L2, nst->cardnr, "%s: msg (%d) too short\n", __FUNCTION__,
 			msg->len);
 		msg_push(msg, mISDN_HEADER_LEN);
 		return(ret);
@@ -1715,30 +1715,30 @@ ph_data_mux(net_stack_t *nst, iframe_t *frm, msg_t *msg)
 	psapi = *datap++;
 	ptei = *datap++;
 	if ((psapi & 1) || !(ptei & 1)) {
-		dprint(DBGM_L2, "l2 D-channel frame wrong EA0/EA1\n");
+		dprint(DBGM_L2, nst->cardnr, "l2 D-channel frame wrong EA0/EA1\n");
 		msg_push(msg, mISDN_HEADER_LEN);
 		return(ret);
 	}
 	psapi >>= 2;
 	ptei >>= 1;
-	dprint(DBGM_L2, "%s: sapi(%d) tei(%d)\n", __FUNCTION__, psapi, ptei);
+	dprint(DBGM_L2, nst->cardnr, "%s: sapi(%d) tei(%d)\n", __FUNCTION__, psapi, ptei);
 	if (ptei == GROUP_TEI) {
 		if (psapi == TEI_SAPI) {
 			hh = (mISDNuser_head_t *)msg_push(msg, mISDNUSER_HEAD_SIZE);
 			hh->prim = MDL_UNITDATA | INDICATION;
 			if (nst->feature & FEATURE_NET_PTP) {
-				dprint(DBGM_L2, "%s: tei management not enabled for PTP\n", __FUNCTION__);
+				dprint(DBGM_L2, nst->cardnr, "%s: tei management not enabled for PTP\n", __FUNCTION__);
 				return(-EINVAL);
 			}
 			return(tei_mux(nst, msg));
 		} else {
-			dprint(DBGM_L2, "%s: unknown tei(%d) msg\n", __FUNCTION__,
+			dprint(DBGM_L2, nst->cardnr, "%s: unknown tei(%d) msg\n", __FUNCTION__,
 				ptei);
 		}
 	}
 	l2 = select_l2(nst, psapi, ptei);
 	if (!l2) {
-		dprint(DBGM_L2, "%s: no l2 for sapi(%d) tei(%d)\n", __FUNCTION__,
+		dprint(DBGM_L2, nst->cardnr, "%s: no l2 for sapi(%d) tei(%d)\n", __FUNCTION__,
 			psapi, ptei);
 		return(-ENXIO);
 	}
@@ -1770,7 +1770,7 @@ ph_data_mux(net_stack_t *nst, iframe_t *frm, msg_t *msg)
 		c = 'L';
 	}
 	if (c) {
-		dprint(DBGM_L2, "l2 D-channel frame error %c\n",c);
+		dprint(DBGM_L2, l2->nst->cardnr, "l2 D-channel frame error %c\n",c);
 		FsmEvent(&l2->l2m, EV_L2_FRAME_ERROR, (void *)(long)c);
 	}
 	if (ret)
@@ -1785,8 +1785,8 @@ msg_mux(net_stack_t *nst, iframe_t *frm, msg_t *msg)
 	int		ret = -EINVAL;
 	msg_t		*nmsg;
 
-	dprint(DBGM_L2, "%s: msg len(%d)\n", __FUNCTION__, msg->len);
-	dprint(DBGM_L2, "%s: adr(%x) pr(%x) di(%x) len(%d)\n", __FUNCTION__,
+	dprint(DBGM_L2, nst->cardnr, "%s: msg len(%d)\n", __FUNCTION__, msg->len);
+	dprint(DBGM_L2, nst->cardnr, "%s: adr(%x) pr(%x) di(%x) len(%d)\n", __FUNCTION__,
 		frm->addr, frm->prim, frm->dinfo, frm->len);
 	l2 = nst->layer2;
 	while(l2) {
@@ -1852,7 +1852,7 @@ l2muxer(net_stack_t *nst, msg_t *msg)
 			ret = msg_mux(nst, frm, msg);
 			break;
 		default:
-			dprint(DBGM_L2, "%s: pr %x\n", __FUNCTION__, frm->prim);
+			dprint(DBGM_L2, nst->cardnr, "%s: pr %x\n", __FUNCTION__, frm->prim);
 			break;
 	}
 	return(ret);
@@ -1869,11 +1869,11 @@ l2from_up(net_stack_t *nst, msg_t *msg) {
 	hh = (mISDNuser_head_t *)msg->data;
 	if (msg->len < mISDN_FRAME_MIN)
 		return(ret);
-	dprint(DBGM_L2, "%s: prim(%x) dinfo(%x)\n", __FUNCTION__,
+	dprint(DBGM_L2, nst->cardnr, "%s: prim(%x) dinfo(%x)\n", __FUNCTION__,
 		hh->prim, hh->dinfo);
 	l2 = select_l2(nst, SAPITEI(hh->dinfo));
 	if (!l2) {
-		dprint(DBGM_L2, "%s: no l2 for sapi(%d) tei(%d)\n", __FUNCTION__,
+		dprint(DBGM_L2, l2->nst->cardnr, "%s: no l2 for sapi(%d) tei(%d)\n", __FUNCTION__,
 			SAPITEI(hh->dinfo));
 		return(-ENXIO);
 	}
@@ -1932,7 +1932,7 @@ tei_l2(layer2_t *l2, msg_t *msg)
 
 	if (!l2 || !msg)
 		return(ret);
-	dprint(DBGM_L2, "%s: prim(%x)\n", __FUNCTION__, hh->prim);
+	dprint(DBGM_L2, l2->nst->cardnr, "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (msg->len < mISDN_FRAME_MIN)
 		return(ret);
 	switch(hh->prim) {
@@ -1963,14 +1963,14 @@ l2m_debug(struct FsmInst *fi, char *fmt, ...)
 
 	va_start(args, fmt);
 	vsprintf(tbuf, fmt, args);
-	dprint(DBGM_L2, "L2 %s\n", tbuf);
+	dprint(DBGM_L2, fi->nst->cardnr, "L2 %s\n", tbuf);
 	va_end(args);
 }
 
 static void
 release_l2(layer2_t *l2)
 {
-	dprint(DBGM_L2, "%s: sapi(%d) tei(%d) state(%d)\n", __FUNCTION__,
+	dprint(DBGM_L2, l2->nst->cardnr, "%s: sapi(%d) tei(%d) state(%d)\n", __FUNCTION__,
 		l2->sapi, l2->tei, l2->l2m.state);
 	FsmRemoveTimer(&l2->t200);
 	FsmRemoveTimer(&l2->t203);
@@ -1988,14 +1988,14 @@ int
 tei0_active(layer2_t *l2)
 {
 	while(l2) {
-		dprint(DBGM_L2, "checking l2 with tei=%d, sapi=%d\n", l2->tei, l2->sapi);
+		dprint(DBGM_L2, l2->nst->cardnr, "checking l2 with tei=%d, sapi=%d\n", l2->tei, l2->sapi);
 		if (l2->tei == 0 && l2->sapi == 0)
 			break;
 		l2 = l2->next;
 	}
 	if (!l2)
 		return(0);
-	dprint(DBGM_L2, "checking l2 with state=%d\n", l2->l2m.state);
+	dprint(DBGM_L2, l2->nst->cardnr, "checking l2 with state=%d\n", l2->l2m.state);
 	if (l2->l2m.state >= ST_L2_7)
 		return(1);
 	return(0);
@@ -2007,7 +2007,7 @@ new_dl2(net_stack_t *nst, int tei) {
 	layer2_t *nl2;
 
 	if (!(nl2 = malloc(sizeof(layer2_t)))) {
-		dprint(DBGM_L2, "malloc layer2 failed\n");
+		dprint(DBGM_L2, nst->cardnr, "malloc layer2 failed\n");
 		return(NULL);
 	}
 	memset(nl2, 0, sizeof(layer2_t));
@@ -2064,14 +2064,14 @@ int Isdnl2Init(net_stack_t *nst)
 	nst->l3_l2 = l2from_up;
 	l2 = new_dl2(nst, 127);
 	if (!l2) {
-		dprint(DBGM_L2, "%s: failed to create L2-instance with TEI 127\n", __FUNCTION__);
+		dprint(DBGM_L2, l2->nst->cardnr, "%s: failed to create L2-instance with TEI 127\n", __FUNCTION__);
 		cleanup:
 		cleanup_Isdnl2(nst);
 		return(-ENOMEM);
 	}
 	l2 = new_dl2(nst, 0);
 	if (!l2) {
-		dprint(DBGM_L2, "%s: failed to create L2-instance with TEI 0\n", __FUNCTION__);
+		dprint(DBGM_L2, l2->nst->cardnr, "%s: failed to create L2-instance with TEI 0\n", __FUNCTION__);
 		goto cleanup;
 	}
 	if (!(nst->feature & FEATURE_NET_PTP)) {
@@ -2087,7 +2087,7 @@ int Isdnl2Init(net_stack_t *nst)
 void cleanup_Isdnl2(net_stack_t *nst)
 {
 	if(nst->layer2) {
-		dprint(DBGM_L2, "%s: l2 list not empty\n", __FUNCTION__);
+		dprint(DBGM_L2, nst->cardnr, "%s: l2 list not empty\n", __FUNCTION__);
 		while(nst->layer2)
 			release_l2(nst->layer2);
 	}
