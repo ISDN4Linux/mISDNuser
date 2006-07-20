@@ -1,4 +1,4 @@
-/* $Id: net_l2.c,v 1.7 2006/07/20 10:16:31 crich Exp $
+/* $Id: net_l2.c,v 1.8 2006/07/20 19:32:13 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l2_revision = "$Revision: 1.7 $";
+const char *l2_revision = "$Revision: 1.8 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -142,12 +142,14 @@ l2mgr(layer2_t *l2, u_int prim, void *arg) {
 static void
 set_peer_busy(layer2_t *l2) {
 	test_and_set_bit(FLG_PEER_BUSY, &l2->flag);
+	dprint(DBGM_L2, l2->nst->cardnr, "Peer Busy\n");
 	if (msg_queue_len(&l2->i_queue) || msg_queue_len(&l2->ui_queue))
 		test_and_set_bit(FLG_L2BLOCK, &l2->flag);
 }
 
 static void
 clear_peer_busy(layer2_t *l2) {
+	dprint(DBGM_L2, l2->nst->cardnr, "Clear Peer Busy\n");
 	if (test_and_clear_bit(FLG_PEER_BUSY, &l2->flag))
 		test_and_clear_bit(FLG_L2BLOCK, &l2->flag);
 }
@@ -254,35 +256,30 @@ enqueue_super(layer2_t *l2, msg_t *msg)
 inline int
 IsUI(u_char * data, layer2_t *l2)
 {
-	dprint(DBGM_L2, l2->nst->cardnr ,"%s: UI\n", __FUNCTION__); 
 	return ((data[0] & 0xef) == UI);
 }
 
 inline int
 IsUA(u_char * data, layer2_t *l2)
 {
-	dprint(DBGM_L2, l2->nst->cardnr ,"%s: UA\n", __FUNCTION__); 
 	return ((data[0] & 0xef) == UA);
 }
 
 inline int
 IsDM(u_char * data, layer2_t *l2)
 {
-	dprint(DBGM_L2, l2->nst->cardnr ,"%s: DM\n", __FUNCTION__); 
 	return ((data[0] & 0xef) == DM);
 }
 
 inline int
 IsDISC(u_char * data, layer2_t *l2)
 {
-	dprint(DBGM_L2, l2->nst->cardnr ,"%s: DISC\n", __FUNCTION__); 
 	return ((data[0] & 0xef) == DISC);
 }
 
 inline int
 IsRR(u_char * data, layer2_t *l2)
 {
-	dprint(DBGM_L2, l2->nst->cardnr,"%s: RR\n", __FUNCTION__); 
 	if (test_bit(FLG_MOD128, &l2->flag))
 		return (data[0] == RR);
 	else
@@ -293,7 +290,6 @@ inline int
 IsSFrame(u_char * data, layer2_t *l2)
 {
 	register u_char d = *data;
-	dprint(DBGM_L2, l2->nst->cardnr,"%s: SFrame\n", __FUNCTION__); 
 	
 	if (!test_bit(FLG_MOD128, &l2->flag))
 		d &= 0xf;
@@ -304,29 +300,24 @@ inline int
 IsSABME(u_char * data, layer2_t *l2)
 {
 	u_char d = data[0] & ~0x10;
-	dprint(DBGM_L2, l2->nst->cardnr,"%s: SABME\n", __FUNCTION__); 
-
 	return (test_bit(FLG_MOD128, &l2->flag) ? d == SABME : d == SABM);
 }
 
 inline int
 IsREJ(u_char * data, layer2_t *l2)
 {
-	dprint(DBGM_L2, l2->nst->cardnr,"%s: REJ\n", __FUNCTION__); 
 	return (test_bit(FLG_MOD128, &l2->flag) ? data[0] == REJ : (data[0] & 0xf) == REJ);
 }
 
 inline int
 IsFRMR(u_char * data, layer2_t *l2)
 {
-	dprint(DBGM_L2, l2->nst->cardnr ,"%s: FRMR\n", __FUNCTION__); 
 	return ((data[0] & 0xef) == FRMR);
 }
 
 inline int
 IsRNR(u_char * data, layer2_t *l2)
 {
-	dprint(DBGM_L2, l2->nst->cardnr,"%s: RNR\n", __FUNCTION__); 
 	return (test_bit(FLG_MOD128, &l2->flag) ? data[0] == RNR : (data[0] & 0xf) == RNR);
 }
 
