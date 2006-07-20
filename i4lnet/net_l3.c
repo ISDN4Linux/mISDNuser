@@ -1,4 +1,4 @@
-/* $Id: net_l3.c,v 1.9 2006/07/18 13:50:03 crich Exp $
+/* $Id: net_l3.c,v 1.10 2006/07/20 10:16:31 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -16,7 +16,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l3_revision = "$Revision: 1.9 $";
+const char *l3_revision = "$Revision: 1.10 $";
 
 #define PROTO_DIS_EURO	8
 
@@ -131,7 +131,7 @@ getcallref(u_char *p)
 void
 newl3state(layer3_proc_t *pc, int state)
 {
-	if (pc->l3->debug & L3_DEB_STATE)
+	if (pc->l3 && pc->l3->debug & L3_DEB_STATE)
 		l3_debug(pc->l3, "newstate cr %d %d%s --> %d%s", 
 			 pc->callref & 0x7FFF,
 			 pc->state, pc->master ? "i" : "",

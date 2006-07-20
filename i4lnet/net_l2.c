@@ -1,4 +1,4 @@
-/* $Id: net_l2.c,v 1.6 2006/07/18 16:14:50 crich Exp $
+/* $Id: net_l2.c,v 1.7 2006/07/20 10:16:31 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l2_revision = "$Revision: 1.6 $";
+const char *l2_revision = "$Revision: 1.7 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -252,32 +252,37 @@ enqueue_super(layer2_t *l2, msg_t *msg)
 #define enqueue_ui(a, b) enqueue_super(a, b)
 
 inline int
-IsUI(u_char * data)
+IsUI(u_char * data, layer2_t *l2)
 {
+	dprint(DBGM_L2, l2->nst->cardnr ,"%s: UI\n", __FUNCTION__); 
 	return ((data[0] & 0xef) == UI);
 }
 
 inline int
-IsUA(u_char * data)
+IsUA(u_char * data, layer2_t *l2)
 {
+	dprint(DBGM_L2, l2->nst->cardnr ,"%s: UA\n", __FUNCTION__); 
 	return ((data[0] & 0xef) == UA);
 }
 
 inline int
-IsDM(u_char * data)
+IsDM(u_char * data, layer2_t *l2)
 {
+	dprint(DBGM_L2, l2->nst->cardnr ,"%s: DM\n", __FUNCTION__); 
 	return ((data[0] & 0xef) == DM);
 }
 
 inline int
-IsDISC(u_char * data)
+IsDISC(u_char * data, layer2_t *l2)
 {
+	dprint(DBGM_L2, l2->nst->cardnr ,"%s: DISC\n", __FUNCTION__); 
 	return ((data[0] & 0xef) == DISC);
 }
 
 inline int
 IsRR(u_char * data, layer2_t *l2)
 {
+	dprint(DBGM_L2, l2->nst->cardnr,"%s: RR\n", __FUNCTION__); 
 	if (test_bit(FLG_MOD128, &l2->flag))
 		return (data[0] == RR);
 	else
@@ -288,6 +293,7 @@ inline int
 IsSFrame(u_char * data, layer2_t *l2)
 {
 	register u_char d = *data;
+	dprint(DBGM_L2, l2->nst->cardnr,"%s: SFrame\n", __FUNCTION__); 
 	
 	if (!test_bit(FLG_MOD128, &l2->flag))
 		d &= 0xf;
@@ -298,6 +304,7 @@ inline int
 IsSABME(u_char * data, layer2_t *l2)
 {
 	u_char d = data[0] & ~0x10;
+	dprint(DBGM_L2, l2->nst->cardnr,"%s: SABME\n", __FUNCTION__); 
 
 	return (test_bit(FLG_MOD128, &l2->flag) ? d == SABME : d == SABM);
 }
@@ -305,18 +312,21 @@ IsSABME(u_char * data, layer2_t *l2)
 inline int
 IsREJ(u_char * data, layer2_t *l2)
 {
+	dprint(DBGM_L2, l2->nst->cardnr,"%s: REJ\n", __FUNCTION__); 
 	return (test_bit(FLG_MOD128, &l2->flag) ? data[0] == REJ : (data[0] & 0xf) == REJ);
 }
 
 inline int
-IsFRMR(u_char * data)
+IsFRMR(u_char * data, layer2_t *l2)
 {
+	dprint(DBGM_L2, l2->nst->cardnr ,"%s: FRMR\n", __FUNCTION__); 
 	return ((data[0] & 0xef) == FRMR);
 }
 
 inline int
 IsRNR(u_char * data, layer2_t *l2)
 {
+	dprint(DBGM_L2, l2->nst->cardnr,"%s: RNR\n", __FUNCTION__); 
 	return (test_bit(FLG_MOD128, &l2->flag) ? data[0] == RNR : (data[0] & 0xf) == RNR);
 }
 
@@ -325,7 +335,7 @@ iframe_error(layer2_t *l2, msg_t *msg)
 {
 	int i = l2addrsize(l2) + (test_bit(FLG_MOD128, &l2->flag) ? 2 : 1);
 	int rsp = *msg->data & 0x2;
-
+	
 	if (test_bit(FLG_ORIG, &l2->flag))
 		rsp = !rsp;
 	if (rsp)
@@ -1403,7 +1413,7 @@ l2_got_FRMR(struct FsmInst *fi, int event, void *arg)
 	msg_pull(msg, l2addrsize(l2) + 1);
 
 	if (!(msg->data[0] & 1) || ((msg->data[0] & 3) == 1) ||		/* I or S */
-	    (IsUA(msg->data) && (fi->state == ST_L2_7))) {
+	    (IsUA(msg->data, l2) && (fi->state == ST_L2_7))) {
 		l2mgr(l2, MDL_ERROR | INDICATION, (void *) 'K');
 		establishlink(fi);
 		test_and_clear_bit(FLG_L3_INIT, &l2->flag);
@@ -1748,22 +1758,22 @@ ph_data_mux(net_stack_t *nst, iframe_t *frm, msg_t *msg)
 	} else if (IsSFrame(datap, l2)) {	/* S-Frame */
 		if(!(c = super_error(l2, msg)))
 			ret = FsmEvent(&l2->l2m, EV_L2_SUPER, msg);
-	} else if (IsUI(datap)) {
+	} else if (IsUI(datap,l2)) {
 		if(!(c = UI_error(l2, msg)))
 			ret = FsmEvent(&l2->l2m, EV_L2_UI, msg);
 	} else if (IsSABME(datap, l2)) {
 		if(!(c = unnum_error(l2, msg, CMD)))
 			ret = FsmEvent(&l2->l2m, EV_L2_SABME, msg);
-	} else if (IsUA(datap)) {
+	} else if (IsUA(datap,l2)) {
 		if(!(c = unnum_error(l2, msg, RSP)))
 			ret = FsmEvent(&l2->l2m, EV_L2_UA, msg);
-	} else if (IsDISC(datap)) {
+	} else if (IsDISC(datap,l2)) {
 		if(!(c = unnum_error(l2, msg, CMD)))
 			ret = FsmEvent(&l2->l2m, EV_L2_DISC, msg);
-	} else if (IsDM(datap)) {
+	} else if (IsDM(datap,l2)) {
 		if(!(c = unnum_error(l2, msg, RSP)))
 			ret = FsmEvent(&l2->l2m, EV_L2_DM, msg);
-	} else if (IsFRMR(datap)) {
+	} else if (IsFRMR(datap,l2)) {
 		if(!(c = FRMR_error(l2, msg)))
 			ret = FsmEvent(&l2->l2m, EV_L2_FRMR, msg);
 	} else {

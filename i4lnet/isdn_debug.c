@@ -1,5 +1,6 @@
 #include <stdarg.h>
 #include <time.h>
+#include <string.h>
 #include "isdn_debug.h"
 
 
@@ -98,7 +99,7 @@ dprint(unsigned int mask, int port, const char *fmt, ...)
 	va_start(args, fmt);
 	if (debug_mask & mask) {
 		if (debug_file != stdout)
-			fprintf(debug_file, "%s P(%2d): ",tmp, port);
+			fprintf(debug_file, "%s P(%02d): L(0x%02x):",tmp, port,mask);
 		ret = vfprintf(debug_file, fmt, args);
 		if (debug_file != stdout)
 			fflush(debug_file);
