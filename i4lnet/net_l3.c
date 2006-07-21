@@ -1,4 +1,4 @@
-/* $Id: net_l3.c,v 1.10 2006/07/20 10:16:31 crich Exp $
+/* $Id: net_l3.c,v 1.11 2006/07/21 08:15:35 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -16,7 +16,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l3_revision = "$Revision: 1.10 $";
+const char *l3_revision = "$Revision: 1.11 $";
 
 #define PROTO_DIS_EURO	8
 
@@ -1962,14 +1962,27 @@ l3dss1_t303(layer3_proc_t *pc, int pr, void *arg)
 			dhexprint(DBGM_L3DATA, "l3 oframe:", &pc->obuf[0], l);
 			if ((msg = l3_alloc_msg(l))) {
 				memcpy(msg_put(msg, l), &pc->obuf[0], l);
-				if (l3_msg(pc->l3, DL_UNITDATA | REQUEST, 127, msg))
-					free_msg(msg);
+
+#warning testing as well
+				if (pc->l3->l2_state0 && (pc->l3->nst->feature & FEATURE_NET_PTP)) {
+					dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: proc(%p) sending SETUP to CES 0\n", __FUNCTION__, pc);
+					if (l3_msg(pc->l3, DL_DATA | REQUEST, 0, msg))
+						free_msg(msg);
+				} else {
+					dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: proc(%p) sending SETUP to broadcast CES\n", __FUNCTION__, pc);
+					if (l3_msg(pc->l3, DL_UNITDATA | REQUEST, 127, msg))
+						free_msg(msg);
+				}
 			}
+
 			L3DelTimer(&pc->timer2);
 dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
-			L3AddTimer(&pc->timer2, T312, 0x312);
-			test_and_set_bit(FLG_L3P_TIMER312,
-				&pc->Flags);
+			if ( ! pc->l3->nst->feature & FEATURE_NET_PTP) {
+				L3AddTimer(&pc->timer2, T312, 0x312);
+				test_and_set_bit(FLG_L3P_TIMER312,
+					&pc->Flags);
+			}
+
 			L3AddTimer(&pc->timer1, T303, 0x303);
 			return;
 		}
