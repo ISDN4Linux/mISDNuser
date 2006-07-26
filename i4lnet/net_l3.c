@@ -1,4 +1,4 @@
-/* $Id: net_l3.c,v 1.11 2006/07/21 08:15:35 crich Exp $
+/* $Id: net_l3.c,v 1.12 2006/07/26 14:40:33 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -16,7 +16,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l3_revision = "$Revision: 1.11 $";
+const char *l3_revision = "$Revision: 1.12 $";
 
 #define PROTO_DIS_EURO	8
 
@@ -200,7 +200,7 @@ RemoveAllL3Timer(layer3_proc_t *pc)
 	
 	ret = remove_timer(&pc->timer1.tl);
 	if (ret)
-		dprint(DBGM_L3, pc->l3->nst->cardnr, "RemoveL3Timer1: ret %d\n", ret);
+		dprint(DBGM_L3, pc->l3?pc->l3->nst->cardnr:0, "RemoveL3Timer1: ret %d\n", ret);
 	ret = remove_timer(&pc->timer2.tl);
 	dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
 	if (ret)
@@ -916,7 +916,9 @@ l3dss1_release(layer3_proc_t *pc, int pr, void *arg)
 static void
 l3dss1_release_i(layer3_proc_t *pc, int pr, void *arg)
 {
+
 	l3dss1_message(pc, MT_RELEASE_COMPLETE);
+	newl3state(pc, 0);
 	send_proc(pc, IMSG_END_PROC_M, NULL);
 }
 
@@ -1287,17 +1289,17 @@ static struct stateentry datastatelist[] =
 	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) |
 	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19) | SBIT(25),
 		MT_INFORMATION, l3dss1_information},
-	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(6) | SBIT(10) |
+	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(10) |
 	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17),
 		MT_RELEASE, l3dss1_release},
-	{SBIT(7) | SBIT(8) | SBIT(9) | SBIT(19) | SBIT(25),
+	{SBIT(6) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(19) | SBIT(25),
 		MT_RELEASE, l3dss1_release_i},
 	{SBIT(0) | SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(10) |
-	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17),
+	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19),
 		MT_RELEASE_COMPLETE, l3dss1_release_cmpl},
 	{SBIT(4) | SBIT(7) | SBIT(10),
 		MT_USER_INFORMATION, l3dss1_userinfo},
-	{SBIT(7) | SBIT(8) | SBIT(9) | SBIT(19) | SBIT(25),
+	{SBIT(7) | SBIT(8) | SBIT(9) | SBIT(25),
 		MT_RELEASE_COMPLETE, l3dss1_release_cmpl_i},
 	{SBIT(3) | SBIT(4) | SBIT(10),
 		MT_HOLD, l3dss1_hold},
@@ -1369,7 +1371,9 @@ l3dss1_connect_m(layer3_proc_t *pc, int pr, void *arg)
 static void
 l3dss1_release_m(layer3_proc_t *pc, int pr, void *arg)
 {
-	l3dss1_message(pc, MT_RELEASE_COMPLETE);
+	msg_t	*msg = arg;
+	msg_pull(msg, mISDNUSER_HEAD_SIZE);
+	l3dss1_release_i(pc, pr, msg);
 }
 
 static void
@@ -1593,7 +1597,7 @@ l3dss1_setup_req(layer3_proc_t *pc, int pr, void *arg)
 	newl3state(pc, 6);
 	dhexprint(DBGM_L3DATA, "l3 oframe:", &pc->obuf[0], l);
 #warning testing
-	if (pc->l3->l2_state0 && (pc->l3->nst->feature & FEATURE_NET_PTP)) {
+	if (pc->l3->nst->feature & FEATURE_NET_PTP) {
 		dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: proc(%p) sending SETUP to CES 0\n", __FUNCTION__, pc);
 		if (l3_msg(pc->l3, DL_DATA | REQUEST, 0, msg))
 			free_msg(msg);
@@ -1869,7 +1873,7 @@ static void
 l3dss1_release_req(layer3_proc_t *pc, int pr, void *arg)
 {
 	RELEASE_t *rel = arg;
-
+	
 	StopAllL3Timer(pc);
 	if (rel) {
 		MsgStart(pc, MT_RELEASE);
@@ -1964,7 +1968,7 @@ l3dss1_t303(layer3_proc_t *pc, int pr, void *arg)
 				memcpy(msg_put(msg, l), &pc->obuf[0], l);
 
 #warning testing as well
-				if (pc->l3->l2_state0 && (pc->l3->nst->feature & FEATURE_NET_PTP)) {
+				if (pc->l3->nst->feature & FEATURE_NET_PTP) {
 					dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: proc(%p) sending SETUP to CES 0\n", __FUNCTION__, pc);
 					if (l3_msg(pc->l3, DL_DATA | REQUEST, 0, msg))
 						free_msg(msg);
@@ -2356,7 +2360,9 @@ imsg_intrelease(layer3_proc_t *master, layer3_proc_t *child)
 			break;
 		case 6:
 		case 10:
+			break;
 		case 19:
+			send_proc(master, IMSG_END_PROC, NULL);
 			break;
 		case 7:
 		case 9:
@@ -2400,7 +2406,7 @@ send_proc(layer3_proc_t *proc, int op, void *arg)
 	struct _l3_msg	*l3m = arg;
 	struct _l3_msg	l3msg;
 
-	if (proc->l3->debug & L3_DEB_PROC)
+	if (proc->l3 && proc->l3->debug & L3_DEB_PROC)
 		l3_debug(proc->l3, "%s: proc(%x,%d) op(%d)", __FUNCTION__,
 			proc->ces, proc->callref, op);  
 	switch(op) {
@@ -2853,6 +2859,9 @@ l3_msg(layer3_t *l3, u_int pr, int dinfo, void *arg)
 	int	ces = dinfo & 0xffff;
 	dprint(DBGM_L3, l3->nst->cardnr, "%s: pr(%x) di(%x) arg(%p)\n", __FUNCTION__,
 		pr, dinfo, arg);
+
+	if (l3->nst->feature & FEATURE_NET_PTP) dinfo=0;
+
 	switch (pr) {
 		case (DL_UNITDATA | REQUEST):
 			return(l3down(l3, pr, dinfo, arg));
