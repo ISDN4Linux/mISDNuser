@@ -1,4 +1,4 @@
-/* $Id: net_l3.c,v 1.12 2006/07/26 14:40:33 crich Exp $
+/* $Id: net_l3.c,v 1.13 2006/07/31 09:52:21 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -16,7 +16,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l3_revision = "$Revision: 1.12 $";
+const char *l3_revision = "$Revision: 1.13 $";
 
 #define PROTO_DIS_EURO	8
 
@@ -2693,25 +2693,27 @@ manager_l3(net_stack_t *nst, msg_t *msg)
 	proc = find_proc(nst->layer3->proc, hh->dinfo & 0xffff,
 		(hh->dinfo>>16)& 0xffff);
 	if (!proc) {
-		if (hh->prim == (CC_SETUP | REQUEST)) {
-			int l4id;
-			nst->layer3->next_cr++;
-			if (nst->feature & FEATURE_NET_CRLEN2) {
-				if (nst->layer3->next_cr>32766)
-					nst->layer3->next_cr = 1;
-			} else {
-				if (nst->layer3->next_cr>126)
-					nst->layer3->next_cr = 1;
-			}
-			proc = create_proc(nst->layer3, hh->dinfo & 0xffff,
-				nst->layer3->next_cr | 0x8000, NULL);
-			if (!proc) {
-				dprint(DBGM_L3, nst->cardnr, "%s: pr(%x) failed to create proc.\n",
-					__FUNCTION__, hh->prim);
-				free_msg(msg);
-				return(0);
-			}
-			dprint(DBGM_L3, nst->cardnr, "%s: proc(%p)\n", __FUNCTION__, proc);
+		switch (hh->prim) {
+			case CC_SETUP | REQUEST:
+			{
+				int l4id;
+				nst->layer3->next_cr++;
+				if (nst->feature & FEATURE_NET_CRLEN2) {
+					if (nst->layer3->next_cr>32766)
+						nst->layer3->next_cr = 1;
+				} else {
+					if (nst->layer3->next_cr>126)
+						nst->layer3->next_cr = 1;
+				}
+				proc = create_proc(nst->layer3, hh->dinfo & 0xffff,
+					nst->layer3->next_cr | 0x8000, NULL);
+				if (!proc) {
+					dprint(DBGM_L3, nst->cardnr, "%s: pr(%x) failed to create proc.\n",
+						__FUNCTION__, hh->prim);
+					free_msg(msg);
+					return(0);
+				}
+				dprint(DBGM_L3, nst->cardnr, "%s: proc(%p)\n", __FUNCTION__, proc);
 #warning testing
 #if 0
 printf("check for tei 0 active\n");
@@ -2735,10 +2737,20 @@ printf("check for tei 0 active\n");
 #endif
 			
 
-			APPEND_TO_LIST(proc, nst->layer3->proc);
-			l4id = proc->ces | (proc->callref << 16);
-			if_link(nst->manager, (ifunc_t)nst->l3_manager, CC_SETUP |
-				CONFIRM, hh->dinfo, sizeof(int), &l4id, 0);
+				APPEND_TO_LIST(proc, nst->layer3->proc);
+				l4id = proc->ces | (proc->callref << 16);
+				if_link(nst->manager, (ifunc_t)nst->l3_manager, CC_SETUP | CONFIRM, hh->dinfo, sizeof(int), &l4id, 0);
+				}
+			break;
+			case DL_ESTABLISH | REQUEST: 
+				if (nst->feature & FEATURE_NET_PTP) {
+					l3down(nst->layer3, DL_ESTABLISH | REQUEST, 0, NULL);
+					free_msg(msg);
+					return 0;
+				}
+			break;
+			default:
+			break;
 		}
 	}
 	if (!proc) {

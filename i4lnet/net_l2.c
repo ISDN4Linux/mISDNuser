@@ -1,4 +1,4 @@
-/* $Id: net_l2.c,v 1.8 2006/07/20 19:32:13 crich Exp $
+/* $Id: net_l2.c,v 1.9 2006/07/31 09:52:21 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l2_revision = "$Revision: 1.8 $";
+const char *l2_revision = "$Revision: 1.9 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -662,10 +662,8 @@ l2_establish(struct FsmInst *fi, int event, void *arg)
 	msg_t *msg = arg;
 	layer2_t *l2 = fi->userdata;
 
-	if (!test_bit(FLG_LAPD_NET, &l2->flag)) {
-		establishlink(fi);
-		test_and_set_bit(FLG_L3_INIT, &l2->flag);
-	}
+	establishlink(fi);
+	test_and_set_bit(FLG_L3_INIT, &l2->flag);
 	free_msg(msg);
 }
 
