@@ -1,4 +1,4 @@
-/* $Id: net_l2.c,v 1.9 2006/07/31 09:52:21 crich Exp $
+/* $Id: net_l2.c,v 1.10 2006/08/09 10:29:44 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "helper.h"
 // #include "debug.h"
 
-const char *l2_revision = "$Revision: 1.9 $";
+const char *l2_revision = "$Revision: 1.10 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -136,6 +136,8 @@ l2mgr(layer2_t *l2, u_int prim, void *arg) {
 	long c = (long)arg;
 
 	dprint(DBGM_L2, l2->nst->cardnr, "l2mgr: prim %x %c\n", prim, (char)c);
+      l2->nst->phd_down_msg=NULL;
+      msg_queue_purge(&l2->nst->down_queue);
 	return(0);
 }
 

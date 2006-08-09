@@ -278,8 +278,8 @@ write_dmsg(net_stack_t *nst, msg_t *msg)
 	mISDNuser_head_t	*hh;
 
 	hh = (mISDNuser_head_t *)msg->data;
-	dprint(DBGM_NET, nst->cardnr, "%s: msg(%p) len(%d) pr(%x) di(%x)\n", __FUNCTION__,
-		msg, msg->len, hh->prim, hh->dinfo);
+	dprint(DBGM_NET, nst->cardnr, "%s: msg(%p) len(%d) pr(%x) di(%x) q(%d)\n", __FUNCTION__,
+		msg, msg->len, hh->prim, hh->dinfo, nst->phd_down_msg?1:0);
 	msg_pull(msg, mISDNUSER_HEAD_SIZE);
 	frm = (iframe_t *)msg_push(msg, mISDN_HEADER_LEN);
 	frm->prim = hh->prim;
