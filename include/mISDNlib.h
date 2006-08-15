@@ -3,6 +3,12 @@
 
 /* API library to use with /dev/mISDN */
 
+#define	MISDNUSER_MAJOR_VERSION	1
+#define	MISDNUSER_MINOR_VERSION	0
+#define	MISDNUSER_PATCHLEVEL	3
+#define	MISDNUSER_VERSION_CODE	((MISDNUSER_MAJOR_VERSION<<24) | (MISDNUSER_MINOR_VERSION<<16) | MISDNUSER_PATCHLEVEL)
+#define MISDNUSER_VERSION(x,y,z) ((x<<24) | (y<<16) | z)
+
 /* we need somme extentions */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE

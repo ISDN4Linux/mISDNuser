@@ -36,6 +36,7 @@ SUBDIRS := lib example
 SUBDIRS += $(shell if test -d i4lnet ; then echo i4lnet; fi)
 SUBDIRS += $(shell if test -d tenovis ; then echo tenovis; fi)
 SUBDIRS += $(shell if test -d voip ; then echo voip; fi)
+SUBDIRS += $(shell if test -d suppserv ; then echo suppserv; fi)
 
 LIBS := lib/libmISDN.a
 
