@@ -3,6 +3,8 @@
 #
 MISDNDIR := /usr/src/mqueue/mISDN
 
+
+PWD=$(shell pwd)
 #
 # Change this to create an install prefix for the shared libs, programms and
 # includes
