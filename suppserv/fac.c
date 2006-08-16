@@ -7,12 +7,23 @@
  * Portions of this file are based on the mISDN sources
  * by Karsten Keil.
  *
- * This program is free software, distributed under the terms of
- * the GNU General Public License, Version 2.
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
-#include "suppserv.h"
+#include "asn1.h"
 #include "asn1_diversion.h"
 #include "l3dss1.h"
 #include <string.h>
@@ -122,21 +133,11 @@ int decodeFac (__u8 *src, struct FacParm *fac)
 			return 0;
 		case Fac_AOCDCurrency:
 			fac->Function = Fac_AOCDCurrency;
-			fac->u.AOCDcur.chargeNotAvailable = pc.u.inv.o.AOCDcur.chargeNotAvailable;
-			fac->u.AOCDcur.freeOfCharge = pc.u.inv.o.AOCDcur.freeOfCharge;
-			strncpy((char *)fac->u.AOCDcur.currency, pc.u.inv.o.AOCDcur.currency, 11);
-			fac->u.AOCDcur.currencyAmount = pc.u.inv.o.AOCDcur.currencyAmount;
-			fac->u.AOCDcur.multiplier = pc.u.inv.o.AOCDcur.multiplier;
-			fac->u.AOCDcur.typeOfChargingInfo = pc.u.inv.o.AOCDcur.typeOfChargingInfo;
-			fac->u.AOCDcur.billingId = pc.u.inv.o.AOCDcur.billingId;
+			memcpy(&(fac->u.AOCDcur), &(pc.u.inv.o.AOCDcur), sizeof(struct FacAOCDCurrency));
 			return 0;
 		case Fac_AOCDChargingUnit:
 			fac->Function = Fac_AOCDChargingUnit;
-			fac->u.AOCDchu.chargeNotAvailable = pc.u.inv.o.AOCDchu.chargeNotAvailable;
-			fac->u.AOCDchu.freeOfCharge = pc.u.inv.o.AOCDchu.freeOfCharge;
-			fac->u.AOCDchu.recordedUnits = pc.u.inv.o.AOCDchu.recordedUnits;
-			fac->u.AOCDchu.typeOfChargingInfo = pc.u.inv.o.AOCDchu.typeOfChargingInfo;
-			fac->u.AOCDchu.billingId = pc.u.inv.o.AOCDchu.billingId;
+			memcpy(&(fac->u.AOCDchu), &(pc.u.inv.o.AOCDchu), sizeof(struct FacAOCDChargingUnit));
 			return 0;
 		default:
 			goto _dec_err;

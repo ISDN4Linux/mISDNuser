@@ -1,8 +1,8 @@
-/* $Id: asn1_basic_service.c,v 1.1 2006/08/15 16:29:13 nadi Exp $
+/* $Id: asn1_basic_service.c,v 1.2 2006/08/16 14:15:52 nadi Exp $
  *
  */
 
-#include "suppserv.h"
+#include "asn1.h"
 
 // ======================================================================
 // Basic Service Elements EN 300 196-1 D.6

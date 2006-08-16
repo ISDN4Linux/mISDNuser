@@ -1,9 +1,9 @@
-/* $Id: asn1_diversion.c,v 1.2 2006/08/16 13:14:54 nadi Exp $
+/* $Id: asn1_diversion.c,v 1.3 2006/08/16 14:15:52 nadi Exp $
  *
  */
 
+#include "asn1.h"
 #include <stdio.h>
-#include "suppserv.h"
 
 // ======================================================================
 // Diversion Supplementary Services ETS 300 207-1 Table 3

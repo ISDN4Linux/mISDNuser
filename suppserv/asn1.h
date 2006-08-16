@@ -1,6 +1,7 @@
 #ifndef __ASN1_H__
 #define __ASN1_H__
 
+#include "suppserv.h"
 #include <asm/types.h>
 #include <sys/types.h>
 #include <stdio.h>
@@ -60,24 +61,6 @@ struct ReqCallDeflection {
 	int pres;
 };
 
-struct AOCDChargingUnit {
-	short chargeNotAvailable;
-	short freeOfCharge;
-	int recordedUnits;
-	int typeOfChargingInfo;
-	int billingId;
-};
-
-struct AOCDCurrency {
-	short chargeNotAvailable;
-	short freeOfCharge;
-	char  currency[11];
-	int currencyAmount;
-	int multiplier;
-	int typeOfChargingInfo;
-	int billingId;
-};
-
 struct ServedUserNumberList {
 	struct PartyNumber partyNumber[10];
 };
@@ -100,8 +83,8 @@ struct asn1Invoke {
 		struct ActDivNotification actNot;
 		struct DeactDivNotification deactNot;
 		struct ReqCallDeflection reqCD;
-		struct AOCDChargingUnit AOCDchu;
-		struct AOCDCurrency AOCDcur;
+		struct FacAOCDChargingUnit AOCDchu;
+		struct FacAOCDCurrency AOCDcur;
 	} o;
 };
 
@@ -337,11 +320,11 @@ int ParseComponent(struct asn1_parm *parm, u_char *p, u_char *end);
 int XParseComponent(struct asn1_parm *parm, u_char *p, u_char *end);
 
 int ParseAOCECurrency(struct asn1_parm *pc, u_char *p, u_char *end, int dummy);
-int ParseAOCDChargingUnit(struct asn1_parm *pc,u_char *p, u_char *end, struct AOCDChargingUnit *chu);
-int ParseAOCDCurrency(struct asn1_parm *pc, u_char *p, u_char *end, struct AOCDCurrency *cur);
-int ParseAOCDCurrencyInfo(struct asn1_parm *pc,u_char *p, u_char *end, struct AOCDCurrency *cur);
-int ParseAOCDChargingUnitInfo(struct asn1_parm *pc,u_char *p, u_char *end, struct AOCDChargingUnit *chu);
-int ParseRecordedCurrency(struct asn1_parm *pc,u_char *p, u_char *end, struct AOCDCurrency *cur);
+int ParseAOCDChargingUnit(struct asn1_parm *pc,u_char *p, u_char *end, struct FacAOCDChargingUnit *chu);
+int ParseAOCDCurrency(struct asn1_parm *pc, u_char *p, u_char *end, struct FacAOCDCurrency *cur);
+int ParseAOCDCurrencyInfo(struct asn1_parm *pc,u_char *p, u_char *end, struct FacAOCDCurrency *cur);
+int ParseAOCDChargingUnitInfo(struct asn1_parm *pc,u_char *p, u_char *end, struct FacAOCDChargingUnit *chu);
+int ParseRecordedCurrency(struct asn1_parm *pc,u_char *p, u_char *end, struct FacAOCDCurrency *cur);
 int ParseRecordedUnitsList(struct asn1_parm *pc,u_char *p, u_char *end, int *recordedUnits);
 int ParseTypeOfChargingInfo(struct asn1_parm *pc,u_char *p, u_char *end, int *typeOfChargingInfo);
 int ParseRecordedUnits(struct asn1_parm *pc,u_char *p, u_char *end, int *recordedUnits);
@@ -350,7 +333,7 @@ int ParseAOCECurrencyInfo(struct asn1_parm *pc, u_char *p, u_char *end, int dumm
 int ParseAOCEChargingUnitInfo(struct asn1_parm *pc,u_char *p, u_char *end, int dummy);
 int ParseAOCEBillingId(struct asn1_parm *pc,u_char *p, u_char *end, int *billingId);
 int ParseCurrency(struct asn1_parm *pc,u_char *p, u_char *end, char *currency);
-int ParseAmount(struct asn1_parm *pc,u_char *p, u_char *end, struct AOCDCurrency *cur);
+int ParseAmount(struct asn1_parm *pc,u_char *p, u_char *end, struct FacAOCDCurrency *cur);
 int ParseCurrencyAmount(struct asn1_parm *pc,u_char *p, u_char *end, int *currencyAmount);
 int ParseMultiplier(struct asn1_parm *pc,u_char *p, u_char *end, int *multiplier);
 int ParseTypeOfUnit(struct asn1_parm *pc,u_char *p, u_char *end, int *typeOfUnit);

@@ -1,15 +1,15 @@
-/* $Id: asn1_aoc.c,v 1.2 2006/08/16 13:14:54 nadi Exp $
+/* $Id: asn1_aoc.c,v 1.3 2006/08/16 14:15:52 nadi Exp $
  *
  */
 
-#include "suppserv.h"
+#include "asn1.h"
 #include <string.h>
 
 // ======================================================================
 // AOC EN 300 182-1 V1.3.3
 
 int
-ParseAOCDCurrency(struct asn1_parm *pc, u_char *p, u_char *end, struct AOCDCurrency *cur)
+ParseAOCDCurrency(struct asn1_parm *pc, u_char *p, u_char *end, struct FacAOCDCurrency *cur)
 {
 	INIT;
 
@@ -27,7 +27,7 @@ ParseAOCDCurrency(struct asn1_parm *pc, u_char *p, u_char *end, struct AOCDCurre
 }
 
 int
-ParseAOCDChargingUnit(struct asn1_parm *pc, u_char *p, u_char *end, struct AOCDChargingUnit *chu)
+ParseAOCDChargingUnit(struct asn1_parm *pc, u_char *p, u_char *end, struct FacAOCDChargingUnit *chu)
 {
 	INIT;
 
@@ -71,7 +71,7 @@ ParseAOCEChargingUnit(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 // AOCDCurrencyInfo
 
 int
-ParseAOCDSpecificCurrency(struct asn1_parm *pc, u_char *p, u_char *end, struct AOCDCurrency *cur)
+ParseAOCDSpecificCurrency(struct asn1_parm *pc, u_char *p, u_char *end, struct FacAOCDCurrency *cur)
 {
 	INIT;
 
@@ -83,7 +83,7 @@ ParseAOCDSpecificCurrency(struct asn1_parm *pc, u_char *p, u_char *end, struct A
 }
 
 int
-ParseAOCDCurrencyInfo(struct asn1_parm *pc, u_char *p, u_char *end, struct AOCDCurrency *cur)
+ParseAOCDCurrencyInfo(struct asn1_parm *pc, u_char *p, u_char *end, struct FacAOCDCurrency *cur)
 {
 	INIT;
 
@@ -98,7 +98,7 @@ ParseAOCDCurrencyInfo(struct asn1_parm *pc, u_char *p, u_char *end, struct AOCDC
 // AOCDChargingUnitInfo
 
 int
-ParseAOCDSpecificChargingUnits(struct asn1_parm *pc, u_char *p, u_char *end, struct AOCDChargingUnit *chu)
+ParseAOCDSpecificChargingUnits(struct asn1_parm *pc, u_char *p, u_char *end, struct FacAOCDChargingUnit *chu)
 {
 	INIT;
 
@@ -112,7 +112,7 @@ ParseAOCDSpecificChargingUnits(struct asn1_parm *pc, u_char *p, u_char *end, str
 }
 
 int
-ParseAOCDChargingUnitInfo(struct asn1_parm *pc, u_char *p, u_char *end, struct AOCDChargingUnit *chu)
+ParseAOCDChargingUnitInfo(struct asn1_parm *pc, u_char *p, u_char *end, struct FacAOCDChargingUnit *chu)
 {
 	INIT;
 
@@ -128,11 +128,11 @@ ParseAOCDChargingUnitInfo(struct asn1_parm *pc, u_char *p, u_char *end, struct A
 // RecordedCurrency
 
 int
-ParseRecordedCurrency(struct asn1_parm *pc, u_char *p, u_char *end, struct AOCDCurrency *cur)
+ParseRecordedCurrency(struct asn1_parm *pc, u_char *p, u_char *end, struct FacAOCDCurrency *cur)
 {
 	INIT;
 
-	XSEQUENCE_1(ParseCurrency, ASN1_TAG_IA5_STRING, 1, cur->currency);
+	XSEQUENCE_1(ParseCurrency, ASN1_TAG_IA5_STRING, 1, (char *)cur->currency);
 	XSEQUENCE_1(ParseAmount, ASN1_TAG_SEQUENCE, 2, cur);
 
 	return p - beg;
@@ -291,7 +291,7 @@ ParseCurrency(struct asn1_parm *pc, u_char *p, u_char *end, char *currency)
 // Amount
 
 int
-ParseAmount(struct asn1_parm *pc, u_char *p, u_char *end, struct AOCDCurrency *cur)
+ParseAmount(struct asn1_parm *pc, u_char *p, u_char *end, struct FacAOCDCurrency *cur)
 {
 	INIT;
 

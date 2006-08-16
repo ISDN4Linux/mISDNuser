@@ -1,10 +1,10 @@
-/* $Id: asn1_address.c,v 1.1 2006/08/15 16:29:13 nadi Exp $
+/* $Id: asn1_address.c,v 1.2 2006/08/16 14:15:52 nadi Exp $
  *
  */
 
+#include "asn1.h"
 #include <stdio.h>
 #include <string.h>
-#include "suppserv.h"
 
 void buildnumber(char *num, int oc3, int oc3a, char *result, int version,
 		 int *provider, int *sondernummer, int *intern, int *local,
