@@ -19,35 +19,37 @@
 #include <asm/types.h>
 
 /*
- * Structs for Facility Requests
+ * Structs for Facility Messages
  */
 
-enum FacReqFunction {
-	FacReq_None 					= 0xffff,
-	FacReq_GetSupportedServices 	= 0x0000,
-	FacReq_Listen 					= 0x0001,
-	FacReq_Suspend 					= 0x0004,
-	FacReq_Resume 					= 0x0005,
-	FacReq_CFActivate 				= 0x0009,
-	FacReq_CFDeactivate 			= 0x000a,
-	FacReq_CFInterrogateParameters 	= 0x000b,
-	FacReq_CFInterrogateNumbers 	= 0x000c,
-	FacReq_CD 						= 0x000d,
+enum FacFunction {
+	Fac_None 					= 0xffff,
+	Fac_GetSupportedServices 	= 0x0000,
+	Fac_Listen 					= 0x0001,
+	Fac_Suspend 				= 0x0004,
+	Fac_Resume 					= 0x0005,
+	Fac_CFActivate 				= 0x0009,
+	Fac_CFDeactivate 			= 0x000a,
+	Fac_CFInterrogateParameters = 0x000b,
+	Fac_CFInterrogateNumbers 	= 0x000c,
+	Fac_CD 						= 0x000d,
+	Fac_AOCDCurrency 			= 0x0021,
+	Fac_AOCDChargingUnit 		= 0x0022,
 };
 
-struct FacReqListen {
+struct FacListen {
 	__u32 NotificationMask;
 };
 
-struct FacReqSuspend {
+struct FacSuspend {
 	__s8  CallIdentity[16];
 };
 
-struct FacReqResume {
+struct FacResume {
 	__s8  CallIdentity[16];
 };
 
-struct FacReqCFActivate {
+struct FacCFActivate {
 	__u32 Handle;
 	__u16 Procedure;
 	__u16 BasicService;
@@ -56,76 +58,61 @@ struct FacReqCFActivate {
 	__s8  ForwardedToSubaddress[16];
 };
 
-struct FacReqCFDeactivate {
+struct FacCFDeactivate {
 	__u32 Handle;
 	__u16 Procedure;
 	__u16 BasicService;
 	__s8  ServedUserNumber[16];
 };
 
-struct FacReqCDeflection {
+struct FacCDeflection {
 	__u16 PresentationAllowed;
 	__s8  DeflectedToNumber[16];
 	__s8  DeflectedToSubaddress[16];
 };
 
-#define FacReqCFInterrogateParameters FacReqCFDeactivate
+#define FacCFInterrogateParameters FacCFDeactivate
 
-struct FacReqCFInterrogateNumbers {
+struct FacCFInterrogateNumbers {
 	__u32 Handle;
 };
 
-struct FacReqParm {
-	enum FacReqFunction Function;
+struct FacAOCDChargingUnit {
+	__u16 chargeNotAvailable;
+	__u16 freeOfCharge;
+	__s32 recordedUnits;
+	__s32 typeOfChargingInfo;
+	__s32 billingId;
+};
+
+struct FacAOCDCurrency {
+	__u16 chargeNotAvailable;
+	__u16 freeOfCharge;
+	__u8  currency[11];
+	__s32 currencyAmount;
+	__s32 multiplier;
+	__s32 typeOfChargingInfo;
+	__s32 billingId;
+};
+
+struct FacParm {
+	enum FacFunction Function;
 	union {
-		struct FacReqListen Listen;
-		struct FacReqSuspend Suspend;
-		struct FacReqResume Resume;
-		struct FacReqCFActivate CFActivate;
-		struct FacReqCFDeactivate CFDeactivate;
-		struct FacReqCFInterrogateParameters CFInterrogateParameters;
-		struct FacReqCFInterrogateNumbers CFInterrogateNumbers;
-		struct FacReqCDeflection CDeflection;
+		struct FacListen Listen;
+		struct FacSuspend Suspend;
+		struct FacResume Resume;
+		struct FacCFActivate CFActivate;
+		struct FacCFDeactivate CFDeactivate;
+		struct FacCFInterrogateParameters CFInterrogateParameters;
+		struct FacCFInterrogateNumbers CFInterrogateNumbers;
+		struct FacCDeflection CDeflection;
+		struct FacAOCDChargingUnit AOCDchu;
+		struct FacAOCDCurrency AOCDcur;
 	} u;
 };
 
 /*
- * Structs for Facility Confirms
- */
-
-enum FacConfFunction {
-	FacConf_GetSupportedServices 		= 0x0000,
-	FacConf_Listen 						= 0x0001,
-	FacConf_Hold 						= 0x0002,
-	FacConf_Retrieve 					= 0x0003,
-	FacConf_Suspend 					= 0x0004,
-	FacConf_Resume 						= 0x0005,
-	FacConf_CFActivate 					= 0x0009,
-	FacConf_CFDeactivate 				= 0x000a,
-	FacConf_CFInterrogateParameters 	= 0x000b,
-	FacConf_CFInterrogateNumbers 		= 0x000c,
-	FacConf_CD 							= 0x000d,
-};
-
-struct FacConfGetSupportedServices {
-	__u16 SupplementaryServiceInfo;
-	__u32 SupportedServices;
-};
-
-struct FacConfInfo {
-	__u16 SupplementaryServiceInfo;
-};
-
-struct FacConfParm {
-	enum FacConfFunction Function;
-	union {
-		struct FacConfGetSupportedServices GetSupportedServices;
-		struct FacConfInfo Info;
-	} u;
-};
-
-/*
- * encodeFacReq (__u8 *dest, struct FacReqParm *fac)
+ * encodeFac (__u8 *dest, struct FacParm *fac)
  *
  * encode the facility (fac) into the buffer (dest)
  *
@@ -136,10 +123,10 @@ struct FacConfParm {
  * returns:
  *    length of the encoded facility, or -1 on error
  */
-int encodeFacReq (__u8 *dest, struct FacReqParm *fac);
+int encodeFac (__u8 *dest, struct FacParm *fac);
 
 /*
- * decodeFacReq (__u8 *src, struct FacReqParm *fac)
+ * decodeFac (__u8 *src, struct FacParm *fac)
  *
  * decode the facility (src) and write the result to (fac)
  *
@@ -150,6 +137,6 @@ int encodeFacReq (__u8 *dest, struct FacReqParm *fac);
  * returns:
  *    0 on success, -1 on error
  */
-int decodeFacReq (__u8 *src, struct FacReqParm *fac);
+int decodeFac (__u8 *src, struct FacParm *fac);
 
 #endif

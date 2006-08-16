@@ -1,4 +1,4 @@
-/* $Id: asn1.c,v 1.1 2006/08/15 16:29:13 nadi Exp $
+/* $Id: asn1.c,v 1.2 2006/08/16 13:14:54 nadi Exp $
  *
  */
 
@@ -32,6 +32,7 @@ int ParseLen(u_char *p, u_char *end, int *len)
 	return l+1;
 }
 
+#ifdef ASN1_DEBUG
 int
 ParseASN1(u_char *p, u_char *end, int level)
 {
@@ -76,5 +77,4 @@ ParseASN1(u_char *p, u_char *end, int level)
 	print_asn1msg(PRT_DEBUG_DECODE, "END (%d)\n", p - beg - 2);
 	return p - beg;
 }
-
-
+#endif

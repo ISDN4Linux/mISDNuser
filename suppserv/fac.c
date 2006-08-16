@@ -21,18 +21,6 @@ enum {
 	SUPPLEMENTARY_SERVICE 	= 0x91,
 } SERVICE_DISCRIMINATOR;
 
-enum {
-	INVOKE 					= 0xa1,
-	RETURN_RESULT 			= 0xa2,
-	RETURN_ERROR 			= 0xa3,
-	REJECT 					= 0xa4,
-} COMPONENT_TYPE_TAG;
-
-enum {
-	CALL_DEFLECT 			= 0x0d,
-	AOC 					= 0x22,
-} OPERATION_CODE;
-
 /*
  * Facility IE Encoding
  */
@@ -54,7 +42,7 @@ static int encodeInvokeComponentLength (__u8 *msg, __u8 *p)
 	return msg[1] + 2;
 }
 
-static int encodeFacCDeflection (__u8 *dest, struct FacReqCDeflection *CD)
+static int encodeFacCDeflection (__u8 *dest, struct FacCDeflection *CD)
 {
 	__u8 *p;
 	p = encodeInvokeComponentHead(dest, IE_FACILITY);
@@ -64,22 +52,24 @@ static int encodeFacCDeflection (__u8 *dest, struct FacReqCDeflection *CD)
 	return encodeInvokeComponentLength(dest, p);
 }
 
-int encodeFacReq (__u8 *dest, struct FacReqParm *fac)
+int encodeFac (__u8 *dest, struct FacParm *fac)
 {
 	int len = -1;
 
 	switch (fac->Function) {
-	case FacReq_None:
-	case FacReq_GetSupportedServices:
-	case FacReq_Listen:
-	case FacReq_Suspend:
-	case FacReq_Resume:
-	case FacReq_CFActivate:
-	case FacReq_CFDeactivate:
-	case FacReq_CFInterrogateParameters:
-	case FacReq_CFInterrogateNumbers:
+	case Fac_None:
+	case Fac_GetSupportedServices:
+	case Fac_Listen:
+	case Fac_Suspend:
+	case Fac_Resume:
+	case Fac_CFActivate:
+	case Fac_CFDeactivate:
+	case Fac_CFInterrogateParameters:
+	case Fac_CFInterrogateNumbers:
+	case Fac_AOCDCurrency:
+	case Fac_AOCDChargingUnit:
 		break;
-	case FacReq_CD:
+	case Fac_CD:
 		len = encodeFacCDeflection(dest, &(fac->u.CDeflection));
 	}
 	return len;
@@ -89,7 +79,7 @@ int encodeFacReq (__u8 *dest, struct FacReqParm *fac)
  * Facility IE Decoding
  */
 
-int decodeFacReq (__u8 *src, struct FacReqParm *fac)
+int decodeFac (__u8 *src, struct FacParm *fac)
 {
 	struct asn1_parm pc;
 	int 	fac_len,
@@ -106,7 +96,7 @@ int decodeFacReq (__u8 *src, struct FacReqParm *fac)
 	p += offset;
 	end = p + fac_len;
 
-/* 	ParseASN1(p + 1, end, 0); */
+	ParseASN1(p + 1, end, 0);
 
 	if (*p++ != SUPPLEMENTARY_SERVICE)
 		goto _dec_err;
@@ -117,8 +107,8 @@ int decodeFacReq (__u8 *src, struct FacReqParm *fac)
 	switch (pc.comp) {
 	case invoke:
 		switch (pc.u.inv.operationValue) {
-		case CALL_DEFLECT:
-			fac->Function = FacReq_CD;
+		case Fac_CD:
+			fac->Function = Fac_CD;
 			if (pc.u.inv.o.reqCD.address.partyNumber.type == 0)
 				strncpy((char *)fac->u.CDeflection.DeflectedToNumber,
 						pc.u.inv.o.reqCD.address.partyNumber.p.unknown,
@@ -130,6 +120,26 @@ int decodeFacReq (__u8 *src, struct FacReqParm *fac)
 			fac->u.CDeflection.PresentationAllowed = pc.u.inv.o.reqCD.pres;
 			*(fac->u.CDeflection.DeflectedToSubaddress) = 0;
 			return 0;
+		case Fac_AOCDCurrency:
+			fac->Function = Fac_AOCDCurrency;
+			fac->u.AOCDcur.chargeNotAvailable = pc.u.inv.o.AOCDcur.chargeNotAvailable;
+			fac->u.AOCDcur.freeOfCharge = pc.u.inv.o.AOCDcur.freeOfCharge;
+			strncpy((char *)fac->u.AOCDcur.currency, pc.u.inv.o.AOCDcur.currency, 11);
+			fac->u.AOCDcur.currencyAmount = pc.u.inv.o.AOCDcur.currencyAmount;
+			fac->u.AOCDcur.multiplier = pc.u.inv.o.AOCDcur.multiplier;
+			fac->u.AOCDcur.typeOfChargingInfo = pc.u.inv.o.AOCDcur.typeOfChargingInfo;
+			fac->u.AOCDcur.billingId = pc.u.inv.o.AOCDcur.billingId;
+			return 0;
+		case Fac_AOCDChargingUnit:
+			fac->Function = Fac_AOCDChargingUnit;
+			fac->u.AOCDchu.chargeNotAvailable = pc.u.inv.o.AOCDchu.chargeNotAvailable;
+			fac->u.AOCDchu.freeOfCharge = pc.u.inv.o.AOCDchu.freeOfCharge;
+			fac->u.AOCDchu.recordedUnits = pc.u.inv.o.AOCDchu.recordedUnits;
+			fac->u.AOCDchu.typeOfChargingInfo = pc.u.inv.o.AOCDchu.typeOfChargingInfo;
+			fac->u.AOCDchu.billingId = pc.u.inv.o.AOCDchu.billingId;
+			return 0;
+		default:
+			goto _dec_err;
 		}
 		break;
 	case returnResult:
@@ -139,7 +149,7 @@ int decodeFacReq (__u8 *src, struct FacReqParm *fac)
 	}
 
 _dec_err:
-	fac->Function = FacReq_None;
+	fac->Function = Fac_None;
 	return -1;
 } 
 

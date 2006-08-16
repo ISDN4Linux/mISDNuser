@@ -1,4 +1,4 @@
-/* $Id: asn1_diversion.c,v 1.1 2006/08/15 16:29:13 nadi Exp $
+/* $Id: asn1_diversion.c,v 1.2 2006/08/16 13:14:54 nadi Exp $
  *
  */
 
@@ -254,7 +254,7 @@ ParseDiversionReason(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
 	return ret;
 }
 
-int encodeActivationDiversion(__u8 *dest, struct FacReqCFActivate *CFActivate)
+int encodeActivationDiversion(__u8 *dest, struct FacCFActivate *CFActivate)
 {
 	__u8 *p;
 
@@ -271,7 +271,7 @@ int encodeActivationDiversion(__u8 *dest, struct FacReqCFActivate *CFActivate)
 	return p - dest;
 }
 
-int encodeDeactivationDiversion(__u8 *dest, struct FacReqCFDeactivate *CFDeactivate)
+int encodeDeactivationDiversion(__u8 *dest, struct FacCFDeactivate *CFDeactivate)
 {
 	__u8 *p;
 
@@ -287,7 +287,7 @@ int encodeDeactivationDiversion(__u8 *dest, struct FacReqCFDeactivate *CFDeactiv
 	return p - dest;
 }
 
-int encodeInterrogationDiversion(__u8 *dest, struct FacReqCFInterrogateParameters *params)
+int encodeInterrogationDiversion(__u8 *dest, struct FacCFInterrogateParameters *params)
 {
 	__u8 *p;
 
@@ -308,7 +308,7 @@ int encodeInterrogationDiversion(__u8 *dest, struct FacReqCFInterrogateParameter
 	return p - dest;
 }
 
-int encodeInvokeDeflection(__u8 *dest, struct FacReqCDeflection *CD)
+int encodeInvokeDeflection(__u8 *dest, struct FacCDeflection *CD)
 {
 	__u8 *p;
 

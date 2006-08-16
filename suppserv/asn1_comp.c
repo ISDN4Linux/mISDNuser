@@ -1,4 +1,4 @@
-/* $Id: asn1_comp.c,v 1.1 2006/08/15 16:29:13 nadi Exp $
+/* $Id: asn1_comp.c,v 1.2 2006/08/16 13:14:54 nadi Exp $
  *
  */
 
@@ -55,8 +55,10 @@ ParseInvokeComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 //	case 30: XSEQUENCE(ParseChargingRequest, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
 //	case 31: XSEQUENCE(ParseAOCSCurrency, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
 //	case 32: XSEQUENCE(ParseAOCSSpecialArr, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
-	case 33: XSEQUENCE(ParseAOCDCurrency, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
-	case 34: XSEQUENCE(ParseAOCDChargingUnit, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
+#endif
+	case 33: XSEQUENCE_1(ParseAOCDCurrency, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.AOCDcur); break;
+	case 34: XSEQUENCE_1(ParseAOCDChargingUnit, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.AOCDchu); break;
+#if 0
 	case 35: XSEQUENCE(ParseAOCECurrency, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
 	case 36: XSEQUENCE(ParseAOCEChargingUnit, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
 #endif
