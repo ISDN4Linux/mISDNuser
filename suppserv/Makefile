@@ -9,15 +9,15 @@ main: $(SUPPSERVOBJ)
 
 install:
 	install -m 644 libsuppserv.so $(INSTALL_PREFIX)/usr/lib
+	install -m 644 libsuppserv.a $(INSTALL_PREFIX)/usr/lib
 	cp *.h $(INSTALL_PREFIX)/usr/include/mISDNuser/
 
 libsuppserv.so: $(SUPPSERVOBJ)
-	rm -f $@
-	$(CC) -shared -Xlinker -x -o $@ $(SUPPSERVOBJ)
+	$(CC) -shared -Xlinker -x -o $@ $^
 
 libsuppserv.a: $(SUPPSERVOBJ)
-	rm -f $@
-	ar cr $@ $(SUPPSERVOBJ)
+	ar cr $@ $^
+	ar s $@
 
 clean:
 	rm -f *.o *~ DEADJOE

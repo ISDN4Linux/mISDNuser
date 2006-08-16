@@ -3,18 +3,18 @@ all: libisdnnet.a libisdnnet.so
 
 install:
 	install -m 644 libisdnnet.so $(INSTALL_PREFIX)/usr/lib
+	install -m 644 libisdnnet.a $(INSTALL_PREFIX)/usr/lib
 	cp *.h $(INSTALL_PREFIX)/usr/include/mISDNuser/
 
 ISDNNETOBJ = net_if.o isdn_debug.o isdn_msg.o fsm.o net_l2.o tei.o net_l3.o \
 		manager.o tone.o bchannel.o g711.o
 
 libisdnnet.so: $(ISDNNETOBJ)
-	rm -f $@
-	$(CC) -shared -Xlinker -x -o $@ $(ISDNNETOBJ)
+	$(CC) -shared -Xlinker -x -o $@ $^
 
 libisdnnet.a: $(ISDNNETOBJ)
-	rm -f $@
-	ar cr $@ $(ISDNNETOBJ)
+	ar cr $@ $^
+	ar s $@
 
 isdn_msg.o : isdn_msg.c $(INCLUDEDIR)/isdn_msg.h $(INCLUDEDIR)/isdn_net.h
 
