@@ -175,7 +175,7 @@ void isdn_port_info(void)
 		}
 
 		if (!useable)
-			printf(" * Port NOT useable for PBX\n");
+			printf(" * Port NOT useable for PBX (maybe there is already a PBX running?)\n");
 
 		printf("--------\n");
 
