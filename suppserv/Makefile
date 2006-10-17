@@ -8,8 +8,8 @@ all: libsuppserv.a libsuppserv.so
 main: $(SUPPSERVOBJ)
 
 install:
-	install -m 644 libsuppserv.so $(INSTALL_PREFIX)/usr/lib
-	install -m 644 libsuppserv.a $(INSTALL_PREFIX)/usr/lib
+	install -m 644 libsuppserv.so $(INSTALL_PREFIX)/$(LIBDIR)
+	install -m 644 libsuppserv.a $(INSTALL_PREFIX)/$(LIBDIR)
 	cp *.h $(INSTALL_PREFIX)/usr/include/mISDNuser/
 
 libsuppserv.so: $(SUPPSERVOBJ)

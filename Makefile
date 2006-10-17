@@ -21,6 +21,9 @@ export mISDN_DIR
 INCLUDEDIR := $(mISDN_DIR)/include
 export INCLUDEDIR
 
+LIBDIR=/usr/lib
+export LIBDIR
+
 CFLAGS:= -g -Wall -O2 -I $(INCLUDEDIR) -I $(MISDNINCLUDEDIR)
 CFLAGS+= -D CLOSE_REPORT=1
 ifeq ($(shell uname -m),x86_64)
@@ -49,7 +52,7 @@ all: test_misdn_includes
 install_path:
 	mkdir -p $(INSTALL_PREFIX)/usr/bin/
 	mkdir -p $(INSTALL_PREFIX)/usr/include/mISDNuser/
-	mkdir -p $(INSTALL_PREFIX)/usr/lib/
+	mkdir -p $(INSTALL_PREFIX)/$(LIBDIR)
 
 
 install: install_path all
