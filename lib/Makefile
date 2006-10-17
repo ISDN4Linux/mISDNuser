@@ -1,14 +1,19 @@
+SOMAJOR=0
+SOMINOR=0.0
+SOVERSION=$(SOMAJOR).$(SOMINOR)
 
-all: libmISDN.a libmISDN.so
+all: libmISDN.a libmISDN.so.$(SOVERSION)
 
 install:
-	install -m 644 libmISDN.so $(INSTALL_PREFIX)/$(LIBDIR)
+	install -m 755 libmISDN.so.$(SOVERSION) $(INSTALL_PREFIX)/$(LIBDIR)
+	ln -sf libmISDN.so.$(SOVERSION) $(INSTALL_PREFIX)/$(LIBDIR)/libmISDN.so.$(SOMAJOR)
+	ln -sf libmISDN.so.$(SOVERSION) $(INSTALL_PREFIX)/$(LIBDIR)/libmISDN.so
 	install -m 644 libmISDN.a $(INSTALL_PREFIX)/$(LIBDIR)
 
 LIBMISDN_OBJS = device.o layer.o stack.o status.o
 
-libmISDN.so: $(LIBMISDN_OBJS)
-	$(CC) -shared -Xlinker -x -o $@ $^
+libmISDN.so.$(SOVERSION): $(LIBMISDN_OBJS)
+	$(CC) -shared -Xlinker -x -Wl,-soname,libmISDN.so.$(SOMAJOR) -o $@ $^
 
 libmISDN.a: $(LIBMISDN_OBJS)
 	ar cr $@ $^
