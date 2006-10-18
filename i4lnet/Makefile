@@ -22,7 +22,7 @@ libisdnnet.a: $(ISDNNET_OBJ)
 	$(AR) cru $@ $^
 	$(RANLIB) $@
 
-libisdnnet.so: $(ISDNNETOBJ)
+libisdnnet.so: $(ISDNNET_OBJ)
 	$(CC) -shared -Xlinker -x -o $@ $^
 
 .c.o:

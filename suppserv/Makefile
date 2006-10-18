@@ -25,7 +25,7 @@ libsuppserv.a: $(SUPPSERV_OBJ)
 	$(AR) cru $@ $<
 	$(RANLIB) $@
 
-libsuppserv.so: $(SUPPSERVOBJ)
+libsuppserv.so: $(SUPPSERV_OBJ)
 	$(CC) -shared -Xlinker -x -o $@ $^
 
 
