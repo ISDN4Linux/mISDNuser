@@ -26,9 +26,6 @@ export LIBDIR
 
 CFLAGS:= -g -Wall -O2 -I $(INCLUDEDIR) -I $(MISDNINCLUDEDIR)
 CFLAGS+= -D CLOSE_REPORT=1
-ifeq ($(shell uname -m),x86_64)
-CFLAGS        += -fPIC
-endif
 export CFLAGS
 
 mISDNLIB	:= $(PWD)/lib/libmISDN.a
