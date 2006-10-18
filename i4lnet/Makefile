@@ -22,6 +22,9 @@ libisdnnet.a: $(ISDNNET_OBJ)
 	$(AR) cru $@ $^
 	$(RANLIB) $@
 
+libisdnnet.so: $(ISDNNETOBJ)
+	$(CC) -shared -Xlinker -x -o $@ $^
+
 .c.o:
 	$(CC) $(CFLAGS) -o $@ -c $<
 
@@ -53,8 +56,8 @@ bchannel.o bchannel.lo: bchannel.c $(INCLUDEDIR)/isdn_net.h $(INCLUDEDIR)/tone.h
 g711.o g711.lo: g711.c $(INCLUDEDIR)/g711.h
 
 clean:
-	rm -f *.o *.lo *~ DEADJOE
-	rm -f libisdnnet.a libisdnnet_pic.a
+	rm -f *.o *.lo *~ DEADJOE 
+	rm -f libisdnnet.a libisdnnet_pic.a libisdnnet.so
 
 distclean: clean
 	rm -f *.a

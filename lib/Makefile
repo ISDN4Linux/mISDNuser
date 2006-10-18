@@ -20,6 +20,9 @@ libmISDN.a: $(LIBMISDN_OBJS)
 	$(AR) cru $@ $^
 	$(RANLIB) $@
 
+libmISDN.so: $(LIBMISDN_OBJS)
+	$(CC) -shared -Xlinker -x -o $@ $^
+
 .c.o:
 	$(CC) $(CFLAGS) -o $@ -c $<
 
@@ -32,7 +35,7 @@ stack.o stack.lo: stack.c ../include/mISDNlib.h
 status.o status.lo: status.c ../include/mISDNlib.h 
 
 clean:
-	rm -f libmISDN.a libMISDN_pic.a
+	rm -f libmISDN.a libMISDN_pic.a libmISDN.so
 	rm -f *.o *.lo *~ DEADJOE
 
 distclean: clean

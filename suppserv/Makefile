@@ -25,6 +25,10 @@ libsuppserv.a: $(SUPPSERV_OBJ)
 	$(AR) cru $@ $<
 	$(RANLIB) $@
 
+libsuppserv.so: $(SUPPSERVOBJ)
+	$(CC) -shared -Xlinker -x -o $@ $^
+
+
 .c.o:
 	$(CC) $(CFLAGS) -o $@ -c $<
 
@@ -32,7 +36,7 @@ libsuppserv.a: $(SUPPSERV_OBJ)
 	$(CC) $(CFLAGS) -fPIC -o $@ -c $<
 
 clean:
-	rm -f *.o *.lo *~ DEADJOE
+	rm -f *.o *.lo *~ DEADJOE *.so
 	rm -f libsuppserv.a libsuppserv_pic.a
 
 distclean: clean
