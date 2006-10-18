@@ -1,33 +1,41 @@
-SOMAJOR=0
-SOMINOR=0.0
-SOVERSION=$(SOMAJOR).$(SOMINOR)
+CC = gcc
+AR = ar
+RANLIB = ranlib
 
-all: libmISDN.a libmISDN.so.$(SOVERSION)
+all: libmISDN.a libmISDN_pic.a libmISDN.so
 
 install:
-	install -m 755 libmISDN.so.$(SOVERSION) $(INSTALL_PREFIX)/$(LIBDIR)
-	ln -sf libmISDN.so.$(SOVERSION) $(INSTALL_PREFIX)/$(LIBDIR)/libmISDN.so.$(SOMAJOR)
-	ln -sf libmISDN.so.$(SOVERSION) $(INSTALL_PREFIX)/$(LIBDIR)/libmISDN.so
-	install -m 644 libmISDN.a $(INSTALL_PREFIX)/$(LIBDIR)
+	install -m 644 libmISDN.so $(INSTALL_PREFIX)/usr/lib
+	install -m 644 libmISDN_pic.a $(INSTALL_PREFIX)/usr/lib
+	install -m 644 libmISDN.a $(INSTALL_PREFIX)/usr/lib
 
 LIBMISDN_OBJS = device.o layer.o stack.o status.o
+LIBMISDN_PICOBJS = $(LIBMISDN_OBJS:%.o=%.lo)
 
-libmISDN.so.$(SOVERSION): $(LIBMISDN_OBJS)
-	$(CC) -shared -Xlinker -x -Wl,-soname,libmISDN.so.$(SOMAJOR) -o $@ $^
+libmISDN_pic.a: $(LIBMISDN_PICOBJS)
+	$(AR) cru $@ $^
+	$(RANLIB) $@
 
 libmISDN.a: $(LIBMISDN_OBJS)
-	ar cr $@ $^
-	ar s $@
+	$(AR) cru $@ $^
+	$(RANLIB) $@
 
-device.o : device.c ../include/mISDNlib.h
-layer.o : layer.c ../include/mISDNlib.h
-stack.o : stack.c ../include/mISDNlib.h
-status.o : status.c ../include/mISDNlib.h 
+.c.o:
+	$(CC) $(CFLAGS) -o $@ -c $<
+
+.c.lo:
+	$(CC) $(CFLAGS) -fPIC -o $@ -c $<
+
+device.o device.lo: device.c ../include/mISDNlib.h
+layer.o layer.lo: layer.c ../include/mISDNlib.h
+stack.o stack.lo: stack.c ../include/mISDNlib.h
+status.o status.lo: status.c ../include/mISDNlib.h 
 
 clean:
-	rm -f *.o *~ DEADJOE
-	rm -f libmISDN.a
+	rm -f libmISDN.a libMISDN_pic.a
+	rm -f *.o *.lo *~ DEADJOE
 
 distclean: clean
 	rm -f *.a
  
+.SUFFIXES: .lo
