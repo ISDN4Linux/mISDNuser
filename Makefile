@@ -43,7 +43,7 @@ SUBDIRS += $(shell if test -d suppserv ; then echo suppserv; fi)
 LIBS := lib/libmISDN.a
 
 all: test_misdn_includes
-	make TARGET=$@ subdirs
+	$(MAKE) TARGET=$@ subdirs
 
 
 install_path:
@@ -53,7 +53,7 @@ install_path:
 
 
 install: install_path all
-	make TARGET=install subdirs
+	$(MAKE) TARGET=install subdirs
 	cp include/*.h $(INSTALL_PREFIX)/usr/include/mISDNuser/
 
 
@@ -61,11 +61,11 @@ subdirs:
 	set -e; for i in $(SUBDIRS) ; do $(MAKE) -C $$i $(TARGET); done
 
 clean:  
-	make TARGET=$@ subdirs
+	$(MAKE) TARGET=$@ subdirs
 	rm -f *.o *~ DEADJOE $(INCLUDEDIR)/*~ $(INCLUDEDIR)/DEADJOE
 
 distclean: clean
-	make TARGET=$@ subdirs
+	$(MAKE) TARGET=$@ subdirs
 	rm -f *.o *~ testlog
 
 MAINDIR := $(shell basename $(PWD))
