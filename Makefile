@@ -1,8 +1,12 @@
+
+MAJOR=1
+MINOR=0
+SUBMINOR=2
+
 #
 # Set this to your local copy of mISDN
 #
 MISDNDIR := /usr/src/mqueue/mISDN
-
 
 PWD=$(shell pwd)
 #
@@ -26,6 +30,10 @@ export LIBDIR
 
 CFLAGS:= -g -Wall -O2 -I $(INCLUDEDIR) -I $(MISDNINCLUDEDIR)
 CFLAGS+= -D CLOSE_REPORT=1
+
+#disable this if your system does not support PIC (position independent code)
+CFLAGS+=-fPIC
+
 export CFLAGS
 
 mISDNLIB	:= $(PWD)/lib/libmISDN.a
@@ -99,4 +107,20 @@ voiparchiv: archiv
 test_misdn_includes:
 	@if ! echo "#include <linux/mISDNif.h>" | gcc -I$(MISDNINCLUDEDIR) -C -E - >/dev/null ; then echo -e "\n\nYou either don't seem to have installed mISDN properly\nor you haven't set the MISDNDIR variable in this very Makefile.\n\nPlease either install mISDN or set the MISDNDIR properly\n"; exit 1; fi
 
+
+snapshot: clean
+	DIR=mISDNuser-$$(date +"20%y_%m_%d") ; \
+	echo $$(date +"20%y_%m_%d" | sed -e "s/\//_/g") > VERSION ; \
+	mkdir -p /tmp/$$DIR ; \
+	cp -a * /tmp/$$DIR ; \
+	cd /tmp/; \
+	tar czf $$DIR.tar.gz $$DIR
+
+release: clean
+	DIR=mISDNuser-$(MAJOR)_$(MINOR)_$(SUBMINOR) ; \
+	echo $(MAJOR)_$(MINOR)_$(SUBMINOR) > VERSION ; \
+	mkdir -p /tmp/$$DIR ; \
+	cp -a * /tmp/$$DIR ; \
+	cd /tmp/; \
+	tar czf $$DIR.tar.gz $$DIR
 
