@@ -22,14 +22,14 @@
 void usage(pname) 
 char *pname;
 {
-	fprintf(stderr,"Call with %s [options]\n",pname);
-	fprintf(stderr,"\n");
-	fprintf(stderr,"\n     Valid options are:\n");
-	fprintf(stderr,"\n");
-	fprintf(stderr,"  -?              Usage ; printout this information\n");
-	fprintf(stderr,"  -c<n>           use card number n (default 1)\n"); 
-	fprintf(stderr,"  -vn             Printing debug info level n\n");
-	fprintf(stderr,"\n");
+	fprintf(stderr, "Call with %s [options]\n",pname);
+	fprintf(stderr, "\n");
+	fprintf(stderr, "\n     Valid options are:\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "  -?              Usage ; printout this information\n");
+	fprintf(stderr, "  -c<n>           use card number n (default 1)\n"); 
+	fprintf(stderr, "  -vn             Printing debug info level n\n");
+	fprintf(stderr, "\n");
 }
 
 typedef struct _devinfo {
@@ -44,16 +44,16 @@ typedef struct _devinfo {
 } devinfo_t;
 
 
-static int VerifyOn=0;
+static int VerifyOn=1;
 static devinfo_t mISDN;
 
 
 void sig_handler(int sig)
 {
 	int err;
-	fprintf(stdout,"exiting...\n");
+	fprintf(stdout, "exiting...\n");
         err = mISDN_close(mISDN.device);
-        fprintf(stdout,"mISDN_close: error(%d): %s\n", err,
+        fprintf(stdout, "mISDN_close: error(%d): %s\n", err,
         	strerror(err));
 	exit(0);
 }
@@ -66,7 +66,16 @@ void set_signals()
         signal(SIGINT, sig_handler);
         signal(SIGTERM, sig_handler);
 }
-                                                        
+ 
+#define TICKS_PER_SEC 1000000
+long get_tick_count(void)
+{
+	struct timeval tp;
+
+	gettimeofday(&tp, 0);
+	return ((unsigned)tp.tv_sec)*TICKS_PER_SEC+((unsigned)tp.tv_usec);
+}
+
 
 /* create userland layer2 */
 int
@@ -96,7 +105,7 @@ add_dlayer2(devinfo_t *di)
         
         lid = mISDN_get_layerid(di->device, di->d_stid, 2);
 	if (lid<0) {
-		fprintf(stdout,"cannot get layer2 (%d)\n", lid);
+		fprintf(stdout, "cannot get layer2 (%d)\n", lid);
 		return(15);
 	}
 	di->layer2 = lid;
@@ -107,23 +116,25 @@ add_dlayer2(devinfo_t *di)
 	return(0);
 }
 
-int do_setup(devinfo_t *di) {
-	unsigned char buf[1024];
+int do_setup(devinfo_t *di)
+{
+	unsigned char buf[2048];
 	iframe_t *frm = (iframe_t *)buf;
 	int i, ret = 0;
 	stack_info_t *stinf;
+	long t1;
 
 	ret = mISDN_get_stack_count(di->device);
 	if (VerifyOn>1)
-		fprintf(stdout,"%d stacks found\n", ret);
+		fprintf(stdout, "%d stacks found\n", ret);
 	if (ret < di->cardnr) {
-		fprintf(stdout,"cannot config card nr %d only %d cards\n",
+		fprintf(stdout, "cannot config card nr %d only %d cards\n",
 			di->cardnr, ret);
 		return(2);
 	}
-	ret = mISDN_get_stack_info(di->device, di->cardnr, buf, 1024);
+	ret = mISDN_get_stack_info(di->device, di->cardnr, buf, 2048);
 	if (ret<=0) {
-		fprintf(stdout,"cannot get stackinfo err: %d\n", ret);
+		fprintf(stdout, "cannot get stackinfo err: %d\n", ret);
 		return(3);
 	}
 	stinf = (stack_info_t *)&frm->data.p;
@@ -139,45 +150,61 @@ int do_setup(devinfo_t *di) {
 
 	di->layer1 = mISDN_get_layerid(di->device, di->d_stid, 1);
 	if (di->layer1<0) {
-		fprintf(stdout,"cannot get layer1\n");
+		fprintf(stdout, "cannot get layer1\n");
 		return(4);
 	}
 	if (VerifyOn>1)
-		fprintf(stdout,"layer1 id %08x\n", di->layer1);
+		fprintf(stdout, "layer1 id %08x\n", di->layer1);
 
 	/* make sure this stack just consists of layer0 + layer1 */
 	di->layer2 = mISDN_get_layerid(di->device, di->d_stid, 2);
 	if (di->layer2 > 0) {
-		fprintf(stdout,"layer2 found (%i), use layermask=3\n", di->layer2);
+		fprintf(stdout, "layer2 found (%i), use layermask=3\n", di->layer2);
 		return(5);
 	}
 
 	ret = add_dlayer2(di);
 	if (ret) {
-		fprintf(stdout,"add_dlayer2 failed\n");
+		fprintf(stdout, "add_dlayer2 failed\n");
 		return(ret);
 	} else {
-		fprintf(stdout,"created new User-Layer2: 0x%x\n", di->layer2);
+		fprintf(stdout, "created new User-Layer2: 0x%x\n", di->layer2);
 	}
 
+	fprintf(stdout, "sending PH_ACTIVATE | REQUEST to layer1...\n");
 	ret = mISDN_write_frame(di->device, buf, di->layer2 | FLG_MSG_DOWN,
 		PH_ACTIVATE | REQUEST, 0, 0, NULL, 0);
 
-	/* wait for at least timer3 for */
-        ret = mISDN_read(di->device, buf, 128, TIMEOUT_10SEC);
-        if (ret>0) {
-                if ((frm->prim == (PH_ACTIVATE | CONFIRM)) ||
-                    (frm->prim == (PH_ACTIVATE | INDICATION))) {
-                        fprintf(stdout,"layer1 activated (0x%x)\n", frm->prim);
-                        return(0);
-                } else {
-                	fprintf(stdout,"unable to activate layer1 (0x%x)\n", frm->prim);
-                	return(6);
-                }
-        }
+	// wait for PH_ACTIVATE | INDICATION or CONFIRM
+	t1 = get_tick_count();
+	while (1) { 
 
-	return(10);
+		ret = mISDN_read(di->device, buf, 2048, 0);
+		
+		if (ret > 0) {
+			if ((frm->prim == (PH_ACTIVATE | CONFIRM)) ||
+			    (frm->prim == (PH_ACTIVATE | INDICATION))) {
+				fprintf(stdout, "layer1 activated (0x%x)\n", frm->prim);
+				return(0);
+			}
+			
+			/*
+			if (frm->prim == (MGR_SHORTSTATUS | INDICATION)) {
+				fprintf(stdout, "got MGR_SHORTSTATUS | INDICATION\n");
+			}
+			fprintf(stdout, "got (0x%x), still waiting for PH_ACTIVATE | CONFIRM/INDICATION...\n", frm->prim);
+			*/
+		}
+		
+		if ((get_tick_count() - t1)  > (TICKS_PER_SEC * 5)) {
+			printf(stdout, "unable to activate layer1 (TIMEOUT)\n");
+			return(6);
+		}
+	}
+
+	return(7);
 }
+	
 
 int printhexdata(FILE *f, int len, u_char *p)
 {
@@ -190,23 +217,24 @@ int printhexdata(FILE *f, int len, u_char *p)
 	return(0);
 }
 
+
+                                
+
 void main_data_loop(devinfo_t *di)
 {
-	unsigned char buf[1024];
-	unsigned char tx_buf[1024];
-	struct timeval tp;
-	long a, b;
-	
+	long t1;
+	unsigned char buf[2048];
+	unsigned char tx_buf[2048];
+		
         iframe_t *frm = (iframe_t *)buf;
         int ret, i;
         
-        gettimeofday(&tp, 0);
-        b = ((unsigned)tp.tv_sec)*1000000+((unsigned)tp.tv_usec);
+        t1 = get_tick_count();
 	
-        printf ("waiting for data (use CTRL-C to cancel) ...\n");
+        printf ("waiting for data (use CTRL-C to cancel)...\n");
         while (1)  {
         	/* read data */
-        	ret = mISDN_read(di->device, buf, 1024, 0);
+        	ret = mISDN_read(di->device, buf, 2048, 0);
         	if (ret >= mISDN_HEADER_LEN) {
         		
         		switch(frm->prim) {
@@ -226,13 +254,11 @@ void main_data_loop(devinfo_t *di)
         	}
         	
         	/* write data */
-        	gettimeofday(&tp, 0);
-        	a = ((unsigned)tp.tv_sec)*1000000+((unsigned)tp.tv_usec);
-        	
-        	if ((a-b)>1000000) {
+        	if ((get_tick_count()-t1) > TICKS_PER_SEC) {
         		printf(".\n");
+
         		i=0;
-        		
+
         		/* send fake d-channel frame, here Tei request */
 			tx_buf[i++] = 0xfC;
 			tx_buf[i++] = 0xff;
@@ -251,7 +277,7 @@ void main_data_loop(devinfo_t *di)
 				di->unconfirmed++;
 			}
         		
-        		b = a;
+        		t1 = get_tick_count();
         	}
 	}
 }
@@ -265,7 +291,7 @@ char *argv[];
 	char sw;
 	int err;
 
-	fprintf(stdout,"\n\nTest-L1 $Revision: 1.2 $\n");
+	fprintf(stdout,"\n\nTest-L1 $Revision: 1.3 $\n");
 	memset(&mISDN, 0, sizeof(mISDN));
 	mISDN.cardnr = 1;
 	mISDN.func = 0;
@@ -316,11 +342,13 @@ char *argv[];
 	
 	set_signals();
 	err = do_setup(&mISDN);
-	if (err)
-		fprintf(stdout,"do_setup error %d\n", err);
-		
+	if (err) {
+		fprintf(stdout, "do_setup error %d\n", err);
+		return(0);
+	}
+
 	main_data_loop(&mISDN);
-		
+
 	err=mISDN_close(mISDN.device);
 	if (err)
 		fprintf(stdout,"mISDN_close: error(%d): %s\n", err,
