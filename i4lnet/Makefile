@@ -23,7 +23,7 @@ libisdnnet.a: $(ISDNNET_OBJ)
 	$(RANLIB) $@
 
 libisdnnet.so: $(ISDNNET_OBJ)
-	$(CC) -shared -Xlinker -x -o $@ $^
+	$(CC) -fPIC -shared -Xlinker -x -o $@ $^
 
 .c.o:
 	$(CC) $(CFLAGS) -o $@ -c $<

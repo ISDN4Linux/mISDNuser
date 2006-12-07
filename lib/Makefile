@@ -21,7 +21,7 @@ libmISDN.a: $(LIBMISDN_OBJS)
 	$(RANLIB) $@
 
 libmISDN.so: $(LIBMISDN_OBJS)
-	$(CC) -shared -Xlinker -x -o $@ $^
+	$(CC) -fPIC -shared -Xlinker -x -o $@ $^
 
 .c.o:
 	$(CC) $(CFLAGS) -o $@ -c $<

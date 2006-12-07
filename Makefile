@@ -32,7 +32,7 @@ CFLAGS:= -g -Wall -O2 -I $(INCLUDEDIR) -I $(MISDNINCLUDEDIR)
 CFLAGS+= -D CLOSE_REPORT=1
 
 #disable this if your system does not support PIC (position independent code)
-CFLAGS+=-fPIC
+#CFLAGS+=-fPIC
 
 export CFLAGS
 
