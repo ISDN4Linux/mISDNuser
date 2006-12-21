@@ -12,6 +12,10 @@ install:
 LIBMISDN_OBJS = device.o layer.o stack.o status.o
 LIBMISDN_PICOBJS = $(LIBMISDN_OBJS:%.o=%.lo)
 
+ifeq ($(shell uname -m),x86_64)
+CFLAGS         += -fPIC
+endif
+
 libmISDN_pic.a: $(LIBMISDN_PICOBJS)
 	$(AR) cru $@ $^
 	$(RANLIB) $@
@@ -21,7 +25,7 @@ libmISDN.a: $(LIBMISDN_OBJS)
 	$(RANLIB) $@
 
 libmISDN.so: $(LIBMISDN_OBJS)
-	$(CC) -fPIC -shared -Xlinker -x -o $@ $^
+	$(CC) $(CFLAGS) -shared -Xlinker -x -o $@ $^
 
 .c.o:
 	$(CC) $(CFLAGS) -o $@ -c $<

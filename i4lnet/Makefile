@@ -14,6 +14,11 @@ ISDNNET_OBJ = net_if.o isdn_debug.o isdn_msg.o fsm.o net_l2.o tei.o net_l3.o \
 		manager.o tone.o bchannel.o g711.o
 ISDNNET_PICOBJ = $(ISDNNET_OBJ:%.o=%.lo)
 
+ifeq ($(shell uname -m),x86_64)
+CFLAGS         += -fPIC
+endif
+
+
 libisdnnet_pic.a: $(ISDNNET_PICOBJ)
 	$(AR) cru $@ $^
 	$(RANLIB) $@
@@ -23,7 +28,7 @@ libisdnnet.a: $(ISDNNET_OBJ)
 	$(RANLIB) $@
 
 libisdnnet.so: $(ISDNNET_OBJ)
-	$(CC) -fPIC -shared -Xlinker -x -o $@ $^
+	$(CC) $(CFLAGS) -shared -Xlinker -x -o $@ $^
 
 .c.o:
 	$(CC) $(CFLAGS) -o $@ -c $<
