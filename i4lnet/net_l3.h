@@ -1,4 +1,4 @@
-/* $Id: net_l3.h,v 1.3 2006/03/06 13:08:29 keil Exp $
+/* $Id: net_l3.h,v 1.4 2006/12/28 12:24:01 jolly Exp $
  *
  * Layer 3 defines
  *
@@ -82,6 +82,7 @@ typedef struct _ALERTING {
 	u_char *SIGNAL;
 	u_char *HLC;
 	u_char *USER_USER;
+	u_char *REDIR_DN;
 } ALERTING_t;
 
 typedef struct _CALL_PROCEEDING {
@@ -90,6 +91,7 @@ typedef struct _CALL_PROCEEDING {
 	u_char *FACILITY;
 	u_char *PROGRESS;
 	u_char *DISPLAY;
+	u_char *REDIR_DN;
 	u_char *HLC;
 } CALL_PROCEEDING_t;
 
