@@ -1781,7 +1781,12 @@ static void
 l3dss1_information_req(layer3_proc_t *pc, int pr, void *arg)
 {
 	INFORMATION_t *info = arg;
+	msg_t   *msg;
+	int     l;
 
+	if (pc->state == 25 && !(pc->l3->nst->feature & FEATURE_NET_PTP))
+		return;
+	
 	if (info) {
 		MsgStart(pc, MT_INFORMATION);
  		if (info->COMPLETE)
@@ -1794,7 +1799,18 @@ l3dss1_information_req(layer3_proc_t *pc, int pr, void *arg)
 			AddvarIE(pc, IE_SIGNAL, info->SIGNAL);
 		if (info->CALLED_PN)
 			AddvarIE(pc, IE_CALLED_PN, info->CALLED_PN);
-		SendMsg(pc, -1);
+		if (pc->state != 25)
+			SendMsg(pc, -1);
+		else {
+			l = pc->op - &pc->obuf[0];
+			if (!(msg = l3_alloc_msg(l)))
+				return;
+			memcpy(msg_put(msg, l), &pc->obuf[0], l);
+			dhexprint(DBGM_L3DATA, "l3 oframe:", &pc->obuf[0], l);
+			dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: proc(%p) sending INFORMATION to CES 0 during state 25 (OVERLAP)\n", __FUNCTION__, pc);
+			if (l3_msg(pc->l3, DL_DATA | REQUEST, 0, msg))
+				free_msg(msg);
+		}
 	}
 }
 
