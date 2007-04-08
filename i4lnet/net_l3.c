@@ -1620,9 +1620,11 @@ l3dss1_setup_req(layer3_proc_t *pc, int pr, void *arg)
 	L3DelTimer(&pc->timer1);
 	test_and_clear_bit(FLG_L3P_TIMER303_1, &pc->Flags);
 	L3AddTimer(&pc->timer1, T303, 0x303);
-	test_and_set_bit(FLG_L3P_TIMER312, &pc->Flags);
 	L3DelTimer(&pc->timer2);
-	L3AddTimer(&pc->timer2, T312, 0x312);
+	if (!(pc->l3->nst->feature & FEATURE_NET_PTP)) {
+		test_and_set_bit(FLG_L3P_TIMER312, &pc->Flags);
+		L3AddTimer(&pc->timer2, T312, 0x312);
+	}
 }
 
 static void
@@ -2008,7 +2010,7 @@ l3dss1_t303(layer3_proc_t *pc, int pr, void *arg)
 
 			L3DelTimer(&pc->timer2);
 dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
-			if ( ! pc->l3->nst->feature & FEATURE_NET_PTP) {
+			if (!(pc->l3->nst->feature & FEATURE_NET_PTP)) {
 				L3AddTimer(&pc->timer2, T312, 0x312);
 				test_and_set_bit(FLG_L3P_TIMER312,
 					&pc->Flags);
