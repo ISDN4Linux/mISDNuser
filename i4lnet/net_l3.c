@@ -373,17 +373,20 @@ l3dss1_message(layer3_proc_t *pc, u_char mt)
 	msg_t *msg;
 	u_char *p;
 	int ret;
+	int crlen = 1;
 
-	if (!(msg = l3_alloc_msg(4)))
+	if (pc->l3->nst->feature & FEATURE_NET_CRLEN2)
+		crlen = 2;
+
+	if (!(msg = l3_alloc_msg(crlen+3)))
 		return(-ENOMEM);
-	p = msg_put(msg, 4);
+	p = msg_put(msg, crlen+3);
 	*p++ = 8;
-	if (pc->l3->nst->feature & FEATURE_NET_CRLEN2) {
-		*p++ = 2;
+	*p++ = crlen;
+	if (crlen == 2) {
 		*p++ = (pc->callref >> 8) ^ 0x80;
 		*p++ = pc->callref & 0xff;
 	} else {
-		*p++ = 1;
 		*p = pc->callref & 0x7f;
 		if (!(pc->callref & 0x8000))
 			*p |= 0x80;
@@ -909,9 +912,8 @@ l3dss1_release(layer3_proc_t *pc, int pr, void *arg)
 	if (mISDN_l3up(pc, umsg))
 		free_msg(umsg);
 
-/*	newl3state(pc, 0);
+	newl3state(pc, 0);
 	send_proc(pc, IMSG_END_PROC_M, NULL);
-*/
 }
 
 static void
@@ -1289,7 +1291,7 @@ static struct stateentry datastatelist[] =
 		MT_CONNECT, l3dss1_connect_i},
 	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(10) | SBIT(19),
 		MT_DISCONNECT, l3dss1_disconnect},
-	{SBIT(7) | SBIT(8) | SBIT(9),
+	{SBIT(7) | SBIT(8) | SBIT(9) | SBIT(25),
 		MT_DISCONNECT, l3dss1_disconnect_i},
 	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) |
 	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19) | SBIT(25),
@@ -2074,7 +2076,7 @@ l3dss1_t312(layer3_proc_t *pc, int pr, void *arg)
 	L3DelTimer(&pc->timer2);
 dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
 	l3_debug(pc->l3, "%s: state %d", __FUNCTION__, pc->state);
-	if (pc->state == 22) {
+	if (pc->state == 22 || pc->state == 25 || pc->state == 9 || pc->state == 7) {
 		StopAllL3Timer(pc);
 		if (!pc->child) {
 			if_link(pc->l3->nst->manager, (ifunc_t)pc->l3->nst->l3_manager,
