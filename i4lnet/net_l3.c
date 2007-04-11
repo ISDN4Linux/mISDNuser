@@ -1179,7 +1179,6 @@ l3dss1_hold(layer3_proc_t *pc, int pr, void *arg)
 		return;
 	}
 	dprint(DBGM_L3, pc->l3->nst->cardnr,"%s\n", __FUNCTION__);
-#warning TODO: global mask for supported none mandatory services, like HOLD
 	if (pc->hold_state == HOLDAUX_HOLD_IND)
 		return;
 	if (pc->hold_state != HOLDAUX_IDLE) {
@@ -1280,7 +1279,6 @@ static struct stateentry datastatelist[] =
 		MT_STATUS, l3dss1_release_cmpl},
 	{SBIT(0),
 		MT_SETUP, l3dss1_setup},
-#warning setup ack
 	{SBIT(6) | SBIT(7)  | SBIT(9) | SBIT(25),
 		MT_SETUP_ACKNOWLEDGE, l3dss1_setup_acknowledge_i},
 	{SBIT(6) | SBIT(7)  | SBIT(9) | SBIT(25),
@@ -1438,7 +1436,6 @@ l3dss1_information_mx(layer3_proc_t *pc, int pr, void *arg)
 
 static struct stateentry mdatastatelist[] =
 {
-#warning setup acknowledge
 	{SBIT(6) | SBIT(7) | SBIT(9) | SBIT(25),
 		MT_SETUP_ACKNOWLEDGE, l3dss1_setup_acknowledge_m},
 	{SBIT(6) | SBIT(7) | SBIT(9) | SBIT(25),
@@ -1607,7 +1604,6 @@ l3dss1_setup_req(layer3_proc_t *pc, int pr, void *arg)
 	memcpy(msg_put(msg, l), &pc->obuf[0], l);
 	newl3state(pc, 6);
 	dhexprint(DBGM_L3DATA, "l3 oframe:", &pc->obuf[0], l);
-#warning testing
 	if (pc->l3->nst->feature & FEATURE_NET_PTP) {
 		dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: proc(%p) sending SETUP to CES 0\n", __FUNCTION__, pc);
 		if (l3_msg(pc->l3, DL_DATA | REQUEST, 0, msg))
@@ -1640,15 +1636,6 @@ l3dss1_connect_req(layer3_proc_t *pc, int pr, void *arg)
 		if (conn->CHANNEL_ID[0] == 1)
 			pc->bc = conn->CHANNEL_ID[1] & 3;
 	}
-#warning pc->bc is nice, but a task of the application. if you change anything, please let me know. 
-#if 0
-	if (!pc->bc) {
-		if (pc->l3->debug & L3_DEB_WARN)
-			l3_debug(pc->l3, "D-chan connect for waiting call");
-		l3dss1_disconnect_req(pc, pr, NULL);
-		return;
-	}
-#endif
 	if (conn) {
 		MsgStart(pc, MT_CONNECT);
 		if (conn->BEARER)
@@ -1839,9 +1826,6 @@ l3dss1_progress_req(layer3_proc_t *pc, int pr, void *arg)
 			AddvarIE(pc, IE_DISPLAY, prog->DISPLAY);
 		if (prog->HLC)
 			AddvarIE(pc, IE_HLC, prog->HLC);
-//#warning ETSI 300286-1 only define USER_USER for USER_INFORMATION SETUP ALERTING PROGRESS CONNECT DISCONNECT RELEASE*
-//		if (prog->USER_USER)
-//			AddvarIE(pc, IE_USER_USER, prog->USER_USER);
 		SendMsg(pc, -1);
 	}
 }
@@ -1996,7 +1980,6 @@ l3dss1_t303(layer3_proc_t *pc, int pr, void *arg)
 			if ((msg = l3_alloc_msg(l))) {
 				memcpy(msg_put(msg, l), &pc->obuf[0], l);
 
-#warning testing as well
 				if (pc->l3->nst->feature & FEATURE_NET_PTP) {
 					dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: proc(%p) sending SETUP to CES 0\n", __FUNCTION__, pc);
 					if (l3_msg(pc->l3, DL_DATA | REQUEST, 0, msg))
@@ -2038,7 +2021,7 @@ dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: pc=%p del timer2\n", __FUNCTION__, pc)
 static void
 l3dss1_t305(layer3_proc_t *pc, int pr, void *arg)
 {
-	int t = 0x305;
+#warning: mut we dat sendn? :  int t = 0x305;
 
 	StopAllL3Timer(pc);
 
@@ -2317,19 +2300,33 @@ static struct stateentry downstatelist[] =
 	{ SBIT(2) | SBIT(11)
 #warning bitte beachte folgendes:
 /*
+andreas:
 es ist nur erlaubt, im state 11 einen release zu schicken!
 dennoch verwende der stack den release scheinbar, um einen prozess
 zu releasen, wie es z.b. in l3dss1_disconnect_req_out geschieht.
 der process befindet sich zu diesem zeitpunk noch im state 7, 9 oder 25.
 wenn man den (Layer 4) state auf 11 ändern würde, braucht mann die folgende
 zeile nicht: (bitte nachdenken, ob dies korrekt ist)
+
+karsten:
 Nein glaube ich nicht. CC_RELEASE |= CC_RELEASE_CR muss aber mal ein paar Tests
 machen
+
+andreas:
+solltest du was ändern, bitte vorher mit mit sprechen, da bei mir alles soweit fabelhaft läuft un ich layer 4 eventuell anpassen muss.
 */
 	| SBIT(12) | SBIT(7) | SBIT(9) | SBIT(25)
 	 ,CC_RELEASE | REQUEST, l3dss1_release_req},
-#warning noch ein bug: wenn ein CC_DISCONNECT gesendet wird (state 7 = klingeling), dann bekommt man nur einen RELEASE_CR, aber keinen vorherigen RELEASE 
-/* muss ich auch testen, keine Zeit */
+/*
+andreas:
+wenn ein CC_DISCONNECT gesendet wird (state 7 = klingeling), dann bekommt man nur einen RELEASE_CR, aber keinen vorherigen RELEASE 
+
+karsten:
+muss ich auch testen, keine Zeit
+
+andreas:
+solltest du was ändern, bitte vorher mit mit sprechen, da bei mir alles soweit fabelhaft läuft un ich layer 4 eventuell anpassen muss.
+*/
 	{ALL_STATES,
 	 CC_FACILITY | REQUEST, l3dss1_facility_req},
 	{SBIT(4) | SBIT(7) | SBIT(8) | SBIT(10),
@@ -2399,8 +2396,6 @@ imsg_intrelease(layer3_proc_t *master, layer3_proc_t *child)
 			if (master->child ||
 				test_bit(FLG_L3P_TIMER312, &master->Flags)) {
 	dprint(DBGM_L3, master->l3->nst->cardnr, "%s: JOLLY child=%p, flg=%d\n", __FUNCTION__, master->child, test_bit(FLG_L3P_TIMER312, &master->Flags));
-#warning TODO: save cause
-#warning bedenke auch, dass vielleicht overlap sending mit information-messages praktisch wäre (später PTP)
 			} else {
 				send_proc(master, IMSG_END_PROC, NULL);
 			}
@@ -2675,7 +2670,7 @@ dl_data_mux(layer3_t *l3, mISDNuser_head_t *hh, msg_t *msg)
 		} else {
 			dprint(DBGM_L3, l3->nst->cardnr, "%s: mt(%x) do not create proc\n", __FUNCTION__,
 				l3m.mt);
-#warning TODO: it happens that a response to an outgoing setup is received after connect of another terminal. in this case we must release.
+			// TODO: it happens that a response to an outgoing setup is received after connect of another terminal. in this case we must release.
 			free_msg(msg);
 			return(0);
 		}
