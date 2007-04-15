@@ -25,8 +25,6 @@
 
 #define ISDN_PID_L4_B_USER 0x440000ff
 
-//#define DEBUG
-
 /* used for udevice */
 int entity = 0;
 
@@ -40,6 +38,7 @@ int quit = 0;
 /* option stuff */
 int nooutput = 0;
 int traffic = 0;
+int debug = 0;
 
 /* mISDN port structure list */
 struct mISDNport {
@@ -116,12 +115,14 @@ static void show_traffic(struct mISDNport *m1, unsigned char *data, int len)
 /*
  * debug output
  */
-#ifdef DEBUG
 #define PDEBUG(fmt, arg...) _printdebug(__FUNCTION__, __LINE__, fmt, ## arg)
 static void _printdebug(const char *function, int line, const char *fmt, ...)
 {
 	char buffer[4096];
 	va_list args;
+
+	if (!debug || nooutput)
+		return;
 
 	va_start(args,fmt);
 	vsnprintf(buffer, sizeof(buffer)-1, fmt, args);
@@ -130,9 +131,6 @@ static void _printdebug(const char *function, int line, const char *fmt, ...)
 
 	printf("%s, line %d: %s", function, line, buffer);
 }
-#else
-#define PDEBUG(fmt, arg...) if(1)
-#endif
 
 /*
  * signal handler to interrupt main loop
@@ -312,6 +310,7 @@ int mISDN_handler(void)
 				}
 				if (mISDNport->que_len)
 				{
+					PDEBUG("Data in que, due to inactive link on port %d.\n", mISDNport->portnum);
 					mISDN_write(mISDNdevice, mISDNport->que_frm, mISDNport->que_len, TIMEOUT_1SEC);
 					mISDNport->que_len = 0;
 				}
@@ -818,7 +817,7 @@ int main(int argc, char *argv[])
 	if (argc <= 1)
 	{
 		usage:
-		printf("Usage: %s [--traffic] [--fork] <port a> <port b> [<port a> <port b> [...]]\n\n", argv[0]);
+		printf("Usage: %s [--<option> [...]] <port a> <port b> [<port a> <port b> [...]]\n\n", argv[0]);
 		printf("Bridges given pairs of ports. The number of given ports must be even.\n");
 		printf("Each pair of ports must be the same interface size (equal channel number).\n");
 		printf("Both ports may have same mode, e.g. TE-mode, to bridge ISDN to leased line.\n");
@@ -826,6 +825,7 @@ int main(int argc, char *argv[])
 		printf("Note: Ports must have layer 1 only, so layermask must be 0x3 to make it work.\n");
 		printf("--fork will make a daemon fork.\n");
 		printf("--traffic will show D-channel traffic.\n");
+		printf("--debug will show debug info.\n");
 		return(0);
 	}
 	if (strstr("help", argv[1]))
@@ -845,6 +845,12 @@ int main(int argc, char *argv[])
 		if (!strcmp(argv[i], "--fork"))
 		{
 			forking = 1;
+			i++;
+			continue;
+		}
+		if (!strcmp(argv[i], "--debug"))
+		{
+			debug = 1;
 			i++;
 			continue;
 		}
