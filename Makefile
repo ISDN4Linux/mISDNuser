@@ -6,7 +6,7 @@ SUBMINOR=2
 #
 # Set this to your local copy of mISDN
 #
-MISDNDIR := /usr/src/mqueue/mISDN
+MISDNDIR := /usr/src/mISDN
 
 PWD=$(shell pwd)
 #
