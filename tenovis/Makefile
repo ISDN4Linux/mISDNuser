@@ -24,6 +24,8 @@ testlib.o : testlib.c ../include/l3dss1.h $(LIBINCL) $(TENOVISINC)
 
 tstlib.o : tstlib.c $(LIBINCL) $(TENOVISINC)
 
+$(TENOVISLIB): sublib
+
 sublib:
 	$(MAKE) -C lib lib
 

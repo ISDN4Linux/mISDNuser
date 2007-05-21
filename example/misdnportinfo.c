@@ -67,20 +67,6 @@ void isdn_port_info(void)
 				printf(" HFC multiport card");
 #endif
 			break;
-			case ISDN_PID_L0_TE_U:
-			printf("TE-mode BRI U   interface line");
-			break;
-			case ISDN_PID_L0_NT_U:
-			nt = 1;
-			printf("NT-mode BRI U   interface port");
-			break;
-			case ISDN_PID_L0_TE_UP2:
-			printf("TE-mode BRI Up2 interface line");
-			break;
-			case ISDN_PID_L0_NT_UP2:
-			nt = 1;
-			printf("NT-mode BRI Up2 interface port");
-			break;
 			case ISDN_PID_L0_TE_E1:
 			pri = 1;
 			printf("TE-mode PRI E1  interface line (for phone lines)");
