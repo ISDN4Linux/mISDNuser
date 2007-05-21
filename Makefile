@@ -50,6 +50,7 @@ SUBDIRS += $(shell if test -d tenovis ; then echo tenovis; fi)
 SUBDIRS += $(shell if test -d voip ; then echo voip; fi)
 SUBDIRS += $(shell if test -d suppserv ; then echo suppserv; fi)
 SUBDIRS += $(shell if test -d bridge ; then echo bridge; fi)
+SUBDIRS += $(shell if test -d debugtool ; then echo debugtool; fi)
 
 LIBS := lib/libmISDN.a
 
