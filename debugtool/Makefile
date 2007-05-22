@@ -1,7 +1,6 @@
 CC = gcc
 
-CFLAGS += -DVERBOSE
-CFLAGS += -DPORT=50501
+CFLAGS += -Wall
 
 all: mISDNdebugtool
 
