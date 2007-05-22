@@ -182,11 +182,11 @@ static char *typestr (unsigned char type)
 		"??",
 		"D_RX",
 		"D_TX",
-		"L1",
-		"L2",
+		"L1_UP",
+		"L1_DOWN",
 	};
 
-	if (type <= L2)
+	if (type <= L1_DOWN)
 		return str[type];
 	return str[0];
 }
@@ -261,7 +261,6 @@ static void log_packet (FILE *file, struct sockaddr_in *sock_client, mISDN_dt_he
 			fprintf(file, "%.2hhx ", *(buf + i));
 		break;
 	default:
-		fprintf(file, "(unknown payload)");
 		break;
 	}
 	
