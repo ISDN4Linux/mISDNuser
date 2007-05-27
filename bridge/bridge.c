@@ -40,6 +40,8 @@ int nooutput = 0;
 int traffic = 0;
 int debug = 0;
 
+pid_t dsp_pid = 0;
+
 /* mISDN port structure list */
 struct mISDNport {
 	struct mISDNport *next, *prev;
@@ -207,8 +209,8 @@ static void bchannel_activate(struct mISDNport *mISDNport, int i)
 	if (mISDNport->b_state[i] == B_STATE_ACTIVE)
 	{
 		/* it is an error if this channel is not associated with a port object */
-		PDEBUG("during activation, we add conference to %d.\n", ((mISDNport->count&(~1)) << 8) + (i<<1) + 1);
-		ph_control(mISDNport->b_addr[i], CMX_CONF_JOIN, ((mISDNport->count&(~1)) << 8) + (i<<1) + 1);
+		PDEBUG("during activation, we add conference to %d.\n", ((mISDNport->count&(~1)) << 23) + (i<<16) + dsp_pid);
+		ph_control(mISDNport->b_addr[i], CMX_CONF_JOIN, ((mISDNport->count&(~1)) << 23) + (i<<16) + dsp_pid);
 		PDEBUG("during activation, we set rxoff.\n");
 		ph_control(mISDNport->b_addr[i], CMX_RECEIVE_OFF, 0);
 #if 0
@@ -557,20 +559,6 @@ struct mISDNport *mISDN_port_open(int port)
 		break;
 		case ISDN_PID_L0_NT_S0:
 		PDEBUG("NT-mode BRI S/T interface port\n");
-		nt = 1;
-		break;
-		case ISDN_PID_L0_TE_U:
-		PDEBUG("TE-mode BRI U   interface line\n");
-		break;
-		case ISDN_PID_L0_NT_U:
-		PDEBUG("NT-mode BRI U   interface port\n");
-		nt = 1;
-		break;
-		case ISDN_PID_L0_TE_UP2:
-		PDEBUG("TE-mode BRI Up2 interface line\n");
-		break;
-		case ISDN_PID_L0_NT_UP2:
-		PDEBUG("NT-mode BRI Up2 interface port\n");
 		nt = 1;
 		break;
 		case ISDN_PID_L0_TE_E1:
@@ -937,6 +925,7 @@ int main(int argc, char *argv[])
 		}
 		nooutput = 1;
 	}
+	dsp_pid = getpid();
 	
 	/* signal handlers */	
 	signal(SIGINT,sighandler);
