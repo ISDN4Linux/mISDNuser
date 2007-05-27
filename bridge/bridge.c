@@ -559,6 +559,20 @@ struct mISDNport *mISDN_port_open(int port)
 		PDEBUG("NT-mode BRI S/T interface port\n");
 		nt = 1;
 		break;
+		case ISDN_PID_L0_TE_U:
+		PDEBUG("TE-mode BRI U   interface line\n");
+		break;
+		case ISDN_PID_L0_NT_U:
+		PDEBUG("NT-mode BRI U   interface port\n");
+		nt = 1;
+		break;
+		case ISDN_PID_L0_TE_UP2:
+		PDEBUG("TE-mode BRI Up2 interface line\n");
+		break;
+		case ISDN_PID_L0_NT_UP2:
+		PDEBUG("NT-mode BRI Up2 interface port\n");
+		nt = 1;
+		break;
 		case ISDN_PID_L0_TE_E1:
 		PDEBUG("TE-mode PRI E1  interface line\n");
 		pri = 1;
