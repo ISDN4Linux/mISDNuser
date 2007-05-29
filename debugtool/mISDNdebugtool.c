@@ -184,9 +184,11 @@ static char *typestr (unsigned char type)
 		"D_TX",
 		"L1_UP",
 		"L1_DOWN",
+		"CRC_ERR",
+		"NEWSTATE",
 	};
 
-	if (type <= L1_DOWN)
+	if (type <= NEWSTATE)
 		return str[type];
 	return str[0];
 }
@@ -259,6 +261,9 @@ static void log_packet (FILE *file, struct sockaddr_in *sock_client, mISDN_dt_he
 	case D_TX:
 		for (i = 0; i < hdr->plength; ++i)
 			fprintf(file, "%.2hhx ", *(buf + i));
+		break;
+	case NEWSTATE:
+		fprintf(file, "%u %s", *(unsigned int *)buf, buf + 4);
 		break;
 	default:
 		break;
