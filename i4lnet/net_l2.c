@@ -1302,6 +1302,12 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 	l2->windowar[p1] = msg;
 	msg = msg_clone(msg);
 
+	if (!msg) {
+		free_msg(l2->windowar[p1]);
+		dprint(DBGM_L2, l2->nst->cardnr,"%s: no msg mem\n", __FUNCTION__);
+		return;
+	}
+
 	i = sethdraddr(l2, header, CMD);
 
 	if (test_bit(FLG_MOD128, &l2->flag)) {
