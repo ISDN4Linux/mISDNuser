@@ -1,7 +1,7 @@
 
 MAJOR=1
 MINOR=1
-SUBMINOR=4
+SUBMINOR=5
 
 #
 # Set this to your local copy of mISDN
@@ -49,6 +49,7 @@ SUBDIRS += $(shell if test -d i4lnet ; then echo i4lnet; fi)
 SUBDIRS += $(shell if test -d tenovis ; then echo tenovis; fi)
 SUBDIRS += $(shell if test -d voip ; then echo voip; fi)
 SUBDIRS += $(shell if test -d suppserv ; then echo suppserv; fi)
+SUBDIRS += $(shell if test -d debugtool ; then echo debugtool; fi)
 
 LIBS := lib/libmISDN.a
 
