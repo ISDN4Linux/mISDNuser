@@ -35,6 +35,7 @@ char *pname;
 	fprintf(stderr,"                    3 send and recive hdlc data\n"); 
 	fprintf(stderr,"                    4 send and recive X75 data\n"); 
 	fprintf(stderr,"                    5 send and recive voice early B connect\n");
+	fprintf(stderr,"                    6 loop back voice\n");
 	fprintf(stderr,"  -n <phone nr>   Phonenumber to dial\n");
 	fprintf(stderr,"  -vn             Printing debug info level n\n");
 	fprintf(stderr,"\n");
@@ -70,7 +71,8 @@ typedef struct _devinfo {
 #define FLG_CALL_ORGINATE	0x0100
 #define FLG_BCHANNEL_EARLY	0x0200
 #define FLG_CALL_ACTIVE		0x0400
-
+#define FLG_BCHANNEL_LOOP	0x0800
+#define FLG_BCHANNEL_LOOPSET	0x1000
 
 #define MAX_REC_BUF		4000
 #define MAX_DATA_BUF		1024
@@ -96,13 +98,15 @@ int play_msg(devinfo_t *di) {
 	struct  mISDNhead *hh = (struct  mISDNhead *)buf;
 	int len, ret;
 	
-	if (di->play<0)
-		return(0);
+	if (di->play < 0)
+		return 0;
 	len = read(di->play, buf + MISDN_HEADER_LEN, PLAY_SIZE);
-	if (len<0) {
-		printf("play_msg err %d: \"%s\"\n", errno, strerror(errno));
+	if (len<1) {
+		if (len<0)
+			printf("play_msg err %d: \"%s\"\n", errno, strerror(errno));
 		close(di->play);
 		di->play = -1;
+		return 0;
 	}
 	
 	hh->prim = PH_DATA_REQ;
@@ -113,7 +117,7 @@ int play_msg(devinfo_t *di) {
 		fprintf(stdout,"play send error %d %s\n", errno, strerror(errno));
 	else if (VerifyOn>3)
 		fprintf(stdout,"play send ret=%d\n", ret);
-	return(ret);
+	return ret;
 }
 
 int send_data(devinfo_t *di) {
@@ -123,7 +127,7 @@ int send_data(devinfo_t *di) {
 	int len, ret;
 	
 	if (di->play<0 || !di->fplay)
-		return(0);
+		return 0;
 	if (!(data = fgets(buf + MISDN_HEADER_LEN, MAX_DATA_BUF, di->fplay))) {
 		close(di->play);
 		di->play = -1;
@@ -147,7 +151,7 @@ int send_data(devinfo_t *di) {
 		fprintf(stdout,"send_data error %d %s\n", errno, strerror(errno));
 	else if (VerifyOn>3)
 		fprintf(stdout,"send_data ret=%d\n", ret);
-	return(ret);
+	return ret;
 }
 
 int setup_bchannel(devinfo_t *di) {
@@ -156,7 +160,7 @@ int setup_bchannel(devinfo_t *di) {
 
 	if ((di->used_bchannel < 1) || (di->used_bchannel > 2)) {
 		fprintf(stdout, "wrong channel %d\n", di->used_bchannel);
-		return(1);
+		return 1;
 	}
 	di->bchan = socket(AF_ISDN, SOCK_DGRAM, di->bproto);
 	if (di->bchan < 0) {
@@ -183,7 +187,7 @@ int setup_bchannel(devinfo_t *di) {
 		fprintf(stdout, "could not bind bchannel socket %s\n", strerror(errno));
 		return 4;
 	}
-	return(ret);
+	return ret;
 }
 
 int send_SETUP(devinfo_t *di, int SI, char *PNr) {
@@ -220,7 +224,7 @@ int send_SETUP(devinfo_t *di, int SI, char *PNr) {
 	if (ret < 0) {
 		fprintf(stdout, "sendto error  %s\n", strerror(errno));
 	}
-	return(ret);
+	return ret;
 }
 
 int activate_bchan(devinfo_t *di) {
@@ -283,7 +287,7 @@ int activate_bchan(devinfo_t *di) {
 		fprintf(stdout, "bchan fd not in set\n");
 		return 0;
 	}
-	return(ret);
+	return ret;
 }
 
 int deactivate_bchan(devinfo_t *di) {
@@ -366,9 +370,40 @@ int send_touchtone(devinfo_t *di, int tone) {
 		PH_CONTROL | REQUEST, 0, 4, &tval, TIMEOUT_1SEC);
 	if (VerifyOn>3)
 		fprintf(stdout,"tt send ret=%d\n", ret);
-	return(ret);
+	return ret;
 }
 #endif
+
+void
+do_hw_loop(devinfo_t *di)
+{
+	struct mISDN_ctrl_req	creq;
+	int ret;
+
+	creq.op = MISDN_CTRL_LOOP;
+	creq.channel = di->used_bchannel;
+	ret = ioctl(di->layer2, IMCTRLREQ, &creq);
+	if (ret < 0)
+		fprintf(stdout,"do_hw_loop ioctl error %s\n", strerror(errno));
+	else
+		di->flag  |= FLG_BCHANNEL_LOOPSET;
+}
+
+void
+del_hw_loop(devinfo_t *di)
+{
+	struct mISDN_ctrl_req	creq;
+	int ret;
+
+	if (!(di->flag & FLG_BCHANNEL_LOOPSET))
+		return;
+	creq.op = MISDN_CTRL_LOOP;
+	creq.channel = 0;
+	ret = ioctl(di->layer2, IMCTRLREQ, &creq);
+	if (ret < 0)
+		fprintf(stdout,"del_hw_loop ioctl error %s\n", strerror(errno));
+	di->flag &= ~FLG_BCHANNEL_LOOPSET;
+}
 
 int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 {
@@ -402,17 +437,13 @@ int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 	} else if (hh->prim == DL_DATA_IND) {
 		/* received data, save it */
 		write(di->save, buf + MISDN_HEADER_LEN, hh->len);
-#ifdef NOTYET					
-	} else if (rfrm->prim == (PH_CONTROL | INDICATION)) {
-		if ((rfrm->len == 4) &&
-			((rfrm->data.i & ~DTMF_TONE_MASK)
-			== DTMF_TONE_VAL)) {
-			fprintf(stdout,"GOT TT %c\n",
-				DTMF_TONE_MASK & rfrm->data.i);
+	} else if (hh->prim == (PH_CONTROL_IND)) {
+		unsigned int	*tone = (unsigned int *)(buf + MISDN_HEADER_LEN);
+
+		if ((hh->len == 4) && ((*tone & ~DTMF_TONE_MASK) == DTMF_TONE_VAL)) {
+			fprintf(stdout,"GOT TT %c\n", DTMF_TONE_MASK & *tone);
 		} else
-			fprintf(stdout,"unknown PH_CONTROL len %d/val %x\n",
-				rfrm->len, rfrm->data.i);
-#endif
+			fprintf(stdout,"unknown PH_CONTROL len %d/val %x\n", hh->len, *tone);
 	} else {
 		if (VerifyOn)
 			fprintf(stdout,"got unexpected B frame prim(%x) id(%x) len(%d)\n",
@@ -487,6 +518,9 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 					}
 				}
 				break;
+			case 6:
+				di->flag |= FLG_BCHANNEL_SETUP;
+				break;
 		}
 		if (!(di->flag & FLG_CALL_ORGINATE)) {
 			p = msg = buf + MISDN_HEADER_LEN;
@@ -506,7 +540,7 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 			fprintf(stdout,"CONNECT but no bchannel selected\n");
 			return 5;
 		}
-		if (!(di->flag & FLG_BCHANNEL_EARLY)) {
+		if (!(di->flag & FLG_BCHANNEL_EARLY) && !(di->flag & FLG_BCHANNEL_LOOP)) {
 			if (!(di->flag & FLG_BCHANNEL_ACTDELAYED))
 				activate_bchan(di);
 			else
@@ -539,6 +573,9 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 			/* setup B after 1 sec */
 			di->timeout = 1;
 			break;
+		case 6:
+			do_hw_loop(di);
+			break;
 		}
 	} else if ((len > 15) && (buf[15] == MT_CONNECT_ACKNOWLEDGE) && (!(di->flag & FLG_CALL_ORGINATE))) {
 		/* We got connect ack, so bring B-channel up */
@@ -546,7 +583,7 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 			fprintf(stdout,"CONNECT but no bchannel selected\n");
 			return 6;
 		}
-		if (!(di->flag & FLG_BCHANNEL_EARLY)) {
+		if (!(di->flag & FLG_BCHANNEL_EARLY) && !(di->flag & FLG_BCHANNEL_LOOP)) {
 			if (!(di->flag & FLG_BCHANNEL_ACTDELAYED))
 				activate_bchan(di);
 			else
@@ -569,6 +606,9 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 		case 4:
 			/* setup B after 1 sec */
 			di->timeout = 1;
+			break;
+		case 6:
+			do_hw_loop(di);
 			break;
 		}
 	} else if ((len > 15) && (buf[15] == MT_DISCONNECT)) {
@@ -678,7 +718,7 @@ int do_connection(devinfo_t *di) {
 				ret = activate_bchan(di);
 				if (!ret) {
 					fprintf(stdout,"error on activate_bchan\n");
-					return(0);
+					return 0;
 				}
 				di->flag &= ~FLG_BCHANNEL_DOACTIVE;
 				/* send next after 1 sec */
@@ -730,8 +770,12 @@ int do_connection(devinfo_t *di) {
 				break;
 		}
 	}
-	if (di->bchan)
-		deactivate_bchan(di);
+	if (di->bchan) {
+		if (di->flag & FLG_BCHANNEL_LOOP)
+			del_hw_loop(di);
+		else
+			deactivate_bchan(di);
+	}
 	sleep(1);
 	hh->prim = DL_RELEASE_REQ;
 	hh->id   = MISDN_ID_ANY;
@@ -783,6 +827,7 @@ int do_setup(devinfo_t *di) {
 	struct timeval		tout;
 	fd_set			rds;
 	unsigned char		buffer[300];
+	struct mISDN_ctrl_req	creq;
 
 	switch (di->func) {
 		case 0:
@@ -796,11 +841,11 @@ int do_setup(devinfo_t *di) {
 			di->si = 1;
 			di->val= 8; /* send  8 touch tones (7 ... 0) */
 			break;
+#endif
 		case 2:
-			di->bproto = ISDN_P_B_RAW;
+			di->bproto = ISDN_P_B_L2DTMF;
 			di->si = 1;
 			break;
-#endif
 		case 3:
 			di->bproto = ISDN_P_B_HDLC;
 			di->si = 7;
@@ -810,21 +855,26 @@ int do_setup(devinfo_t *di) {
 			di->si = 7;
 			di->flag |= FLG_BCHANNEL_ACTDELAYED;
 			break;
+		case 6:
+			di->bproto = ISDN_P_B_RAW;
+			di->si = 1;
+			di->flag |= FLG_BCHANNEL_LOOP;
+			break;
 		default:
 			fprintf(stdout,"unknown program function %d\n",
 				di->func);
-			return(1);
+			return 1;
 	}
 	sk = socket(AF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (sk < 1) {
 		fprintf(stdout, "could not open socket %s\n", strerror(errno));
-		return(1);
+		return 2;
 	}
 	ret = ioctl(sk, IMGETCOUNT, &cnt);
 	if (ret) {
 		fprintf(stdout, "ioctl error %s\n", strerror(errno));
 		close(sk);
-		return 1;
+		return 3;
 	}
 
 	if (VerifyOn>1)
@@ -832,7 +882,7 @@ int do_setup(devinfo_t *di) {
 	if (cnt < di->cardnr) {
 		fprintf(stdout,"cannot config card nr %d only %d cards\n",
 			di->cardnr, cnt);
-		return 2;
+		return 4;
 	}
 
 	devinfo.id = di->cardnr - 1;
@@ -853,7 +903,7 @@ int do_setup(devinfo_t *di) {
 	di->layer2 = socket(AF_ISDN, SOCK_DGRAM, ISDN_P_LAPD_TE);
 	if (di->layer2 < 0) {
 		fprintf(stdout, "could not open layer2 socket %s\n", strerror(errno));
-		return 6;
+		return 5;
 	}
 
 	di->nds = di->layer2 + 1;
@@ -861,7 +911,7 @@ int do_setup(devinfo_t *di) {
 	ret = fcntl(di->layer2, F_SETFL, O_NONBLOCK);
 	if (ret < 0) {
 		fprintf(stdout, "fcntl error %s\n", strerror(errno));
-		return 7;
+		return 6;
 	}
 
 	di->l2addr.family = AF_ISDN;
@@ -874,7 +924,22 @@ int do_setup(devinfo_t *di) {
 
 	if (ret < 0) {
 		fprintf(stdout, "could not bind l2 socket %s\n", strerror(errno));
+		return 7;
+	}
+
+	creq.op = MISDN_CTRL_GETOP;
+	ret = ioctl(di->layer2, IMCTRLREQ, &creq);
+	if (ret < 0) {
+		fprintf(stdout,"IMCTRLREQ ioctl error %s\n", strerror(errno));
 		return 8;
+	}
+	if (VerifyOn > 1)
+		fprintf(stdout, "supported IMCTRLREQ operations: %x\n", creq.op);
+	if (di->func == 6) {
+		if (!(creq.op & MISDN_CTRL_LOOP)) {
+			fprintf(stdout," hw loop not supported\n");
+			return 8;
+		}
 	}
 
 	hh = (struct mISDNhead *)buffer;
@@ -1028,7 +1093,7 @@ char *argv[];
 	if (err < 0) {
 		printf("TestmISDN cannot open mISDN due to %s\n",
 			strerror(errno));
-		return(1);
+		return 1;
 	}
 	close(err);
 	sprintf(FileNameOut,"%s.out",FileName);
@@ -1036,7 +1101,7 @@ char *argv[];
 	if (0>(mISDN.save = open(FileName, O_WRONLY|O_CREAT|O_TRUNC,S_IRWXU))) {
 		printf("TestmISDN cannot open %s due to %s\n",FileName,
 			strerror(errno));
-		return(1);
+		return 1;
 	}
 	if (0>(mISDN.play = open(FileNameOut, O_RDONLY))) {
 		printf("TestmISDN cannot open %s due to %s\n",FileNameOut,
@@ -1059,5 +1124,5 @@ char *argv[];
 		close(mISDN.layer2);
 	if (mISDN.bchan > 0)
 		close(mISDN.bchan);
-	return(0);
+	return 0;
 }
