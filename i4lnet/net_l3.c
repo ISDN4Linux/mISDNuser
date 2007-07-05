@@ -1593,6 +1593,8 @@ l3dss1_setup_req(layer3_proc_t *pc, int pr, void *arg)
 		AddvarIE(pc, IE_CALLED_PN, setup->CALLED_PN);
 	if (setup->CALLED_SUB)
 		AddvarIE(pc, IE_CALLED_SUB, setup->CALLED_SUB);
+	if (setup->REDIR_NR)
+		AddvarIE(pc, IE_REDIR_NR, setup->REDIR_NR);
 	if (setup->LLC)
 		AddvarIE(pc, IE_LLC, setup->LLC);
 	if (setup->HLC)
