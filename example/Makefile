@@ -1,8 +1,16 @@
 LIBINCL	:= $(INCLUDEDIR)/mISDNlib.h
-PROGS	:= testcon loghex
+PROGS	:= testcon loghex testlayer3
 # PROGS   := testcon testnet loadfirm logger
 
 all: $(PROGS)
+
+mISDNLIB := ../layer3/libmisdn.so
+LIBPTHREAD := -lpthread
+LIBMISDN := -lmisdn
+
+testlayer3 :	LDFLAGS += -L $(LIBDIR) $(LIBMISDN) $(LIBPTHREAD)
+
+CC := gcc -g $(CFLAGS)
 
 install:
 	for i in $(PROGS) ; do \
@@ -11,6 +19,18 @@ install:
 
 testcon: testcon.o
 
-testcon.o : testcon.c ../include/l3dss1.h
+testlayer3: testlayer3.o
+
+testcon.o : testcon.c ../include/q931.h
+
+testlayer3.o: testlayer3.c ../include/q931.h ../include/mlayer3.h
 
 loghex: loghex.o
+
+clean:
+	rm -f *.o *.lo *~ DEADJOE
+
+distclean: clean
+	rm -f $(PROGS)
+	
+

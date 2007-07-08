@@ -1,12 +1,7 @@
 
 MAJOR=1
 MINOR=1
-SUBMINOR=3
-
-#
-# Set this to your local copy of mISDN
-#
-MISDNDIR := /usr/src/mISDN
+SUBMINOR=1
 
 PWD=$(shell pwd)
 #
@@ -16,20 +11,18 @@ PWD=$(shell pwd)
 INSTALL_PREFIX := /
 export INSTALL_PREFIX
 
-MISDNINCLUDEDIR := $(MISDNDIR)/include
-export MISDNINCLUDEDIR
-
 mISDN_DIR := $(PWD)
 export mISDN_DIR
 
 INCLUDEDIR := $(mISDN_DIR)/include
 export INCLUDEDIR
 
-LIBDIR=/usr/lib
+LIBDIR := $(mISDN_DIR)/layer3
 export LIBDIR
 
-CFLAGS:= -g -Wall -I $(INCLUDEDIR) -I $(MISDNINCLUDEDIR)
-CFLAGS+= -D CLOSE_REPORT=1
+CFLAGS:= -g -Wall -I $(INCLUDEDIR)
+
+LDFLAGS:= -g -L $(LIBDIR) 
 
 #disable this if your system does not support PIC (position independent code)
 ifeq ($(shell uname -m),x86_64)
@@ -38,21 +31,9 @@ endif
 
 export CFLAGS
 
-mISDNLIB	:= $(PWD)/lib/libmISDN.a
-mISDNNETLIB	:= $(PWD)/i4lnet/libmisdnnet.a
-export mISDNLIB
-export mISDNNETLIB
+SUBDIRS := layer3 example
 
-SUBDIRS := lib example
-
-SUBDIRS += $(shell if test -d i4lnet ; then echo i4lnet; fi)
-SUBDIRS += $(shell if test -d tenovis ; then echo tenovis; fi)
 SUBDIRS += $(shell if test -d voip ; then echo voip; fi)
-SUBDIRS += $(shell if test -d suppserv ; then echo suppserv; fi)
-SUBDIRS += $(shell if test -d bridge ; then echo bridge; fi)
-SUBDIRS += $(shell if test -d debugtool ; then echo debugtool; fi)
-
-LIBS := lib/libmISDN.a
 
 all: test_misdn_includes
 	$(MAKE) TARGET=$@ subdirs
@@ -94,19 +75,6 @@ archiv: distclean
 basearchiv: ARCHIVOPT += --exclude i4lnet --exclude voip --exclude tenovis
 basearchiv: ARCHIVNAME := $(ARCHIVDIR)/$(MAINDIR)_base-$(VERSION).tar.bz2
 basearchiv: archiv
-
-mainarchiv: ARCHIVOPT += --exclude voip --exclude tenovis
-mainarchiv: ARCHIVNAME := $(ARCHIVDIR)/$(MAINDIR)_main-$(VERSION).tar.bz2
-mainarchiv: archiv
-
-tenovisarchiv: ARCHIVOPT += --exclude voip --exclude i4lnet
-tenovisarchiv: ARCHIVNAME := $(ARCHIVDIR)/$(MAINDIR)_tenovis-$(VERSION).tar.bz2
-tenovisarchiv: archiv
-
-voiparchiv: ARCHIVOPT += --exclude tenovis
-voiparchiv: ARCHIVNAME := $(ARCHIVDIR)/$(MAINDIR)_voip-$(VERSION).tar.bz2
-voiparchiv: archiv
-
 
 test_misdn_includes:
 	@if ! echo "#include <linux/mISDNif.h>" | gcc -I$(MISDNINCLUDEDIR) -C -E - >/dev/null ; then echo -e "\n\nYou either don't seem to have installed mISDN properly\nor you haven't set the MISDNDIR variable in this very Makefile.\n\nPlease either install mISDN or set the MISDNDIR properly\n"; exit 1; fi

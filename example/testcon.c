@@ -13,7 +13,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <linux/mISDNif.h>
-#include "../include/l3dss1.h"
+#include <q931.h>
 
 void usage(pname) 
 char *pname;

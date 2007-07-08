@@ -1,0 +1,57 @@
+CC = gcc
+AR = ar
+RANLIB = ranlib
+
+all: libmisdn.a libmisdn_pic.a libmisdn.so
+
+install:
+	install -m 644 libisdnnet.a $(INSTALL_PREFIX)/usr/lib
+	install -m 644 libisdnnet_pic.a $(INSTALL_PREFIX)/usr/lib
+	install -m 644 libisdnnet.so $(INSTALL_PREFIX)/usr/lib
+
+MISDN_OBJ = mbuffer.o q931.o fsm.o mtimer.o mlayer3.o dss1user.o layer3.o
+
+# net_if.o isdn_debug.o isdn_msg.o fsm.o net_l2.o tei.o net_l3.o \
+#		manager.o tone.o bchannel.o g711.o
+
+MISDN_PICOBJ = $(ISDNNET_OBJ:%.o=%.lo)
+
+ifeq ($(shell uname -m),x86_64)
+CFLAGS         += -fPIC
+endif
+
+
+libmisdn_pic.a: $(MISDN_PICOBJ)
+	$(AR) cru $@ $^
+	$(RANLIB) $@
+
+libmisdn.a: $(MISDN_OBJ)
+	$(AR) cru $@ $^
+	$(RANLIB) $@
+
+libmisdn.so: $(MISDN_OBJ)
+	$(CC) $(CFLAGS) -shared -Xlinker -x -o $@ $^
+
+.c.o:
+	$(CC) $(CFLAGS) -o $@ -c $<
+
+.c.lo:
+	$(CC) $(CFLAGS) -fPIC -o $@ -c $<
+
+mbuffer.o mbuffer.lo:	mbuffer.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h
+q931.o q931.lo:		q931.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h $(INCLUDEDIR)/q931.h
+fsm.o fsm.lo:		fsm.c fsm.h mtimer.h
+mtimer.o mtimer.lo:	mtimer.c mtimer.h mlist.h
+mlayer3.o mlayer3.lo:	mlayer3.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h $(INCLUDEDIR)/q931.h mlist.h
+dss1user.o dss1user.lo:	dss1user.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h $(INCLUDEDIR)/q931.h dss1.h layer3.h
+layer3.o layer3.lo:	layer3.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h $(INCLUDEDIR)/q931.h mlist.h mtimer.h layer3.h
+
+
+clean:
+	rm -f *.o *.lo *~ DEADJOE 
+	rm -f libmisdn.a libmisdn_pic.a libmisdn.so
+
+distclean: clean
+	rm -f *.a
+
+.SUFFIXES: .lo
