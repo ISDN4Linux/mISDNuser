@@ -24,6 +24,7 @@
 #include "helper.h"
 #include "dss1.h"
 #include "layer3.h"
+#include "debug.h"
 
 static int dss1man(l3_process_t *, u_int, struct l3_msg *);
 
@@ -307,7 +308,7 @@ l3dss1_get_cid(l3_process_t *pc, struct l3_msg *l3m) {
 
 	if (!l3m->channel_id)
 		return -1; /* IE missing */
-	if (test_bit(FLG_BASICRATE, &pc->l3->ml3.options)) {
+	if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
 		if (l3m->channel_id[0] != 1)
 			return -2; /* wrong length */
 		if (l3m->channel_id[1] & 0x60)
@@ -360,7 +361,7 @@ l3dss1_get_cause(l3_process_t *pc, struct l3_msg *l3m) {
 }
 
 static void
-l3dss1_release_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_release_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	StopAllL3Timer(pc);
 	if (l3m) {
@@ -369,22 +370,22 @@ l3dss1_release_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		newl3state(pc, 19);
 		l3dss1_message(pc, MT_RELEASE);
 	}
-	L3AddTimer(&pc->timer, T308, CC_T308_1);
+	L3AddTimer(&pc->timer1, T308, CC_T308_1);
 }
 
 static void
-l3dss1_setup_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_setup_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	increment_refcnt(l3m);
 	pc->t303msg = l3m;
 	SendMsg(pc, l3m, 1);
 	pc->n303 = N303;
-	L3DelTimer(&pc->timer);
-	L3AddTimer(&pc->timer, T303, CC_T303);
+	L3DelTimer(&pc->timer1);
+	L3AddTimer(&pc->timer1, T303, CC_T303);
 }
 
 static void
-l3dss1_disconnect_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_disconnect_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	unsigned char	c[2];
 
@@ -406,11 +407,11 @@ l3dss1_disconnect_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_NORMALUNSPECIFIED);
 		pc->cause=CAUSE_NORMALUNSPECIFIED;
 	}
-	L3AddTimer(&pc->timer, T305, CC_T305);
+	L3AddTimer(&pc->timer1, T305, CC_T305);
 }
 
 static void
-l3dss1_connect_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_connect_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (!pc->cid[0]) { /* no channel was selected */
 		l3dss1_disconnect_req(pc, pr, NULL);
@@ -424,12 +425,12 @@ l3dss1_connect_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		newl3state(pc, 8);
 		l3dss1_message(pc, MT_CONNECT);
 	}
-	L3DelTimer(&pc->timer);
-	L3AddTimer(&pc->timer, T313, CC_T313);
+	L3DelTimer(&pc->timer1);
+	L3AddTimer(&pc->timer1, T313, CC_T313);
 }
 
 static void
-l3dss1_release_cmpl_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_release_cmpl_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	StopAllL3Timer(pc);
 	if (l3m) {
@@ -442,7 +443,7 @@ l3dss1_release_cmpl_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_alert_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_alert_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m) {
 		SendMsg(pc, l3m, 7);
@@ -450,11 +451,11 @@ l3dss1_alert_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		newl3state(pc, 7);
 		l3dss1_message(pc, MT_ALERTING);
 	}
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 }
 
 static void
-l3dss1_proceed_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_proceed_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m) {
 		SendMsg(pc, l3m, 9);
@@ -462,11 +463,11 @@ l3dss1_proceed_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		newl3state(pc, 9);
 		l3dss1_message(pc, MT_CALL_PROCEEDING);
 	}
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 }
 
 static void
-l3dss1_setup_ack_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_setup_ack_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m) {
 		SendMsg(pc, l3m, 25);
@@ -474,12 +475,12 @@ l3dss1_setup_ack_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		newl3state(pc, 25);
 		l3dss1_message(pc, MT_SETUP_ACKNOWLEDGE);
 	}
-	L3DelTimer(&pc->timer);
-	L3AddTimer(&pc->timer, T302, CC_T302);
+	L3DelTimer(&pc->timer1);
+	L3AddTimer(&pc->timer1, T302, CC_T302);
 }
 
 static void
-l3dss1_suspend_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_suspend_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m) {
 		SendMsg(pc, l3m, 15);
@@ -487,11 +488,11 @@ l3dss1_suspend_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		newl3state(pc, 15);
 		l3dss1_message(pc, MT_SUSPEND);
 	}
-	L3AddTimer(&pc->timer, T319, CC_T319);
+	L3AddTimer(&pc->timer1, T319, CC_T319);
 }
 
 static void
-l3dss1_resume_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_resume_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m) {
 		SendMsg(pc, l3m, 17);
@@ -499,11 +500,11 @@ l3dss1_resume_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		newl3state(pc, 17);
 		l3dss1_message(pc, MT_RESUME);
 	}
-	L3AddTimer(&pc->timer, T318, CC_T318);
+	L3AddTimer(&pc->timer1, T318, CC_T318);
 }
 
 static void
-l3dss1_status_enq_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_status_enq_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m)
 		free_l3_msg(l3m);
@@ -511,11 +512,11 @@ l3dss1_status_enq_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_information_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_information_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (pc->state == 2) {
-		L3DelTimer(&pc->timer);
-		L3AddTimer(&pc->timer, T304, CC_T304);
+		L3DelTimer(&pc->timer1);
+		L3AddTimer(&pc->timer1, T304, CC_T304);
 	}
 
 	if (l3m) {
@@ -524,7 +525,7 @@ l3dss1_information_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_notify_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_notify_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m) {
 		SendMsg(pc, l3m, -1);
@@ -532,7 +533,7 @@ l3dss1_notify_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_progress_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_progress_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m) {
 		SendMsg(pc, l3m, -1);
@@ -540,7 +541,7 @@ l3dss1_progress_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_facility_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_facility_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m) {
 		SendMsg(pc, l3m, -1);
@@ -548,7 +549,7 @@ l3dss1_facility_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_restart_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_restart_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m) {
 		SendMsg(pc, l3m, -1);
@@ -556,7 +557,7 @@ l3dss1_restart_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_release_cmpl(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_release_cmpl(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	StopAllL3Timer(pc);
 	newl3state(pc, 0);
@@ -565,12 +566,12 @@ l3dss1_release_cmpl(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_alerting(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_alerting(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int	ret;
 
 	if (!(ret = l3dss1_get_cid(pc, l3m))) {
-		if (test_bit(FLG_BASICRATE, &pc->l3->ml3.options)) {
+		if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
 			if ((0 == (pc->cid[1] & 3)) || (3 == (pc->cid[1] & 3))) {
 				l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
 				free_l3_msg(l3m);
@@ -593,7 +594,7 @@ l3dss1_alerting(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		free_l3_msg(l3m);
 		return;
 	}
-	L3DelTimer(&pc->timer);	/* T304 */
+	L3DelTimer(&pc->timer1);	/* T304 */
 	if (pc->t303msg) {
 		free_l3_msg(pc->t303msg);
 		pc->t303msg = NULL;
@@ -605,12 +606,12 @@ l3dss1_alerting(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_call_proc(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_call_proc(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int	ret;
 
 	if (!(ret = l3dss1_get_cid(pc, l3m))) {
-		if (test_bit(FLG_BASICRATE, &pc->l3->ml3.options)) {
+		if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
 			if ((0 == (pc->cid[1] & 3)) || (3 == (pc->cid[1] & 3))) {
 				l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
 				free_l3_msg(l3m);
@@ -634,25 +635,25 @@ l3dss1_call_proc(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		free_l3_msg(l3m);
 		return;
 	}
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	if (pc->t303msg) {
 		free_l3_msg(pc->t303msg);
 		pc->t303msg = NULL;
 	}
 	newl3state(pc, 3);
-	L3AddTimer(&pc->timer, T310, CC_T310);
+	L3AddTimer(&pc->timer1, T310, CC_T310);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
 	mISDN_l3up(pc, MT_CALL_PROCEEDING, l3m);
 }
 
 static void
-l3dss1_connect(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_connect(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int	ret;
 
 	if (!(ret = l3dss1_get_cid(pc, l3m))) {
-		if (test_bit(FLG_BASICRATE, &pc->l3->ml3.options)) {
+		if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
 			if ((0 == (pc->cid[1] & 3)) || (3 == (pc->cid[1] & 3))) {
 				l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
 				free_l3_msg(l3m);
@@ -675,7 +676,7 @@ l3dss1_connect(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		free_l3_msg(l3m);
 		return;
 	}
-	L3DelTimer(&pc->timer);	/* T303 or T310 */
+	L3DelTimer(&pc->timer1);	/* T303 or T310 */
 	if (pc->t303msg) {
 		free_l3_msg(pc->t303msg);
 		pc->t303msg = NULL;
@@ -688,7 +689,7 @@ l3dss1_connect(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_connect_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_connect_ack(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int		ret;
 
@@ -699,14 +700,14 @@ l3dss1_connect_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		return;
 	}
 	newl3state(pc, 10);
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	if (ret)
 		l3dss1_std_ie_err(pc, ret);
 	mISDN_l3up(pc, MT_CONNECT_ACKNOWLEDGE, l3m);
 }
 
 static void
-l3dss1_disconnect(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_disconnect(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int		ret;
 	unsigned char	cause = 0;
@@ -739,17 +740,17 @@ l3dss1_disconnect(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		free_l3_msg(l3m);
 	if (cause) {
 		l3dss1_message_cause(pc, MT_RELEASE, cause);
-		L3AddTimer(&pc->timer, T308, CC_T308_1);
+		L3AddTimer(&pc->timer1, T308, CC_T308_1);
 	}
 }
 
 static void
-l3dss1_setup_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_setup_ack(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int	ret;
 
 	if (!(ret = l3dss1_get_cid(pc, l3m))) {
-		if (test_bit(FLG_BASICRATE, &pc->l3->ml3.options)) {
+		if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
 			if ((0 == (pc->cid[1] & 3)) || (3 == (pc->cid[1] & 3))) {
 				l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
 				free_l3_msg(l3m);
@@ -773,20 +774,20 @@ l3dss1_setup_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		free_l3_msg(l3m);
 		return;
 	}
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	if (pc->t303msg) {
 		free_l3_msg(pc->t303msg);
 		pc->t303msg = NULL;
 	}
 	newl3state(pc, 2);
-	L3AddTimer(&pc->timer, T304, CC_T304);
+	L3AddTimer(&pc->timer1, T304, CC_T304);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
 	mISDN_l3up(pc, MT_SETUP_ACKNOWLEDGE, l3m);
 }
 
 static void
-l3dss1_setup(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_setup(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int	err = 0;
 
@@ -809,8 +810,8 @@ l3dss1_setup(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 	 */
 
 	if (!(err = l3dss1_get_cid(pc, l3m))) {
-		if (test_bit(FLG_BASICRATE, &pc->l3->ml3.options)) {
-			if (!test_bit(FLG_PTP, &pc->l3->ml3.options)) {
+		if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
+			if (!test_bit(FLG_PTP, &pc->L3->ml3.options)) {
 				if (3 == (pc->cid[1] & 3)) {
 					l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
 					free_l3_msg(l3m);
@@ -836,15 +837,15 @@ l3dss1_setup(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		return;
 	}
 	newl3state(pc, 6);
-	L3DelTimer(&pc->timer);
-	L3AddTimer(&pc->timer, T_CTRL, CC_TCTRL);
+	L3DelTimer(&pc->timer1);
+	L3AddTimer(&pc->timer1, T_CTRL, CC_TCTRL);
 	if (err) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, err);
 	mISDN_l3up(pc, MT_SETUP, l3m);
 }
 
 static void
-l3dss1_reset(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_reset(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m)
 		free_l3_msg(l3m);
@@ -852,7 +853,7 @@ l3dss1_reset(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_release(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_release(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int		ret, cause=0;
 
@@ -878,7 +879,7 @@ l3dss1_release(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_progress(l3_process_t *pc, u_char pr, struct l3_msg *l3m) {
+l3dss1_progress(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m) {
 	int		err = 0;
 	unsigned char	cause = CAUSE_INVALID_CONTENTS;
 
@@ -929,7 +930,7 @@ l3dss1_progress(l3_process_t *pc, u_char pr, struct l3_msg *l3m) {
 	 * Message, according to ETSI). 
 	 * 
 	 */
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	if (pc->t303msg) {
 		free_l3_msg(pc->t303msg);
 		pc->t303msg = NULL;
@@ -941,7 +942,7 @@ l3dss1_progress(l3_process_t *pc, u_char pr, struct l3_msg *l3m) {
 }
 
 static void
-l3dss1_notify(l3_process_t *pc, u_char pr, struct l3_msg *l3m) {
+l3dss1_notify(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m) {
 	int		err = 0;
 	unsigned char	cause = CAUSE_INVALID_CONTENTS;
 
@@ -981,7 +982,7 @@ l3dss1_notify(l3_process_t *pc, u_char pr, struct l3_msg *l3m) {
 }
 
 static void
-l3dss1_status_enq(l3_process_t *pc, u_char pr, struct l3_msg *l3m) {
+l3dss1_status_enq(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m) {
 	int		ret;
 
 	ret = check_infoelements(pc, l3m, ie_STATUS_ENQUIRY);
@@ -991,21 +992,21 @@ l3dss1_status_enq(l3_process_t *pc, u_char pr, struct l3_msg *l3m) {
 }
 
 static void
-l3dss1_information(l3_process_t *pc, u_char pr, struct l3_msg *l3m) {
+l3dss1_information(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m) {
 	int		ret;
 
 	ret = check_infoelements(pc, l3m, ie_INFORMATION);
 	if (ret)
 		l3dss1_std_ie_err(pc, ret);
 	if (pc->state == 25) { /* overlap receiving */
-		L3DelTimer(&pc->timer);
-		L3AddTimer(&pc->timer, T302, CC_T302);
+		L3DelTimer(&pc->timer1);
+		L3AddTimer(&pc->timer1, T302, CC_T302);
 	}
 	mISDN_l3up(pc, MT_INFORMATION, l3m);
 }
 
 static void
-l3dss1_release_ind(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_release_ind(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int	callState = -1;
 
@@ -1033,15 +1034,15 @@ l3dss1_release_ind(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_restart(l3_process_t *pc, u_char pr, struct l3_msg *l3m) {
-	L3DelTimer(&pc->timer);
+l3dss1_restart(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m) {
+	L3DelTimer(&pc->timer1);
 	release_l3_process(pc);
 	if (l3m)
 		free_l3_msg(l3m);
 }
 
 static void
-l3dss1_status(l3_process_t *pc, u_char pr, struct l3_msg *l3m) {
+l3dss1_status(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m) {
 	int		ret = 0;
 	unsigned char	cause = 0, callState = 0xff;
 
@@ -1089,7 +1090,7 @@ l3dss1_status(l3_process_t *pc, u_char pr, struct l3_msg *l3m) {
 }
 
 static void
-l3dss1_facility(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_facility(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int		ret;
 
@@ -1103,10 +1104,10 @@ l3dss1_facility(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_suspend_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m) {
+l3dss1_suspend_ack(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m) {
 	int	ret;
 
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	newl3state(pc, 0);
 	/* We don't handle suspend_ack for IE errors now */
 	ret = check_infoelements(pc, l3m, ie_SUSPEND_ACKNOWLEDGE);
@@ -1115,7 +1116,7 @@ l3dss1_suspend_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m) {
 }
 
 static void
-l3dss1_suspend_rej(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_suspend_rej(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int		ret;
 	unsigned char	cause;
@@ -1135,7 +1136,7 @@ l3dss1_suspend_rej(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		free_l3_msg(l3m);
 		return;
 	}
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	mISDN_l3up(pc, MT_SUSPEND_REJECT, l3m);
 	newl3state(pc, 10);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
@@ -1143,12 +1144,12 @@ l3dss1_suspend_rej(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_resume_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_resume_ack(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int	ret;
 
 	if (!(ret = l3dss1_get_cid(pc, l3m))) {
-		if (test_bit(FLG_BASICRATE, &pc->l3->ml3.options)) {
+		if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
 			if ((0 == (pc->cid[1] & 3)) || (3 == (pc->cid[1] & 3))) {
 				l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
 				free_l3_msg(l3m);
@@ -1171,7 +1172,7 @@ l3dss1_resume_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		free_l3_msg(l3m);
 		return;
 	}
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	mISDN_l3up(pc, MT_RESUME_ACKNOWLEDGE, l3m);
 	newl3state(pc, 10);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
@@ -1179,7 +1180,7 @@ l3dss1_resume_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_resume_rej(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_resume_rej(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int		ret;
 	unsigned char	cause;
@@ -1199,7 +1200,7 @@ l3dss1_resume_rej(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		free_l3_msg(l3m);
 		return;
 	}
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	mISDN_l3up(pc, MT_RESUME_REJECT, l3m);
 	newl3state(pc, 0);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
@@ -1208,14 +1209,14 @@ l3dss1_resume_rej(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_global_restart(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_global_restart(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	unsigned char	ri;
 	l3_process_t	*up, *n;
 	struct l3_msg	*nl3m;
 	int		ret;
 
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	if (l3m->restart_ind) {
 		ri = l3m->restart_ind[1];
 	} else {
@@ -1223,7 +1224,7 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 	}
 	memset(pc->cid, 0, 4); /* clear cid */
 	if (!(ret = l3dss1_get_cid(pc, l3m))) {
-		if (test_bit(FLG_BASICRATE, &pc->l3->ml3.options)) {
+		if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
 			if (0 == (pc->cid[1] & 3)) {
 				l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
 				free_l3_msg(l3m);
@@ -1236,10 +1237,10 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		return;
 	}
 	newl3state(pc, 2);
-	list_for_each_entry_safe(up, n, &pc->l3->plist, list) {
+	list_for_each_entry_safe(up, n, &pc->L3->plist, list) {
 		if ((ri & 6) == 6) 
 			dss1man(up, MT_RESTART, NULL);
-		else if (test_bit(FLG_BASICRATE, &pc->l3->ml3.options)) {
+		else if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
 			if ((up->cid[1] & 3) == (pc->cid[1] & 3))
 				dss1man(up, MT_RESTART, NULL);
 		} else {
@@ -1259,22 +1260,22 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 
 
 static void
-l3dss1_restart_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_restart_ack(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	fprintf(stderr, "Restart Acknowledge\n");
+	eprint("Restart Acknowledge\n");
 }
 
 static void
-l3dss1_dummy(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_dummy(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m)
 		free_l3_msg(l3m);
 }
 
 static void
-l3dss1_hold_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_hold_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	if (!test_bit(FLG_PTP, &pc->l3->ml3.options)) {
+	if (!test_bit(FLG_PTP, &pc->L3->ml3.options)) {
 		if ((pc->state & VALID_HOLD_STATES_PTMP) == 0) { /* not a valid HOLD state for PtMP */
 			return;
 		}
@@ -1283,7 +1284,7 @@ l3dss1_hold_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		case AUX_IDLE:
 			break;
 		default:
-			fprintf(stderr, "RETRIEVE_REQ in wrong aux state %d\n", pc->aux_state);
+			eprint("RETRIEVE_REQ in wrong aux state %d\n", pc->aux_state);
 		case AUX_HOLD_IND: /* maybe collition, ignored */
 			return;
 	}
@@ -1292,17 +1293,17 @@ l3dss1_hold_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 	else
 		l3dss1_message(pc, MT_HOLD);
 	pc->aux_state = AUX_HOLD_REQ;
-	L3AddTimer(&pc->aux_timer, THOLD, CC_THOLD);
+	L3AddTimer(&pc->timer2, THOLD, CC_THOLD);
 }
 
 static void
-l3dss1_hold_ack_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_hold_ack_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	switch(pc->aux_state) {
 		case AUX_HOLD_IND:
 			break;
 		default:
-			fprintf(stderr, "HOLD_ACK in wrong aux state %d\n", pc->aux_state);
+			eprint("HOLD_ACK in wrong aux state %d\n", pc->aux_state);
 			return;
 	}
 	if (l3m)
@@ -1313,13 +1314,13 @@ l3dss1_hold_ack_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_hold_rej_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_hold_rej_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	switch(pc->aux_state) {
 		case AUX_HOLD_IND:
 			break;
 		default:
-			fprintf(stderr, "HOLD_REJ in wrong aux state %d\n", pc->aux_state);
+			eprint("HOLD_REJ in wrong aux state %d\n", pc->aux_state);
 			return;
 	}
 	if (l3m)
@@ -1330,7 +1331,7 @@ l3dss1_hold_rej_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_hold_ind(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_hold_ind(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int	ret;
 
@@ -1340,7 +1341,7 @@ l3dss1_hold_ind(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		free_l3_msg(l3m);
 		return;
 	}
-	if (test_bit(FLG_PTP, &pc->l3->ml3.options)) {
+	if (test_bit(FLG_PTP, &pc->L3->ml3.options)) {
 		if ((pc->state & VALID_HOLD_STATES_PTP) == 0) { /* not a valid HOLD state for PtP */
 			l3dss1_message_cause(pc, MT_HOLD_REJECT, CAUSE_NOTCOMPAT_STATE);
 			free_l3_msg(l3m);
@@ -1355,7 +1356,7 @@ l3dss1_hold_ind(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 	}
 	switch(pc->aux_state) {
 		case AUX_HOLD_REQ:
-			L3DelTimer(&pc->aux_timer);
+			L3DelTimer(&pc->timer2);
 		case AUX_IDLE:
 			mISDN_l3up(pc, MT_HOLD, l3m);
 			pc->aux_state = AUX_HOLD_IND;
@@ -1370,7 +1371,7 @@ l3dss1_hold_ind(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_hold_rej(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_hold_rej(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int		ret;
 	unsigned char	cause;
@@ -1392,31 +1393,31 @@ l3dss1_hold_rej(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 	}
 	switch(pc->aux_state) {
 		case AUX_HOLD_REQ:
-			L3DelTimer(&pc->aux_timer);
+			L3DelTimer(&pc->timer2);
 			break;
 		default:
-			fprintf(stderr, "HOLD_REJ in wrong aux state %d\n", pc->aux_state);
+			eprint("HOLD_REJ in wrong aux state %d\n", pc->aux_state);
 	}
 	pc->aux_state = AUX_IDLE;
 	mISDN_l3up(pc, MT_HOLD_REJECT, l3m);
 }
 
 static void
-l3dss1_hold_ignore(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_hold_ignore(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m)
 		free_l3_msg(l3m);
 }
 
 static void
-l3dss1_hold_req_ignore(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_hold_req_ignore(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m)
 		free_l3_msg(l3m);
 }
 
 static void
-l3dss1_hold_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_hold_ack(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int	ret;
 
@@ -1428,12 +1429,12 @@ l3dss1_hold_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 	}
 	switch(pc->aux_state) {
 		case AUX_HOLD_REQ:
-			L3DelTimer(&pc->aux_timer);
+			L3DelTimer(&pc->timer2);
 			mISDN_l3up(pc, MT_HOLD_ACKNOWLEDGE, l3m);
 			pc->aux_state = AUX_CALL_HELD;
 			break;
 		default:
-			fprintf(stderr, "HOLD_ACK in wrong aux state %d\n", pc->aux_state);
+			eprint("HOLD_ACK in wrong aux state %d\n", pc->aux_state);
 			free_l3_msg(l3m);
 	}
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
@@ -1441,9 +1442,9 @@ l3dss1_hold_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_retrieve_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_retrieve_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	if (!test_bit(FLG_PTP, &pc->l3->ml3.options)) {
+	if (!test_bit(FLG_PTP, &pc->L3->ml3.options)) {
 		if ((pc->state & (VALID_HOLD_STATES_PTMP | SBIT(12))) == 0) { /* not a valid RETRIEVE state for PtMP */
 			if (l3m)
 				free_l3_msg(l3m);
@@ -1454,7 +1455,7 @@ l3dss1_retrieve_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		case AUX_CALL_HELD:
 			break;
 		default:
-			fprintf(stderr, "RETRIEVE_REQ in wrong aux state %d\n", pc->aux_state);
+			eprint("RETRIEVE_REQ in wrong aux state %d\n", pc->aux_state);
 		case AUX_RETRIEVE_IND: /* maybe collition, ignored */
 			if (l3m)
 				free_l3_msg(l3m);
@@ -1467,17 +1468,17 @@ l3dss1_retrieve_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 		l3dss1_message(pc, MT_RETRIEVE);
 	}
 	pc->aux_state = AUX_RETRIEVE_REQ;
-	L3AddTimer(&pc->aux_timer, TRETRIEVE, CC_TRETRIEVE);
+	L3AddTimer(&pc->timer2, TRETRIEVE, CC_TRETRIEVE);
 }
 
 static void
-l3dss1_retrieve_ack_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_retrieve_ack_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	switch(pc->aux_state) {
 		case AUX_RETRIEVE_IND:
 			break;
 		default:
-			fprintf(stderr, "HOLD_REJ in wrong aux state %d\n", pc->aux_state);
+			eprint("HOLD_REJ in wrong aux state %d\n", pc->aux_state);
 			if (l3m)
 				free_l3_msg(l3m);
 			return;
@@ -1490,13 +1491,13 @@ l3dss1_retrieve_ack_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_retrieve_rej_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_retrieve_rej_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	switch(pc->aux_state) {
 		case AUX_RETRIEVE_IND:
 			break;
 		default:
-			fprintf(stderr, "HOLD_REJ in wrong aux state %d\n", pc->aux_state);
+			eprint("HOLD_REJ in wrong aux state %d\n", pc->aux_state);
 			if (l3m)
 				free_l3_msg(l3m);
 			return;
@@ -1510,11 +1511,11 @@ l3dss1_retrieve_rej_req(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 
 
 static void
-l3dss1_retrieve_ind(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_retrieve_ind(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int	ret;
 
-	if (test_bit(FLG_PTP, &pc->l3->ml3.options)) {
+	if (test_bit(FLG_PTP, &pc->L3->ml3.options)) {
 		if ((pc->state & (VALID_HOLD_STATES_PTP | SBIT(12))) == 0) { /* not a valid RETRIEVE state for PtP */
 			l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_NOTCOMPAT_STATE);
 			free_l3_msg(l3m);
@@ -1535,7 +1536,7 @@ l3dss1_retrieve_ind(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 	}
 	switch(pc->aux_state) {
 		case AUX_RETRIEVE_REQ:
-			L3DelTimer(&pc->aux_timer);
+			L3DelTimer(&pc->timer2);
 		case AUX_CALL_HELD:
 			if (!l3m->channel_id) {
 				l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_MANDATORY_IE_MISS);
@@ -1555,7 +1556,7 @@ l3dss1_retrieve_ind(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_retrieve_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_retrieve_ack(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int	ret;
 
@@ -1567,7 +1568,7 @@ l3dss1_retrieve_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 	}
 	switch(pc->aux_state) {
 		case AUX_RETRIEVE_REQ:
-			L3DelTimer(&pc->aux_timer);
+			L3DelTimer(&pc->timer2);
 			if (!l3m->channel_id) {
 				l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
 				free_l3_msg(l3m);
@@ -1577,7 +1578,7 @@ l3dss1_retrieve_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 			pc->aux_state = AUX_IDLE;
 			break;
 		default:
-			fprintf(stderr, "RETRIEVE_ACK in wrong aux state %d\n", pc->aux_state);
+			eprint("RETRIEVE_ACK in wrong aux state %d\n", pc->aux_state);
 			free_l3_msg(l3m);
 	}
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
@@ -1585,7 +1586,7 @@ l3dss1_retrieve_ack(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_retrieve_rej(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_retrieve_rej(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int		ret;
 	unsigned char	cause;
@@ -1607,20 +1608,20 @@ l3dss1_retrieve_rej(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 	}
 	switch(pc->aux_state) {
 		case AUX_RETRIEVE_REQ:
-			L3DelTimer(&pc->aux_timer);
+			L3DelTimer(&pc->timer2);
 			pc->aux_state = AUX_CALL_HELD;
 			break;
 		default:
-			fprintf(stderr, "RETRIEVE_REJ in wrong aux state %d\n", pc->aux_state);
+			eprint("RETRIEVE_REJ in wrong aux state %d\n", pc->aux_state);
 	}
 	pc->aux_state = AUX_IDLE;
 	mISDN_l3up(pc, MT_RETRIEVE_REJECT, l3m);
 }
 
 static void
-l3dss1_thold(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_thold(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	L3DelTimer(&pc->aux_timer);
+	L3DelTimer(&pc->timer2);
 #if 0
 	pc->cause = 102;	/* Timer expiry */
 	pc->para.loc = 0;	/* local */
@@ -1630,9 +1631,9 @@ l3dss1_thold(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_tretrieve(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_tretrieve(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	L3DelTimer(&pc->aux_timer);
+	L3DelTimer(&pc->timer2);
 #if 0
 	pc->cause = 102;	/* Timer expiry */
 	pc->para.loc = 0;	/* local */
@@ -1642,22 +1643,22 @@ l3dss1_tretrieve(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_t302(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_t302(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_INVALID_NUMBER);
 	mISDN_l3up(pc, MT_TIMEOUT, NULL);
 }
 
 static void
-l3dss1_t303(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_t303(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	if (pc->n303 > 0) {
 		pc->n303--;
 		if (pc->t303msg) {
-			struct l3_msg *nl3m = pc->t303msg;;
+			struct l3_msg *nl3m = pc->t303msg;
 
 			if (pc->n303 > 0)
 				increment_refcnt(pc->t303msg);
@@ -1665,7 +1666,7 @@ l3dss1_t303(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 				pc->t303msg = NULL;
 			SendMsg(pc, nl3m, -1);
 		}
-		L3AddTimer(&pc->timer, T303, CC_T303);
+		L3AddTimer(&pc->timer1, T303, CC_T303);
 		return;
 	}
 	if (pc->t303msg)
@@ -1677,20 +1678,20 @@ l3dss1_t303(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_t304(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_t304(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
 	mISDN_l3up(pc, MT_TIMEOUT, NULL);
 }
 
 static void
-l3dss1_t305(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_t305(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int cause;
 	
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	if (pc->cause != NO_CAUSE) {
 		cause = pc->cause;
 	} else {
@@ -1699,48 +1700,48 @@ l3dss1_t305(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 	
 	newl3state(pc, 19);
 	l3dss1_message_cause(pc, MT_RELEASE, cause);
-	L3AddTimer(&pc->timer, T308, CC_T308_1);
+	L3AddTimer(&pc->timer1, T308, CC_T308_1);
 }
 
 static void
-l3dss1_t310(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_t310(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
 	mISDN_l3up(pc, MT_TIMEOUT, NULL);
 }
 
 static void
-l3dss1_t313(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_t313(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
 	mISDN_l3up(pc, MT_TIMEOUT, NULL);
 }
 
 static void
-l3dss1_t308_1(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_t308_1(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	newl3state(pc, 19);
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	l3dss1_message(pc, MT_RELEASE);
-	L3AddTimer(&pc->timer, T308, CC_T308_2);
+	L3AddTimer(&pc->timer1, T308, CC_T308_2);
 }
 
 static void
-l3dss1_t308_2(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_t308_2(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 	mISDN_l3up(pc, MT_TIMEOUT, NULL);
 	release_l3_process(pc);
 }
 
 static void
-l3dss1_t318(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_t318(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 #if 0
 	pc->cause = 102;	/* Timer expiry */
 	pc->para.loc = 0;	/* local */
@@ -1748,13 +1749,13 @@ l3dss1_t318(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 	mISDN_l3up(pc, MT_RESUME_REJECT, NULL);
 	newl3state(pc, 19);
 	l3dss1_message(pc, MT_RELEASE);
-	L3AddTimer(&pc->timer, T308, CC_T308_1);
+	L3AddTimer(&pc->timer1, T308, CC_T308_1);
 }
 
 static void
-l3dss1_t319(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_t319(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 #if 0
 	pc->cause = 102;	/* Timer expiry */
 	pc->para.loc = 0;	/* local */
@@ -1764,7 +1765,7 @@ l3dss1_t319(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
 }
 
 static void
-l3dss1_dl_reset(l3_process_t *pc, u_char pr, struct l3_msg *arg)
+l3dss1_dl_reset(l3_process_t *pc, unsigned int pr, struct l3_msg *arg)
 {
 	struct l3_msg	*l3m = MsgStart(pc, MT_DISCONNECT);
 	unsigned char	c[2];
@@ -1780,7 +1781,7 @@ l3dss1_dl_reset(l3_process_t *pc, u_char pr, struct l3_msg *arg)
 }
 
 static void
-l3dss1_dl_release(l3_process_t *pc, u_char pr, struct l3_msg  *arg)
+l3dss1_dl_release(l3_process_t *pc, unsigned int pr, struct l3_msg  *arg)
 {
 	newl3state(pc, 0);
 #if 0
@@ -1791,23 +1792,23 @@ l3dss1_dl_release(l3_process_t *pc, u_char pr, struct l3_msg  *arg)
 }
 
 static void
-l3dss1_dl_reestablish(l3_process_t *pc, u_char pr, struct l3_msg  *arg)
+l3dss1_dl_reestablish(l3_process_t *pc, unsigned int pr, struct l3_msg  *arg)
 {
-	L3DelTimer(&pc->timer);
-	L3AddTimer(&pc->timer, T309, CC_T309);
-	l3_manager(pc->l3, DL_ESTABLISH_REQ);
+	L3DelTimer(&pc->timer1);
+	L3AddTimer(&pc->timer1, T309, CC_T309);
+	l3_manager(pc->l2if, DL_ESTABLISH_REQ);
 }
 
 static void
-l3dss1_dl_reest_status(l3_process_t *pc, u_char pr, struct l3_msg  *arg)
+l3dss1_dl_reest_status(l3_process_t *pc, unsigned int pr, struct l3_msg  *arg)
 {
-	L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer1);
 
 	l3dss1_status_send(pc, CAUSE_NORMALUNSPECIFIED);
 }
 
 static void
-l3dss1_dl_ignore(l3_process_t *pc, u_char pr, struct l3_msg *l3m)
+l3dss1_dl_ignore(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m)
 		free_l3_msg(l3m);
@@ -1967,6 +1968,8 @@ static struct stateentry manstatelist[] =
         {ALL_STATES,
          DL_RELEASE_IND, l3dss1_dl_release},
         {ALL_STATES,
+         DL_ESTABLISH_IND, l3dss1_dl_ignore},
+        {ALL_STATES,
          DL_ESTABLISH_CNF, l3dss1_dl_ignore},
 	{SBIT(25),
 	 CC_T302, l3dss1_t302},
@@ -2032,14 +2035,14 @@ dss1_fromdown(layer3_t *l3, struct mbuffer *msg)
 	l3_process_t	*proc;
 
 	if (msg->len < 3) {
-		fprintf(stderr, "dss1up frame too short(%d)\n", msg->len);
+		eprint("dss1up frame too short(%d)\n", msg->len);
 		goto freemsg;
 	}
 	if (msg->data[0] != Q931_PD)
 		goto freemsg;
 	ret = parseQ931(msg);
 	if (ret & Q931_ERROR_FATAL) {
-		fprintf(stderr, "dss1up: parse IE error %x\n", ret); 
+		eprint("dss1up: parse IE error %x\n", ret); 
 		goto freemsg;
 	}
 	if (msg->l3h.crlen == 0) {	/* Dummy Callref */
@@ -2061,7 +2064,7 @@ dss1_fromdown(layer3_t *l3, struct mbuffer *msg)
 				/* Setup with wrong CREF flag */
 				goto freemsg;
 			}
-			if (!(proc = create_new_process(l3, msg->l3.pid))) {
+			if (!(proc = create_new_process(l3, msg->addr.channel,msg->l3h.cr, NULL))) {
 				/* Maybe should answer with RELEASE_COMPLETE and
 				 * CAUSE 0x2f "Resource unavailable", but this
 				 * need a new_l3_process too ... arghh
@@ -2073,7 +2076,7 @@ dss1_fromdown(layer3_t *l3, struct mbuffer *msg)
 			// ret = mISDN_l3up(proc, MT_NEW_CR, NULL);
 #if 0
 			if (ret) {
-				fprintf(stderr, "dss1up: cannot register ID(%x)\n",
+				eprint("dss1up: cannot register ID(%x)\n",
 					proc->id);
 				release_l3_process(proc);
 				goto freemsg;
@@ -2102,7 +2105,7 @@ dss1_fromdown(layer3_t *l3, struct mbuffer *msg)
 				 * MT_STATUS is received with call state != 0,
 				 * we must send MT_RELEASE_COMPLETE cause 101
 				 */
-				if ((proc = create_new_process(l3, msg->l3.pid))) {
+				if ((proc = create_new_process(l3, msg->addr.channel,msg->l3h.cr, NULL))) {
 					l3dss1_msg_without_setup(proc, CAUSE_NOTCOMPAT_STATE);
 				}
 			}
@@ -2115,8 +2118,8 @@ dss1_fromdown(layer3_t *l3, struct mbuffer *msg)
 			 * (except MT_SETUP and RELEASE_COMPLETE) is received,
 			 * we must send MT_RELEASE_COMPLETE cause 81 */
 			
-			fprintf(stderr, "We got Message with Invalid Callref\n");
-			if ((proc = create_new_process(l3, msg->l3.pid))) {
+			eprint("We got Message with Invalid Callref\n");
+			if ((proc = create_new_process(l3, msg->addr.channel,msg->l3h.cr, NULL))) {
 				l3dss1_msg_without_setup(proc, CAUSE_INVALID_CALLREF);
 			}
 			goto freemsg;
@@ -2147,8 +2150,6 @@ dss1_fromup(layer3_t *l3, struct l3_msg *l3m)
 	u_int		i;
 	l3_process_t	*proc;
 
-	proc = get_l3process4pid(l3, l3m->pid);
-	
 	if (l3m->pid == MISDN_PID_DUMMY) {
 		if (l3m->type == MT_FACILITY) {
 			l3dss1_facility_req(&l3->dummy, l3m->type, l3m);
@@ -2164,15 +2165,10 @@ dss1_fromup(layer3_t *l3, struct l3_msg *l3m)
 		}
 		return -EINVAL;
 	}
-#if 0 /* was soll das ?? */
-	if (!proc && (hh->prim == (MT_RELEASE_COMPLETE | REQUEST)) ) {
-		/* crich: */
-		SendMsg(l3->dummy, l3m, -1);
-		return 0;
-	}
-#endif
+
+	proc = get_l3process4pid(l3, l3m->pid);
 	if (!proc) {
-		fprintf(stderr, "mISDN dss1 fromup without proc pr=%04x dinfo(%x)\n", l3m->type, l3m->pid);
+		eprint("mISDN dss1 fromup without proc pr=%04x dinfo(%x)\n", l3m->type, l3m->pid);
 		return -EINVAL;
 	}
 	for (i = 0; i < DOWNSLLEN; i++)
@@ -2192,14 +2188,14 @@ dss1man(l3_process_t *proc, u_int pr, struct l3_msg *l3m)
 	u_int	i;
 
 	if (!proc) {
-		fprintf(stderr, "mISDN dss1man without proc pr=%04x\n", pr);
+		eprint("mISDN dss1man without proc pr=%04x\n", pr);
 		return -EINVAL;
 	}
 	for (i = 0; i < MANSLLEN; i++)
 		if ((pr == manstatelist[i].primitive) && ((1 << proc->state) & manstatelist[i].state))
 			break;
 	if (i == MANSLLEN) {
-		fprintf(stderr, "cr %x dss1man state %d prim %#x unhandled\n",
+		eprint("cr %x dss1man state %d prim %#x unhandled\n",
 			proc->pid & 0x7fff, proc->state, pr);
 		if (l3m)
 			free_l3_msg(l3m);
@@ -2215,6 +2211,7 @@ dss1_user_init(layer3_t *l3)
 	l3->from_l2 = dss1_fromdown;
 	l3->to_l3 = dss1_fromup;
 	l3->p_mgr = dss1man;
+	test_and_set_bit(FLG_USER, &l3->ml3.options);
 }
 
 struct l3protocol	dss1user = {

@@ -32,6 +32,7 @@
 /* T310 can be between 30-120 Seconds. We use 120 Seconds so the user can hear
    the inband messages */
 #define T310	120000
+#define T312	6000
 #define T313	4000
 #define T318	4000
 #define T319	4000
@@ -50,6 +51,7 @@
 #define CC_T308_2	0x030802
 #define CC_T309		0x030901
 #define CC_T310		0x031001
+#define CC_T312		0x031201
 #define CC_T313		0x031301
 #define CC_T318		0x031801
 #define CC_T319		0x031901

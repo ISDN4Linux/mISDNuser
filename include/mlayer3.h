@@ -104,6 +104,7 @@ struct mlayer3 {
  * Layer3 protocols
  */
 #define	L3_PROTOCOL_DSS1_USER	0x101
+#define L3_PROTOCOL_DSS1_NET	0x102
 
 /*
  * Layer3 property Flags
@@ -113,8 +114,7 @@ struct mlayer3 {
  */
  
 #define FLG_PTP		1
-#define FLG_USER	2
-#define FLG_NETWORK	3
+#define FLG_NET_HOLD	2
 
 /* 
  * Layer3 <----> Application additional message types
@@ -134,10 +134,13 @@ struct mlayer3 {
  */
 #define MISDN_PID_DUMMY		0x81000000
 #define MISDN_PID_GLOBAL	0x82000000
+#define MISDN_PID_MASTER	0xFF000000
 #define MISDN_PID_CRTYPE_MASK	0xFF000000
 #define MISDN_PID_CID_MASK	0x00FF0000
 #define MISDN_PID_CR_MASK	0xFF00FFFF
 #define MISDN_PID_CRVAL_MASK	0x0000FFFF
+#define MISDN_PID_CR_FLAG	0x00008000
+#define MISDN_CES_MASTER	0x0000FF00
 
 /*
  * init layer3 statemachines and chaches
@@ -172,6 +175,9 @@ extern struct l3_msg	*alloc_l3_msg(void);
 extern void		free_l3_msg(struct l3_msg *);
 extern int		add_layer3_ie(struct l3_msg *, unsigned char, int, unsigned char *);
 extern void		increment_refcnt(struct l3_msg *);
+
+extern	int		mISDN_debug_init(unsigned int, char *, char *, char *);
+extern	void		mISDN_debug_close(void);
 
 #ifdef __cplusplus
 }

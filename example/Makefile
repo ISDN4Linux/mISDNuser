@@ -1,5 +1,5 @@
 LIBINCL	:= $(INCLUDEDIR)/mISDNlib.h
-PROGS	:= testcon loghex testlayer3
+PROGS	:= testcon loghex testlayer3 cleanl2
 # PROGS   := testcon testnet loadfirm logger
 
 all: $(PROGS)
@@ -8,7 +8,7 @@ mISDNLIB := ../layer3/libmisdn.so
 LIBPTHREAD := -lpthread
 LIBMISDN := -lmisdn
 
-testlayer3 :	LDFLAGS += -L $(LIBDIR) $(LIBMISDN) $(LIBPTHREAD)
+testlayer3 :	LDFLAGS += -L $(LIBDIR) $(LIBPTHREAD) $(LIBMISDN)
 
 CC := gcc -g $(CFLAGS)
 
@@ -26,6 +26,8 @@ testcon.o : testcon.c ../include/q931.h
 testlayer3.o: testlayer3.c ../include/q931.h ../include/mlayer3.h
 
 loghex: loghex.o
+
+cleanl2: cleanl2.o
 
 clean:
 	rm -f *.o *.lo *~ DEADJOE

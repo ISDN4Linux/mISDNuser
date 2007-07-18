@@ -125,7 +125,11 @@
  * Cause location
  */
 #define CAUSE_LOC_USER		0
-#define CAUSE_LOC_PNET_LOCUSER	1
+#define CAUSE_LOC_PRVN_LOCUSER	1
+#define CAUSE_LOC_PUBN_LOCUSER	2
+#define CAUSE_LOC_TRANSIT	3
+#define CAUSE_LOC_PUBN_RMTUSER	4
+#define CAUSE_LOC_PRVN_RMTUSER	5
 
 /*
  * Cause values
