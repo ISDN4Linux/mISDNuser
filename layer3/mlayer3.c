@@ -36,6 +36,7 @@ init_layer3(int nr)
 	init_mbuffer(nr);
 	mISDNl3New();
 	__init_done = 1;
+	mISDN_debug_init(0, NULL, NULL, NULL);
 }
 
 void
@@ -47,8 +48,8 @@ cleanup_layer3(void)
 }
 
 /* for now, maybe get this via some register prortocol in future */
-extern struct l3protocol       dss1user;
-
+extern struct l3protocol	dss1user;
+extern struct l3protocol	dss1net;
 /*
  * open a layer3 stack
  * parameter1 - device id
@@ -64,6 +65,10 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	int			fd, cnt, ret;
 	struct mISDN_devinfo	devinfo;
 
+	if (__init_done == 0) {
+		fprintf(stderr, "You should call init_layer3(nr of message cache entres) first\n"); 
+		init_layer3(10);
+	}
 	fd = socket(AF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (fd < 0) {
 		fprintf(stderr,"could not open socket %s\n", strerror(errno));
@@ -109,20 +114,32 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 		}
 		dss1user.init(l3);
 		break;
+	case L3_PROTOCOL_DSS1_NET:
+		if (!(devinfo.Dprotocols & (1 << ISDN_P_NT_S0))) {
+			fprintf(stderr,"protocol L3_PROTOCOL_DSS1_NET device do not support ISDN_P_NT_S0\n");
+			goto fail;
+		}
+		fd = socket(AF_ISDN, SOCK_DGRAM, ISDN_P_LAPD_NT);
+		if (fd < 0) {
+			fprintf(stderr,"could not open ISDN_P_LAPD_NT socket %s\n", strerror(errno));
+			goto fail;
+		}
+		dss1net.init(l3);
+		break;
 	default:
 		fprintf(stderr,"protocol %x not supported\n", proto);
 		goto fail;
 	}
 
-	l3->l2addr.family = AF_ISDN;
-	l3->l2addr.dev = dev;
-	l3->l2addr.channel = 0;
-	l3->l2addr.sapi = 0;
+	l3->l2master.l2addr.family = AF_ISDN;
+	l3->l2master.l2addr.dev = dev;
+	l3->l2master.l2addr.channel = 0;
+	l3->l2master.l2addr.sapi = 0;
 	if (test_bit(FLG_PTP, &l3->ml3.options))
-		l3->l2addr.tei = 0;
+		l3->l2master.l2addr.tei = 0;
 	else
-		l3->l2addr.tei = 127;
-	ret = bind(fd, (struct sockaddr *)&l3->l2addr, sizeof(l3->l2addr));
+		l3->l2master.l2addr.tei = 127;
+	ret = bind(fd, (struct sockaddr *)&l3->l2master.l2addr, sizeof(l3->l2master.l2addr));
 	if (ret < 0) {
 		fprintf(stderr,"could not bind socket for device %d:%s\n", dev, strerror(errno));
 		goto fail;

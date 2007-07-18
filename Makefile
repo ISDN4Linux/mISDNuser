@@ -22,7 +22,7 @@ export LIBDIR
 
 CFLAGS:= -g -Wall -I $(INCLUDEDIR)
 
-LDFLAGS:= -g -L $(LIBDIR) 
+LDFLAGS:= -g -L $(LIBDIR)
 
 #disable this if your system does not support PIC (position independent code)
 ifeq ($(shell uname -m),x86_64)

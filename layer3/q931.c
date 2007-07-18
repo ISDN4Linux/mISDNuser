@@ -87,7 +87,7 @@ parseQ931(struct mbuffer *mb) {
 		mb->l3h.cr |= *p++;
 	} else if (mb->l3h.crlen == 1)
 		if (mb->l3h.cr & 0x80) {
-			mb->l3h.cr |= 0x8000;
+			mb->l3h.cr |= MISDN_PID_CR_FLAG;
 			mb->l3h.cr &= 0x807F;
 		}
 	mb->l3.pid = mb->addr.channel << 16;
@@ -101,6 +101,7 @@ parseQ931(struct mbuffer *mb) {
 		return Q931_ERROR_LEN;
 
 	mb->l3h.type = *__msg_pull(mb, 1);
+	mb->l3.type = mb->l3h.type;
 	codeset = maincodeset = 0;
 	while (mb->len) {
 		p = __msg_pull(mb, 1);
@@ -210,7 +211,7 @@ assembleQ931(l3_process_t *pc, struct l3_msg *l3m)
 	if (pc->pid == MISDN_PID_DUMMY) {
 		mb->l3h.crlen = 0;
 	} else {
-		if (pc->l3->ml3.nr_bchannel > 2)
+		if (pc->L3->ml3.nr_bchannel > 2)
 			mb->l3h.crlen = 2;
 		else
 			mb->l3h.crlen = 1;
@@ -218,14 +219,12 @@ assembleQ931(l3_process_t *pc, struct l3_msg *l3m)
 	}
 	mb->l3h.type = l3m->type & 0xff;
 	*msg_put(mb, 1) = Q931_PD; /* TODO: be flexible for national */
-	if (mb->l3h.crlen > 2)
-		return Q931_ERROR_CREF;
 	*msg_put(mb, 1) = mb->l3h.crlen;
 	if (mb->l3h.crlen == 2) {
 		*msg_put(mb, 1) = 0x80 ^ ((mb->l3h.cr >> 8) & 0xff);
 		*msg_put(mb, 1) = mb->l3h.cr & 0xff;
 	} else if (mb->l3h.crlen == 1) {
-		if (mb->l3h.cr & 0x8000)
+		if (mb->l3h.cr & MISDN_PID_CR_FLAG)
 			*msg_put(mb, 1) = mb->l3h.cr & 0x7f;
 		else
 			*msg_put(mb, 1) = 0x80 | (mb->l3h.cr & 0x7f);

@@ -39,6 +39,8 @@ char *pname;
 	fprintf(stderr,"                    5 send and recive voice early B connect\n");
 	fprintf(stderr,"                    6 loop back voice\n");
 	fprintf(stderr,"  -n <phone nr>   Phonenumber to dial\n");
+	fprintf(stderr,"  -N              NT Mode\n");
+	fprintf(stderr,"  -m <msn>	  MSN (default 123) NT mode only\n");
 	fprintf(stderr,"  -vn             Printing debug info level n\n");
 	fprintf(stderr,"\n");
 }
@@ -47,6 +49,8 @@ typedef struct _devinfo {
 	int			cardnr;
 	int			func;
 	char			phonenr[32];
+	char			msn[32];
+	char			net_nr[32];
 	pthread_mutex_t		wait;
 	pthread_t		bworker;
 	struct mlayer3		*layer3;
@@ -65,6 +69,7 @@ typedef struct _devinfo {
 
 #define FLG_SEND_TONE		0x0001
 #define FLG_SEND_DATA		0x0002
+#define FLG_NT_MODE		0x0004
 #define FLG_BCHANNEL_SETUP	0x0010
 #define FLG_BCHANNEL_DOACTIVE	0x0020
 #define FLG_BCHANNEL_ACTIVE	0x0040
@@ -146,8 +151,54 @@ int send_data(devinfo_t *di) {
 	return ret;
 }
 
+void do_bconnection(devinfo_t *);
+
+int setup_bchannel(devinfo_t *di) {
+	int			ret;
+	struct sockaddr_mISDN	addr;
+
+	if (di->flag & FLG_BCHANNEL_SETUP)
+		return 1;
+	if ((di->used_bchannel < 1) || (di->used_bchannel > 2)) {
+		fprintf(stdout, "wrong channel %d\n", di->used_bchannel);
+		return 2;
+	}
+	di->bchan = socket(AF_ISDN, SOCK_DGRAM, di->bproto);
+	if (di->bchan < 0) {
+		fprintf(stdout, "could not open bchannel socket %s\n", strerror(errno));
+		return 3;
+	}
+
+	if (di->bchan > di->nds - 1)
+		di->nds = di->bchan + 1;
+
+	ret = fcntl(di->bchan, F_SETFL, O_NONBLOCK);
+	if (ret < 0) {
+		fprintf(stdout, "fcntl error %s\n", strerror(errno));
+		return 4;
+	}
+
+	addr.family = AF_ISDN;
+	addr.dev = di->cardnr - 1;
+	addr.channel = di->used_bchannel;
+
+	ret = bind(di->bchan, (struct sockaddr *) &addr, sizeof(addr));
+
+	if (ret < 0) {
+		fprintf(stdout, "could not bind bchannel socket %s\n", strerror(errno));
+		return 5;
+	}
+	ret = pthread_create(&di->bworker, NULL, (void *)do_bconnection, (void *)di);
+	if (ret) {
+		fprintf(stdout, "%s cannot start bworker thread  %s\n", __FUNCTION__, strerror(errno));
+	} else
+		di->flag |= FLG_BCHANNEL_SETUP;
+		
+	return ret;
+}
+
 int send_SETUP(devinfo_t *di, int SI, char *PNr) {
-	unsigned char		nr[64], bearer[4];
+	unsigned char		nr[64], bearer[4], cid[4];
 	unsigned char		*np,*p;
 	int			ret, l;
 	struct	l3_msg		*l3m;
@@ -174,6 +225,12 @@ int send_SETUP(devinfo_t *di, int SI, char *PNr) {
 		bearer[1] = 0x90;	/* Circuit-Mode 64kbps                  */
 	}
 	add_layer3_ie(l3m, IE_BEARER, l, bearer);
+	if (di->flag & FLG_NT_MODE) {
+		di->used_bchannel = 1;
+		cid[0] = 0x80; /* channel prefered */
+		cid[0] |= di->used_bchannel;
+		add_layer3_ie(l3m, IE_CHANNEL_ID, 1, cid);
+	}
 	np = (unsigned char *)PNr;
 	l = strlen(PNr) + 1;
 	p = nr;
@@ -486,44 +543,106 @@ void do_bconnection(devinfo_t *di) {
 	return;
 }
 
-int setup_bchannel(devinfo_t *di) {
-	int			ret;
-	struct sockaddr_mISDN	addr;
+int
+number_match(char *cur, char *msn, int complete) {
 
-	if ((di->used_bchannel < 1) || (di->used_bchannel > 2)) {
-		fprintf(stdout, "wrong channel %d\n", di->used_bchannel);
-		return 1;
+	if (VerifyOn > 2)
+		fprintf(stdout,"numbers: %s/%s\n", cur, msn);
+	if (complete) {
+		if (!strcmp(cur, msn))
+			return 0;
+		else
+			return 2;
 	}
-	di->bchan = socket(AF_ISDN, SOCK_DGRAM, di->bproto);
-	if (di->bchan < 0) {
-		fprintf(stdout, "could not open bchannel socket %s\n", strerror(errno));
-		return 2;
+	if (strlen(cur) >= strlen(msn)) {
+		if (!strncmp(cur, msn, strlen(msn)))
+			return 0;
+		else
+			return 2;
 	}
-
-	if (di->bchan > di->nds - 1)
-		di->nds = di->bchan + 1;
-
-	ret = fcntl(di->bchan, F_SETFL, O_NONBLOCK);
-	if (ret < 0) {
-		fprintf(stdout, "fcntl error %s\n", strerror(errno));
-		return 3;
+	while(*cur) {
+		if (*cur++ != *msn++)
+			return 2;
 	}
+	return 1;
+}
 
-	addr.family = AF_ISDN;
-	addr.dev = di->cardnr - 1;
-	addr.channel = di->used_bchannel;
+int send_connect(devinfo_t *di) {
+	time_t		sec;
+	struct tm	*t;
+	unsigned char	c[5];
+	struct l3_msg	*l3m;
+	int		ret;
 
-	ret = bind(di->bchan, (struct sockaddr *) &addr, sizeof(addr));
-
-	if (ret < 0) {
-		fprintf(stdout, "could not bind bchannel socket %s\n", strerror(errno));
-		return 4;
+	sec = time(NULL);
+	t = localtime(&sec);
+	l3m =  alloc_l3_msg();
+	if (!l3m) {
+		fprintf(stdout, "cannot allocate l3 msg struct\n");
+		return -ENOMEM;
 	}
-	ret = pthread_create(&di->bworker, NULL, (void *)do_bconnection, (void *)di);
-	if (ret) {
-		fprintf(stdout, "%s cannot start bworker thread  %s\n", __FUNCTION__, strerror(errno));
-	}
+	c[0] = t->tm_year;
+	c[1] = t->tm_mon + 1;
+	c[2] = t->tm_mday;
+	c[3] = t->tm_hour;
+	c[4] = t->tm_min;
+	add_layer3_ie(l3m, IE_DATE, 5, c);
+	ret = di->layer3->to_layer3(di->layer3, MT_CONNECT, di->pid, l3m);
 	return ret;
+}
+
+int answer_call(devinfo_t *di, struct l3_msg *l3m) {
+	unsigned char		c[4];
+	unsigned char		*np,*p;
+	int			ret, l, mt;
+	struct	l3_msg		*nl3m;
+
+	nl3m =  alloc_l3_msg();
+	if (!nl3m) {
+		fprintf(stdout, "cannot allocate l3 msg struct\n");
+		return -ENOMEM;
+	}
+	if (l3m->called_nr) {
+		p = l3m->called_nr;
+		l = *p++;
+		np = (unsigned char *)di->net_nr;
+		if (l > 1) {
+			p++;
+			l--;
+			while(l--)
+				*np++ = *p++;
+			*np = 0;
+		}
+		ret = number_match(di->net_nr, di->msn, l3m->sending_complete);
+		if (ret == 0) {
+			mt = MT_CALL_PROCEEDING;
+		} else if (ret == 1) {
+			mt = MT_SETUP_ACKNOWLEDGE;
+		} else {
+			/* Number cannot match */
+			mt = MT_RELEASE_COMPLETE;
+		}
+	} else {
+		mt = MT_SETUP_ACKNOWLEDGE;
+	}
+	if (mt == MT_RELEASE_COMPLETE) {
+		c[0] = 0x80 | CAUSE_LOC_PRVN_RMTUSER;
+		c[1] = 0x80 | CAUSE_CALL_REJECTED;
+		add_layer3_ie(nl3m, IE_CAUSE, 2, c);
+	} else {
+		c[0] = 0x80; /* channel prefered */
+		c[0] |= di->used_bchannel;
+		add_layer3_ie(nl3m, IE_CHANNEL_ID, 1, c);
+	}
+	ret = di->layer3->to_layer3(di->layer3, mt, di->pid, nl3m);
+	if (ret < 0) {
+		fprintf(stdout, "send to_layer3  error  %s\n", strerror(errno));
+		return ret;
+	}
+	if (mt == MT_CALL_PROCEEDING)
+		return 1;
+	else
+		return 0;
 }
 
 int
@@ -533,55 +652,215 @@ setup_channel(devinfo_t *di, struct l3_msg *l3m)
 
 	if (di->flag & FLG_CALL_ACTIVE)
 		return 0;
-	if (l3m->channel_id) {
-		if (l3m->channel_id[0] == 1 && !(l3m->channel_id[1] & 0x60)) {
-			di->used_bchannel = l3m->channel_id[1]  & 0x3;
-		} else {
-			fprintf(stdout,"wrong channel id IE %02x %02x\n", l3m->channel_id[0], l3m->channel_id[1]);
+	if (di->flag & FLG_NT_MODE) {
+		di->used_bchannel = 1;
+		ret = answer_call(di, l3m);
+		if (ret < 0) {
+			fprintf(stdout, "answer_call return %d\n", ret);
 			return 1;
 		}
 		di->flag |= FLG_CALL_ACTIVE;
-		if (di->used_bchannel < 1 || di->used_bchannel > 2) {
-			fprintf(stdout,"got no valid bchannel nr %d\n", di->used_bchannel);
-			return 2;
+		if (!ret) {
+			return 0;
+		}
+	} else {
+		if (l3m->channel_id) {
+			if (l3m->channel_id[0] == 1 && !(l3m->channel_id[1] & 0x60)) {
+				di->used_bchannel = l3m->channel_id[1]  & 0x3;
+			} else {
+				fprintf(stdout,"wrong channel id IE %02x %02x\n", l3m->channel_id[0], l3m->channel_id[1]);
+				return 2;
+			}
+			di->flag |= FLG_CALL_ACTIVE;
+			if (di->used_bchannel < 1 || di->used_bchannel > 2) {
+				fprintf(stdout,"got no valid bchannel nr %d\n", di->used_bchannel);
+				return 3;
+			}
+		} else {
+			fprintf(stdout,"got no channel_id IE\n");
+			return 4;
+		}
+	}
+	switch (di->func) {
+		case 5:
+			di->flag |= FLG_BCHANNEL_EARLY;
+		case 0:
+		case 1:
+		case 2:
+		case 3:
+		case 4:
+			ret = setup_bchannel(di);
+			if (ret) {
+				fprintf(stdout,"error %d on setup_bchannel\n", ret);
+				return 5;
+			}
+			if (di->flag & FLG_BCHANNEL_EARLY) {
+				ret = activate_bchan(di);
+				if (!ret) {
+					fprintf(stdout,"error on activate_bchan\n");
+					return 6;
+				}
+			}
+			break;
+		case 6:
+			di->flag |= FLG_BCHANNEL_SETUP;
+			break;
+	}
+	if (di->flag & FLG_NT_MODE) {
+		ret = send_connect(di);
+		if (ret) {
+			fprintf(stdout, "send to_layer3  error  %s\n", strerror(errno));
+			return 7;
+		}
+		if (!(di->flag & FLG_BCHANNEL_EARLY)) {
+			ret = activate_bchan(di);
+			if (!ret) {
+				fprintf(stdout,"error on activate_bchan\n");
+				return 8;
+			}
 		}
 		switch (di->func) {
-			case 5:
-				di->flag |= FLG_BCHANNEL_EARLY;
-			case 0:
-			case 1:
-			case 2:
-			case 3:
-			case 4:
-				ret = setup_bchannel(di);
-				if (!ret)
-					di->flag |= FLG_BCHANNEL_SETUP;
-				else {
-					fprintf(stdout,"error %d on setup_bchannel\n", ret);
-					return 2;
-				}
-				if (di->flag & FLG_BCHANNEL_EARLY) {
-					ret = activate_bchan(di);
-					if (!ret) {
-						fprintf(stdout,"error on activate_bchan\n");
-						return 3;
-					}
-				}
-				break;
-			case 6:
-				di->flag |= FLG_BCHANNEL_SETUP;
-				break;
+		case 0:
+		case 2:
+		case 5:
+			if (di->play > -1)
+				play_msg(di);
+			break;
+		case 1:
+			/* send next after 2 sec */
+			di->timeout = 2;
+			di->flag |= FLG_SEND_TONE;
+			break;
+		case 3:
+		case 4:
+			/* setup B after 1 sec */
+			di->timeout = 1;
+			break;
+#ifdef NOTYET
+		case 6:
+			do_hw_loop(di);
+			break;
+#endif
 		}
+	} else {
 		if (!(di->flag & FLG_CALL_ORGINATE)) {
 			ret = di->layer3->to_layer3(di->layer3, MT_CONNECT, di->pid, NULL);
 			if (ret < 0) {
 				fprintf(stdout, "sendto error  %s\n", strerror(errno));
-				return 4;
+				return 9;
 			}
 		}
+	}
+	
+	return 0;
+}
+
+int check_number(devinfo_t *di, struct l3_msg *l3m) {
+	unsigned char		*np,*p, c[2];
+	int			ret, l, mt;
+	struct	l3_msg		*nl3m;
+
+	if (l3m->called_nr) {
+		p = l3m->called_nr;
+		l = *p++;
+		np = (unsigned char *)di->net_nr;
+		np += strlen(di->net_nr);
+		if (l > 1) {
+			p++;
+			l--;
+			while(l--)
+				*np++ = *p++;
+			*np = 0;
+		}
+		ret = number_match(di->net_nr, di->msn, l3m->sending_complete);
+		if (ret == 0) {
+			mt = MT_CALL_PROCEEDING;
+		} else if (ret == 1) {
+			return 0;
+		} else {
+			/* Number cannot match */
+			mt = MT_DISCONNECT;
+			fprintf(stdout, "call rejected\n");
+		}
 	} else {
-		fprintf(stdout,"got no channel_id IE\n");
-		return 5;
+		return 0;
+	}
+	nl3m =  alloc_l3_msg();
+	if (!nl3m) {
+		fprintf(stdout, "cannot allocate l3 msg struct\n");
+		return -ENOMEM;
+	}
+	if (mt == MT_DISCONNECT) {
+		c[0] = 0x80 | CAUSE_LOC_PRVN_RMTUSER;
+		c[1] = 0x80 | CAUSE_CALL_REJECTED;
+		add_layer3_ie(nl3m, IE_CAUSE, 2, c);
+	}
+	ret = di->layer3->to_layer3(di->layer3, mt, di->pid, nl3m);
+	if (ret < 0) {
+		fprintf(stdout, "send to_layer3  error  %s\n", strerror(errno));
+		return ret;
+	}
+	if (mt == MT_DISCONNECT)
+		return 0;
+	switch (di->func) {
+		case 5:
+			di->flag |= FLG_BCHANNEL_EARLY;
+		case 0:
+		case 1:
+		case 2:
+		case 3:
+		case 4:
+			ret = setup_bchannel(di);
+			if (ret) {
+				fprintf(stdout,"error %d on setup_bchannel\n", ret);
+				return 5;
+			}
+			if (di->flag & FLG_BCHANNEL_EARLY) {
+				ret = activate_bchan(di);
+				if (!ret) {
+					fprintf(stdout,"error on activate_bchan\n");
+					return 6;
+				}
+			}
+			break;
+		case 6:
+			di->flag |= FLG_BCHANNEL_SETUP;
+			break;
+	}
+	ret = send_connect(di);
+	if (ret) {
+		fprintf(stdout, "send to_layer3  error  %s\n", strerror(errno));
+			return 1;
+		}
+	if (!(di->flag & FLG_BCHANNEL_EARLY)) {
+		ret = activate_bchan(di);
+		if (!ret) {
+			fprintf(stdout,"error on activate_bchan\n");
+			return 2;
+		}
+	}
+	switch (di->func) {
+	case 0:
+	case 2:
+	case 5:
+		if (di->play > -1)
+			play_msg(di);
+		break;
+	case 1:
+		/* send next after 2 sec */
+		di->timeout = 2;
+		di->flag |= FLG_SEND_TONE;
+		break;
+	case 3:
+	case 4:
+		/* setup B after 1 sec */
+		di->timeout = 1;
+		break;
+#ifdef NOTYET
+	case 6:
+		do_hw_loop(di);
+		break;
+#endif
 	}
 	return 0;
 }
@@ -591,12 +870,25 @@ int do_dchannel(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, struct l
 	devinfo_t		*di = l3->private;
 	int			ret;
 
-	if (VerifyOn>4)
+	if (VerifyOn>3)
 		fprintf(stdout,"do_dchannel: L3 cmd(%x) pid(%x)\n",
 			cmd, pid);
 	switch (cmd) {
 	case MT_ASSIGN:
-		di->pid = pid;
+		if (!di->pid) {
+			di->pid = pid;
+			if (VerifyOn > 2)
+				fprintf(stdout,"register pid %x\n", pid);
+		} else if ((di->flag & FLG_NT_MODE) && (di->flag & FLG_CALL_ORGINATE)) {
+			if (((di->pid & MISDN_PID_CRTYPE_MASK) == MISDN_PID_MASTER) &&
+			    ((di->pid & MISDN_PID_CRVAL_MASK) == (pid & MISDN_PID_CRVAL_MASK))) {
+				if (VerifyOn > 2)
+					fprintf(stdout,"select pid %x for %x\n", pid, di->pid);
+				di->pid = pid;
+			} else
+				fprintf(stdout,"got MT_ASSIGN for pid %x but already have pid %x\n", pid, di->pid);
+		} else
+			fprintf(stdout,"got MT_ASSIGN for pid %x but already have pid %x\n", pid, di->pid);
 		return 0;
 	case MT_SETUP:
 		if (!(di->flag & FLG_CALL_ORGINATE)) {
@@ -616,10 +908,19 @@ int do_dchannel(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, struct l
 		goto free_msg;
 	}
 	if (pid != di->pid) {
-		fprintf(stdout,"got message with pid(%x) but not %x\n", pid, di->pid);
-		if (l3m)
-			free_l3_msg(l3m);
-		return 0;
+		if (di->flag & FLG_NT_MODE) {
+			if ((di->flag & FLG_CALL_ORGINATE) && ((di->pid & MISDN_PID_CRTYPE_MASK) == MISDN_PID_MASTER) &&
+			    ((di->pid & MISDN_PID_CRVAL_MASK) == (pid & MISDN_PID_CRVAL_MASK))) {
+				if (VerifyOn > 2)
+					fprintf(stdout,"got message (%x) with pid(%x) for %x\n", cmd, pid, di->pid);
+			} else {
+				fprintf(stdout,"got message (%x) with pid(%x) but not %x\n", cmd, pid, di->pid);
+				goto free_msg;
+			}
+		} else {
+			fprintf(stdout,"got message (%x) with pid(%x) but not %x\n", cmd, pid, di->pid);
+			goto free_msg;
+		}
 	}
 	switch (cmd) {
 	case MT_FREE:
@@ -630,15 +931,34 @@ int do_dchannel(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, struct l
 	case MT_SETUP_ACKNOWLEDGE:
 	case MT_CALL_PROCEEDING:
 	case MT_ALERTING:
-		if (di->flag & FLG_CALL_ORGINATE) {
-			if (!(di->flag & FLG_CALL_ACTIVE)) {
-			   	ret = setup_channel(di, l3m);
-				if (ret) {
-					fprintf(stdout,"setup_channel returned error %d\n", ret);
-					di->layer3->to_layer3(di->layer3, MT_RELEASE_COMPLETE, di->pid, NULL);
-					di->flag |= FLG_STOP;
+		if (di->flag & FLG_NT_MODE) {
+			if (di->flag & FLG_CALL_ORGINATE) {
+				ret = setup_bchannel(di);
+				if (ret == 1) {
+					pthread_mutex_unlock(&di->wait);
+				} else if (ret) {
+					fprintf(stdout, "setup Bchannel error %d\n", ret);
 				}
-				pthread_mutex_unlock(&di->wait);
+			}
+		} else {
+			if (di->flag & FLG_CALL_ORGINATE) {
+				if (!(di->flag & FLG_CALL_ACTIVE)) {
+					ret = setup_channel(di, l3m);
+					if (ret) {
+						fprintf(stdout,"setup_channel returned error %d\n", ret);
+						di->layer3->to_layer3(di->layer3, MT_RELEASE_COMPLETE, di->pid, NULL);
+						di->flag |= FLG_STOP;
+					}
+					pthread_mutex_unlock(&di->wait);
+				}
+			}
+		}
+		break;
+	case MT_INFORMATION:
+		if (di->flag & FLG_NT_MODE) {
+			ret = check_number(di, l3m);
+			if (ret) {
+				fprintf(stdout,"setup_channel returned error %d\n", ret);
 			}
 		}
 		break;
@@ -766,7 +1086,7 @@ int do_setup(devinfo_t *di) {
 	int		ret;
 	struct timeval	tv;
 	struct timespec	ts;
-	unsigned int	prop;
+	unsigned int	prop, protocol;
 
 	switch (di->func) {
 		case 0:
@@ -807,8 +1127,12 @@ int do_setup(devinfo_t *di) {
 			return 1;
 	}
 	init_layer3(4);
-	prop = 1 << FLG_USER;
-	di->layer3 = open_layer3(di->cardnr - 1, L3_PROTOCOL_DSS1_USER, prop , do_dchannel, di);
+	if (di->flag & FLG_NT_MODE) {
+		protocol = L3_PROTOCOL_DSS1_NET;
+	} else {
+		protocol = L3_PROTOCOL_DSS1_USER;
+	}
+	di->layer3 = open_layer3(di->cardnr - 1, protocol, prop , do_dchannel, di);
 	if (!di->layer3) {
 		fprintf(stdout, "cannot open layer3\n");
 		return 2;
@@ -875,8 +1199,7 @@ char *argv[];
 	strcpy(FileName, "test_file");
 	memset(&mISDN, 0, sizeof(mISDN));
 	mISDN.cardnr = 1;
-	mISDN.func = 0;
-	mISDN.phonenr[0] = 0;
+	strcpy(mISDN.msn, "123");
 	if (argc<1) {
 		fprintf(stderr,"Error: Not enough arguments please check\n");
 		usage(argv[0]);
@@ -903,6 +1226,9 @@ char *argv[];
 							mISDN.func=atol(&argv[aidx][2]);
 						}
 						break;
+					case 'N':
+						mISDN.flag |= FLG_NT_MODE;
+						break;
 					case 'n':
 					        if (!argv[aidx][2]) {
 					        	idx = 0;
@@ -912,6 +1238,20 @@ char *argv[];
 						}
 						if (aidx<=argc) {
 							strcpy(mISDN.phonenr, &argv[aidx][idx]);
+						} else {
+							fprintf(stderr," Switch %c without value\n",sw);
+							exit(1);
+						}
+						break;
+					case 'm':
+					        if (!argv[aidx][2]) {
+					        	idx = 0;
+							aidx++;
+						} else {
+							idx=2;
+						}
+						if (aidx<=argc) {
+							strcpy(mISDN.msn, &argv[aidx][idx]);
 						} else {
 							fprintf(stderr," Switch %c without value\n",sw);
 							exit(1);
@@ -949,6 +1289,8 @@ char *argv[];
 	close(err);
 	sprintf(FileNameOut,"%s.out",FileName);
 	sprintf(FileName,"%s.in",FileName);
+	if (VerifyOn > 2)
+		mISDN_debug_init(0xffffffff, "testlayer3.debug", "testlayer3.warn", "testlayer3.error");
 	if (0>(mISDN.save = open(FileName, O_WRONLY|O_CREAT|O_TRUNC,S_IRWXU))) {
 		printf("TestmISDN cannot open %s due to %s\n",FileName,
 			strerror(errno));
@@ -970,5 +1312,6 @@ char *argv[];
 		close(mISDN.play);
 	if (mISDN.bchan > 0)
 		close(mISDN.bchan);
+	mISDN_debug_close();
 	return 0;
 }

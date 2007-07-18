@@ -19,6 +19,7 @@
 #include <string.h>
 #include "mbuffer.h"
 #include "helper.h"
+#include "debug.h"
 
 static	struct mqueue	free_queue_l2, free_queue_l3;
 static	int	Max_Cache;
@@ -90,7 +91,7 @@ _new_mbuffer(int typ)
 	}
 	return(m);
 err:
-	fprintf(stderr, "%s: no mem for mbuffer\n", __FUNCTION__);
+	eprint("%s: no mem for mbuffer\n", __FUNCTION__);
 	return(NULL);
 }
 
@@ -126,16 +127,17 @@ free_mbuffer(struct mbuffer *m) {
 	if (m->refcnt) {
 		m->refcnt--;
 		return;
-	}		
+	}
 	if (m->list) {
 		if (m->list == &free_queue_l3)
-			fprintf(stderr, "%s buffer %p already freed\n",  __FUNCTION__, m);
+			dprint(DBGM_L3BUFFER, 0,"%s l3 buffer %p already freed: %lx\n",  __FUNCTION__, m, (unsigned long)__builtin_return_address(0));
 		else if (m->list == &free_queue_l2)
-			fprintf(stderr, "%s buffer %p already freed\n",  __FUNCTION__, m);
+			dprint(DBGM_L3BUFFER, 0,"%s l2 buffer %p already freed: %lx\n",  __FUNCTION__, m, (unsigned long)__builtin_return_address(0));
 		else
-			fprintf(stderr, "%s buffer %p still in list %p\n", __FUNCTION__, m, m->list);
+			dprint(DBGM_L3BUFFER, 0,"%s buffer %p still in list %p : %lx\n", __FUNCTION__, m, m->list, (unsigned long)__builtin_return_address(0));
 		return;
-	}
+	} else
+		dprint(DBGM_L3BUFFER, 0,"%s buffer %p freed: %lx\n",  __FUNCTION__, m, (unsigned long)__builtin_return_address(0));
 	if (m->chead) {
 		if (free_queue_l3.len > Max_Cache) {
 			free(m->chead);
