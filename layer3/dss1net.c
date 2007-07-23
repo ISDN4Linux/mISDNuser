@@ -314,6 +314,9 @@ l3dss1_disconnect(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 		return ;
 	}
 
+	if (pc->t303msg)
+		free_l3_msg(pc->t303msg);
+	pc->t303msg = NULL;
 	StopAllL3Timer(pc);
 	newl3state(pc, 11);
 
@@ -371,6 +374,9 @@ l3dss1_release(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	int		ret;
 	unsigned char 	cause = 0;
 
+	if (pc->t303msg)
+		free_l3_msg(pc->t303msg);
+	pc->t303msg = NULL;
 	StopAllL3Timer(pc);
 	ret = l3dss1_get_cause(pc, l3m);
 	if (ret) {
@@ -395,7 +401,7 @@ l3dss1_release(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_release_i(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-
+	L3DelTimer(&pc->timer1);
 	l3dss1_message(pc, MT_RELEASE_COMPLETE);
 	newl3state(pc, 0);
 	send_proc(pc, IMSG_END_PROC_M, NULL);
@@ -406,6 +412,9 @@ l3dss1_release_cmpl(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int	ret;
 
+	if (pc->t303msg)
+		free_l3_msg(pc->t303msg);
+	pc->t303msg = NULL;
 	StopAllL3Timer(pc);
 	newl3state(pc, 0);
 	ret = l3dss1_get_cause(pc, l3m);
@@ -434,6 +443,9 @@ l3dss1_setup_acknowledge_i(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m
 		free_l3_msg(l3m);
 		return;
 	}
+	if (pc->t303msg)
+		free_l3_msg(pc->t303msg);
+	pc->t303msg = NULL;
 	L3DelTimer(&pc->timer1);	/* T304 */
 	newl3state(pc, 25);
 	mISDN_l3up(pc, MT_SETUP_ACKNOWLEDGE, l3m);
@@ -668,6 +680,9 @@ l3dss1_setup_acknowledge_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m
 {
 	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
 	L3DelTimer(&pc->timer1);
+	if (pc->t303msg)
+		free_l3_msg(pc->t303msg);
+	pc->t303msg = NULL;
 	create_child_proc(pc, l3m, 25);
 }
 
@@ -676,6 +691,9 @@ l3dss1_proceeding_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
 	L3DelTimer(&pc->timer1);
+	if (pc->t303msg)
+		free_l3_msg(pc->t303msg);
+	pc->t303msg = NULL;
 	create_child_proc(pc, l3m, 9);
 }
 
@@ -684,6 +702,9 @@ l3dss1_alerting_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
 	L3DelTimer(&pc->timer1);
+	if (pc->t303msg)
+		free_l3_msg(pc->t303msg);
+	pc->t303msg = NULL;
 	create_child_proc(pc, l3m, 7);
 }
 
@@ -692,12 +713,18 @@ l3dss1_connect_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
 	L3DelTimer(&pc->timer1);
+	if (pc->t303msg)
+		free_l3_msg(pc->t303msg);
+	pc->t303msg = NULL;
 	create_child_proc(pc, l3m, 8);
 }
 
 static void
 l3dss1_release_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
+	if (pc->t303msg)
+		free_l3_msg(pc->t303msg);
+	pc->t303msg = NULL;
 	l3dss1_release_i(pc, pr, l3m);
 }
 
@@ -735,6 +762,9 @@ l3dss1_release_cmpl_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_release_cmpl_mx(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
+	if (pc->t303msg)
+		free_l3_msg(pc->t303msg);
+	pc->t303msg = NULL;
 	l3dss1_release_cmpl(pc, pr, l3m);
 }
 
@@ -813,6 +843,8 @@ l3dss1_alert_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_setup_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
+	increment_refcnt(l3m);
+	pc->t303msg = l3m;
 	SendMsg(pc, l3m, 6);
 	L3DelTimer(&pc->timer1);
 	test_and_clear_bit(FLG_L3P_TIMER303_1, &pc->flags);
@@ -860,6 +892,9 @@ static void
 l3dss1_disconnect_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	StopAllL3Timer(pc);
+	if (pc->t303msg)
+		free_l3_msg(pc->t303msg);
+	pc->t303msg = NULL;
 	if (l3m) {
 		SendMsg(pc, l3m, 12);
 	} else {
@@ -959,6 +994,9 @@ static void
 l3dss1_release_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	StopAllL3Timer(pc);
+	if (pc->t303msg)
+		free_l3_msg(pc->t303msg);
+	pc->t303msg = NULL;
 	if (l3m) {
 		SendMsg(pc, l3m, 19);
 	} else {
@@ -973,6 +1011,9 @@ static void
 l3dss1_release_cmpl_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	StopAllL3Timer(pc);
+	if (pc->t303msg)
+		free_l3_msg(pc->t303msg);
+	pc->t303msg = NULL;
 	if (l3m) {
 		SendMsg(pc, l3m, 0);
 	} else {
