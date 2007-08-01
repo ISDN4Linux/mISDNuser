@@ -2106,7 +2106,7 @@ l3dss1_holdrej_req(layer3_proc_t *pc, int pr, void *arg)
 			*pc->op++ = IE_CAUSE;
 			*pc->op++ = 2;
 			*pc->op++ = 0x80;
-			*pc->op++ = 0x80 | 0x47;
+			*pc->op++ = 0x80 | 47;
 		}
 		if (hrej->DISPLAY)
 			AddvarIE(pc, IE_DISPLAY, hrej->DISPLAY);
@@ -2114,7 +2114,7 @@ l3dss1_holdrej_req(layer3_proc_t *pc, int pr, void *arg)
 		*pc->op++ = IE_CAUSE;
 		*pc->op++ = 2;
 		*pc->op++ = 0x80;
-		*pc->op++ = 0x80 | 0x47;
+		*pc->op++ = 0x80 | 47;
 	}
 	SendMsg(pc, -1);
 }
@@ -2155,7 +2155,7 @@ l3dss1_retrrej_req(layer3_proc_t *pc, int pr, void *arg)
 			*pc->op++ = IE_CAUSE;
 			*pc->op++ = 2;
 			*pc->op++ = 0x80;
-			*pc->op++ = 0x80 | 0x47;
+			*pc->op++ = 0x80 | 47;
 		}
 		if (rrej->DISPLAY)
 			AddvarIE(pc, IE_DISPLAY, rrej->DISPLAY);
@@ -2163,7 +2163,7 @@ l3dss1_retrrej_req(layer3_proc_t *pc, int pr, void *arg)
 		*pc->op++ = IE_CAUSE;
 		*pc->op++ = 2;
 		*pc->op++ = 0x80;
-		*pc->op++ = 0x80 | 0x47;
+		*pc->op++ = 0x80 | 47;
 	}
 	SendMsg(pc, -1);
 }
@@ -2201,7 +2201,7 @@ l3dss1_susprej_req(layer3_proc_t *pc, int pr, void *arg)
 			*pc->op++ = IE_CAUSE;
 			*pc->op++ = 2;
 			*pc->op++ = 0x80;
-			*pc->op++ = 0x80 | 0x47;
+			*pc->op++ = 0x80 | 47;
 		}
 		if (srej->DISPLAY)
 			AddvarIE(pc, IE_DISPLAY, srej->DISPLAY);
@@ -2209,7 +2209,7 @@ l3dss1_susprej_req(layer3_proc_t *pc, int pr, void *arg)
 		*pc->op++ = IE_CAUSE;
 		*pc->op++ = 2;
 		*pc->op++ = 0x80;
-		*pc->op++ = 0x80 | 0x47;
+		*pc->op++ = 0x80 | 47;
 	}
 	SendMsg(pc, -1);
 	newl3state(pc, 10);
@@ -2249,7 +2249,7 @@ l3dss1_resrej_req(layer3_proc_t *pc, int pr, void *arg)
 			*pc->op++ = IE_CAUSE;
 			*pc->op++ = 2;
 			*pc->op++ = 0x80;
-			*pc->op++ = 0x80 | 0x47;
+			*pc->op++ = 0x80 | 47;
 		}
 		if (rrej->DISPLAY)
 			AddvarIE(pc, IE_DISPLAY, rrej->DISPLAY);
@@ -2257,7 +2257,7 @@ l3dss1_resrej_req(layer3_proc_t *pc, int pr, void *arg)
 		*pc->op++ = IE_CAUSE;
 		*pc->op++ = 2;
 		*pc->op++ = 0x80;
-		*pc->op++ = 0x80 | 0x47;
+		*pc->op++ = 0x80 | 47;
 	}
 	SendMsg(pc, -1);
 	newl3state(pc, 0);
