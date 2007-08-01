@@ -1,0 +1,87 @@
+mISDNdebugtool
+==============
+
+I.   Intro
+II.  Setup
+III. Changing the UDP port
+IV.  Usage of mISDNdebugtool
+
+
+I. Intro
+--------
+
+mISDNdebugtool consists of a kernel module (mISDN_debugtool) and a user space tool
+(mISDNdebugtool).
+
+The kernel modules takes care of transmitting a UDP packet for each ISDN dchannel
+frame, and for events like layer 1 up/down. For hfc_multi, it also transmits packets
+on state changes and CRC errors.
+
+The mISDNdebugtool program is the counterpart to the kernel module. It captures the
+UDP packets, does some parsing and writes them to stdout, to a logfile, and/or to a
+wireshark compatible dumpfile. It also can work as a daemon, see section IV.
+
+
+II. Setup
+---------
+
+1. Install the latest mISDN and mISDNuser. On how to obtain the sources, read:
+
+     http://www.misdn.org/index.php/GIT
+
+2. Configure the mISDN kernel modules. On how to do that, read:
+
+     http://www.misdn.org/index.php/Installing_mISDN
+     http://www.misdn.org/index.php/Configuring_mISDN
+
+3. Add the following line to you /etc/mISDN.conf:
+
+     <module>mISDN_debugtool</module>
+
+4. Load the mISDN kernel modules via:
+
+     mISDN start
+
+5. Enable the debugging facility:
+
+     echo 1 > /sys/class/mISDN-debugtool/enabled
+
+6. Validate your setup by running the mISDNdebugtool user space program to capture
+   all packets transmitted by the mISDNdebugtool kernel module and log them to stdout:
+
+     mISDNdebugtool -v
+
+   Now let something happen on your ISDN lines, i.e. by plugging in a phone. You should
+   now see debugging messages.
+
+
+III. Changing the UDP port
+--------------------------
+
+1. Edit /etc/mISDN.conf. In this example, we use UDP port 12345:
+
+     <module port="12345">mISDN_debugtool</module>
+
+2. Reload your mISDN kernel modules:
+
+     mISDN restart
+
+3. Use the UDP port parameter of mISDNdebugtool:
+
+     mISDNdebugtool -b 12345
+
+
+IV. Usage of mISDNdebugtool
+---------------------------
+
+mISDNdebugtool [-p <mISDN-port>,..] [-f <prefix>] [-l <prefix>] [-b <UDP-port>] [-d] [-v] [-h]
+
+Arguments:
+  -p <mISDN-port>,..  mISDN ports to care for, default: care for all
+  -f <prefix>         enable dumpfile mode, use this prefix for filenames
+  -l <prefix>         enable logfile mode, use this prefix for filenames
+  -b <UDP-port>       UDP port to bind to, default: 50501
+  -d                  daemon mode
+  -v                  print packets to stdout
+  -h                  print this help text and exit
+

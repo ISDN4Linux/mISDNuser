@@ -41,12 +41,13 @@
 static int arg_daemon = 0;
 static int arg_verbose = 0;
 static int arg_udp_port = 50501;
+static int arg_dontenable = 0;
 static char *arg_ports = NULL;
 static char *arg_dfile = NULL;
 static char *arg_lfile = NULL;
 
 static char usage[] =
-"Usage: %s [-p <mISDN-port>,..] [-f <prefix>] [-l <prefix>] [-b <UDP-port>] [-d] [-v] [-h]\n"
+"Usage: %s [-p <mISDN-port>,..] [-f <prefix>] [-l <prefix>] [-b <UDP-port>] [-d] [-n] [-v] [-h]\n"
 "\n"
 "Arguments:\n"
 "  -p <mISDN-port>,..  mISDN ports to care for, default: care for all\n"
@@ -54,10 +55,13 @@ static char usage[] =
 "  -l <prefix>         enable logfile mode, use this prefix for filenames\n"
 "  -b <UDP-port>       UDP port to bind to, default: 50501\n"
 "  -d                  daemon mode\n"
+"  -n                  do not enable mISDN_debugtool kernel module\n"
 "  -v                  print packets to stdout\n"
 "  -h                  print this help text and exit\n";
 
 static char *self;
+
+static int disable_kernel_debugtool = 0;
 
 static void fail (char *err)
 {
@@ -184,9 +188,11 @@ static char *typestr (unsigned char type)
 		"D_TX",
 		"L1_UP",
 		"L1_DOWN",
+		"CRC_ERR",
+		"NEWSTATE",
 	};
 
-	if (type <= L1_DOWN)
+	if (type <= NEWSTATE)
 		return str[type];
 	return str[0];
 }
@@ -260,6 +266,9 @@ static void log_packet (FILE *file, struct sockaddr_in *sock_client, mISDN_dt_he
 		for (i = 0; i < hdr->plength; ++i)
 			fprintf(file, "%.2hhx ", *(buf + i));
 		break;
+	case NEWSTATE:
+		fprintf(file, "%u %s", *(unsigned int *)buf, buf + 4);
+		break;
 	default:
 		break;
 	}
@@ -290,6 +299,45 @@ static inline void handle_packet (struct sockaddr_in *sock_client, mISDN_dt_head
 	}
 }
 
+static int kernel_debugtool_disabled (void)
+{
+	int e;
+
+	FILE *enabled = fopen("/sys/class/mISDN-debugtool/enabled", "r");
+	if (!enabled)
+		fail_perr("fopen(\"/sys/class/mISDN-debugtool/enabled\")");
+
+	if (fscanf(enabled, "%d", &e) != 1)
+		fail("Could not get enabled status");
+
+	fclose(enabled);
+
+	return !e;
+}
+
+static void kernel_debugtool_echo (char *str)
+{
+	FILE *enabled = fopen("/sys/class/mISDN-debugtool/enabled", "w");
+	if (!enabled)
+		fail_perr("fopen(\"/sys/class/mISDN-debugtool/enabled\")");
+	fprintf(enabled, str);
+	fclose(enabled);
+}
+
+static void kernel_debugtool_enable (void)
+{
+	if (kernel_debugtool_disabled()) {
+		disable_kernel_debugtool = 1;
+		kernel_debugtool_echo("1");
+	}
+}
+
+static void kernel_debugtool_disable (void)
+{
+	if (disable_kernel_debugtool)
+		kernel_debugtool_echo("0");
+}
+
 static void sighandler (int signo)
 {
 	struct port* p;
@@ -306,6 +354,8 @@ static void sighandler (int signo)
 			fclose(p->lf);
 		}
 	}
+
+	kernel_debugtool_disable();
 
 	exit(0);
 }
@@ -329,7 +379,7 @@ int main (int argc, char *argv[])
 	signal(SIGTERM, sighandler);
 
 	/* parse args */
-	while ((c = getopt(argc, argv, "p:f:l:b:dvh")) != -1) {
+	while ((c = getopt(argc, argv, "p:f:l:b:dnvh")) != -1) {
 		noargs = 0;
 		switch (c) {
 		case 'p':
@@ -366,6 +416,9 @@ int main (int argc, char *argv[])
 		case 'v':
 			arg_verbose = 1;
 			break;
+		case 'n':
+			arg_dontenable = 1;
+			break;
 		case 'h':
 			printf(usage, self);
 			exit(0);
@@ -391,6 +444,9 @@ int main (int argc, char *argv[])
 		fprintf(stderr, "Option -v in combination with -d makes no sense.\n");
 		exit(1);
 	}
+
+	if (!arg_dontenable)
+		kernel_debugtool_enable();
 
 	if (arg_daemon && daemon(1, 0))
 		fail("daemon()");

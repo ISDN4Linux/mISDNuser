@@ -12,7 +12,7 @@ msg_init(void)
 {
 	free_queue = & _free_queue;
 	msg_queue_init(free_queue);
-	free_queue->maxlen = 40;
+	free_queue->maxlen = 200;
 }
 
 
