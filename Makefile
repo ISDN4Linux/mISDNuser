@@ -33,7 +33,6 @@ export CFLAGS
 
 SUBDIRS := layer3 example
 
-SUBDIRS += $(shell if test -d voip ; then echo voip; fi)
 
 all: test_misdn_includes
 	$(MAKE) TARGET=$@ subdirs
