@@ -36,9 +36,9 @@ extern	void		msg_init(void);
 extern	msg_t		*alloc_msg(int);
 extern	void		free_msg(msg_t *);
 extern	msg_queue_t	*free_queue;
-extern	msg_t		*msg_copy(msg_t *msg);
+extern	msg_t		*misdn_msg_copy(msg_t *msg);
 
-#define	msg_clone(m)	msg_copy(m)
+#define	msg_clone(m)	misdn_msg_copy(m)
  
 static inline void
 msg_queue_init(msg_queue_t *q)

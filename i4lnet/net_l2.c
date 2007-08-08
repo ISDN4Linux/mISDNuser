@@ -1807,7 +1807,7 @@ msg_mux(net_stack_t *nst, iframe_t *frm, msg_t *msg)
 			continue;
 		}
 		if (l2->next) {
-			nmsg = msg_copy(msg);
+			nmsg = misdn_msg_copy(msg);
 		} else
 			nmsg = msg;
 		ret = -EINVAL;

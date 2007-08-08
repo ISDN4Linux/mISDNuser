@@ -98,7 +98,7 @@ free_msg(msg_t *msg) {
 }
 
 msg_t *
-msg_copy(msg_t *msg) {
+misdn_msg_copy(msg_t *msg) {
 	msg_t	*nmsg;
 
 	dprint(DBGM_MSG, -1,"%s: old(%p)\n", __FUNCTION__, msg);
