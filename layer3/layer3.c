@@ -233,7 +233,7 @@ create_new_process(layer3_t *l3, unsigned int ces, unsigned int cr, l3_process_t
 		return NULL;
 	pc->l2if = get_l2if(l3, ces);
 	if (ces == MISDN_CES_MASTER) {
-		if (test_bit(FLG_USER, &l3->ml3.options) || test_bit(FLG_PTP, &l3->ml3.options)) {
+		if (test_bit(FLG_USER, &l3->ml3.options) || test_bit(MISDN_FLG_PTP, &l3->ml3.options)) {
 			if (list_empty(&l3->l2master.list)) {
 				eprint("%s: no layer2 assigned\n", __FUNCTION__);
 				pc->l2if = NULL;
@@ -277,7 +277,7 @@ SendMsg(l3_process_t *pc, struct l3_msg *l3m, int state) {
 	mb->h->len = mb->len;
 	msg_push(mb, MISDN_HEADER_LEN);
 	if ((l3m->type == MT_SETUP) && test_bit(FLG_NETWORK, &pc->l2if->l3->ml3.options) &&
-	    !test_bit(FLG_PTP, &pc->l2if->l3->ml3.options))
+	    !test_bit(MISDN_FLG_PTP, &pc->l2if->l3->ml3.options))
 		mb->h->prim = DL_UNITDATA_REQ;
 	else
 		mb->h->prim = DL_DATA_REQ;
@@ -304,7 +304,7 @@ release_l3_process(l3_process_t *pc)
 	StopAllL3Timer(pc);
 	free(pc);
 	pc = get_first_l3process4ces(l3, ces);
-	if ((!pc) && !test_bit(FLG_PTP, &l3->ml3.options)) {
+	if ((!pc) && !test_bit(MISDN_FLG_PTP, &l3->ml3.options)) {
 		if (!mqueue_len(&l2i->squeue)) {
 			FsmEvent(&l2i->l3m, EV_RELEASE_REQ, NULL);
 		}
@@ -382,10 +382,12 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 		dequeued++;
 	}
 	pc = get_first_l3process4ces(l2i->l3, l2i->l2addr.channel);
-	if ((!pc) && (!test_bit(FLG_PTP, &l2i->l3->ml3.options)) && dequeued) {
+	if ((!pc) && (!test_bit(MISDN_FLG_PTP, &l2i->l3->ml3.options)) && dequeued) {
 		FsmEvent(fi, EV_RELEASE_REQ, NULL);
-	} else
+	} else {
 		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
+		l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, 0, NULL);
+	}
 }
 
 static void
@@ -403,10 +405,12 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 		dequeued++;
 	}
 	pc = get_first_l3process4ces(l2i->l3, l2i->l2addr.channel);
-	if ((!pc) && (!test_bit(FLG_PTP, &l2i->l3->ml3.options)) && dequeued) {
+	if ((!pc) && (!test_bit(MISDN_FLG_PTP, &l2i->l3->ml3.options)) && dequeued) {
 		FsmEvent(fi, EV_RELEASE_REQ, NULL);
-	} else
+	} else {
 		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
+		l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, 0, NULL);
+	}
 }
 
 static void
@@ -441,6 +445,7 @@ lc_release_ind(struct FsmInst *fi, int event, void *arg)
 	FsmChangeState(fi, ST_L3_LC_REL);
 	mqueue_purge(&l2i->squeue);
 	l3ml3p(l2i->l3, DL_RELEASE_IND, l2i->l2addr.channel);
+	l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2RELEASE, 0, NULL);
 }
 
 static void
@@ -451,6 +456,7 @@ lc_release_cnf(struct FsmInst *fi, int event, void *arg)
 	FsmChangeState(fi, ST_L3_LC_REL);
 	mqueue_purge(&l2i->squeue);
 	l3ml3p(l2i->l3, DL_RELEASE_CNF, l2i->l2addr.channel);
+	l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2RELEASE, 0, NULL);
 }
 
 

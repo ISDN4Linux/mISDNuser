@@ -113,19 +113,21 @@ struct mlayer3 {
  *
  */
  
-#define FLG_PTP		1
-#define FLG_NET_HOLD	2
+#define MISDN_FLG_PTP		1
+#define MISDN_FLG_NET_HOLD	2
 
 /* 
  * Layer3 <----> Application additional message types
  * Basic messages are coded like Q931 MT_ from q931.h
  */
 /* Application <---> L3 */
-#define MT_ASSIGN		0x0100
+#define MT_ASSIGN		0x1000
 /* L3 ---> Application */
-#define MT_ERROR		0x1000
-#define MT_FREE			0x2000
-#define MT_TIMEOUT		0x3000
+#define MT_FREE			0x1001
+#define MT_L2ESTABLISH		0x2000
+#define MT_L2RELEASE		0x2001
+#define MT_ERROR		0x8000
+#define MT_TIMEOUT		0x8001
 
 /* 
  * process IDs
@@ -174,7 +176,7 @@ extern void		close_layer3(struct mlayer3 *);
 extern struct l3_msg	*alloc_l3_msg(void);
 extern void		free_l3_msg(struct l3_msg *);
 extern int		add_layer3_ie(struct l3_msg *, unsigned char, int, unsigned char *);
-extern void		increment_refcnt(struct l3_msg *);
+extern void		l3_msg_increment_refcnt(struct l3_msg *);
 
 extern	int		mISDN_debug_init(unsigned int, char *, char *, char *);
 extern	void		mISDN_debug_close(void);

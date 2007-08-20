@@ -135,7 +135,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	l3->l2master.l2addr.dev = dev;
 	l3->l2master.l2addr.channel = 0;
 	l3->l2master.l2addr.sapi = 0;
-	if (test_bit(FLG_PTP, &l3->ml3.options))
+	if (test_bit(MISDN_FLG_PTP, &l3->ml3.options))
 		l3->l2master.l2addr.tei = 0;
 	else
 		l3->l2master.l2addr.tei = 127;

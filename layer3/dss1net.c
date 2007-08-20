@@ -278,7 +278,7 @@ l3dss1_setup(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	/* channel id is optional */
 	if (!(err = l3dss1_get_cid(pc, l3m))) {
 		if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
-			if (!test_bit(FLG_PTP, &pc->L3->ml3.options)) {
+			if (!test_bit(MISDN_FLG_PTP, &pc->L3->ml3.options)) {
 				/* no channel  is invalid ??? */
 				if (0 == (pc->cid[1] & 3)) {
 					l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
@@ -557,7 +557,7 @@ l3dss1_connect_i(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_hold(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	if (!(pc->L3->ml3.options & FLG_NET_HOLD)) {
+	if (!(pc->L3->ml3.options & MISDN_FLG_NET_HOLD)) {
 		l3dss1_message_cause(pc, MT_HOLD_REJECT, CAUSE_MT_NOTIMPLEMENTED);
 		return;
 	}
@@ -576,7 +576,7 @@ l3dss1_hold(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_retrieve(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	if (!(pc->L3->ml3.options & FLG_NET_HOLD)) {
+	if (!(pc->L3->ml3.options & MISDN_FLG_NET_HOLD)) {
 		l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_MT_NOTIMPLEMENTED);
 		return;
 	}
@@ -843,14 +843,14 @@ l3dss1_alert_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_setup_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	increment_refcnt(l3m);
+	l3_msg_increment_refcnt(l3m);
 	pc->t303msg = l3m;
 	SendMsg(pc, l3m, 6);
 	L3DelTimer(&pc->timer1);
 	test_and_clear_bit(FLG_L3P_TIMER303_1, &pc->flags);
 	L3AddTimer(&pc->timer1, T303, CC_T303);
 	L3DelTimer(&pc->timer2);
-	if (!test_bit(FLG_PTP, &pc->L3->ml3.options)) {
+	if (!test_bit(MISDN_FLG_PTP, &pc->L3->ml3.options)) {
 		test_and_set_bit(FLG_L3P_TIMER312, &pc->flags);
 		L3AddTimer(&pc->timer2, T312, CC_T312);
 	}
@@ -923,7 +923,7 @@ l3dss1_userinfo_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_information_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	if (pc->state == 25 && !test_bit(FLG_PTP, &pc->L3->ml3.options))
+	if (pc->state == 25 && !test_bit(MISDN_FLG_PTP, &pc->L3->ml3.options))
 		return;
 	
 	if (l3m) {
@@ -1081,7 +1081,7 @@ l3dss1_t303(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 		}
 		L3AddTimer(&pc->timer1, T303, CC_T303);
 		L3DelTimer(&pc->timer2);
-		if (!test_bit(FLG_PTP, &pc->L3->ml3.options)) {
+		if (!test_bit(MISDN_FLG_PTP, &pc->L3->ml3.options)) {
 			L3AddTimer(&pc->timer2, T312, CC_T312);
 			test_and_set_bit(FLG_L3P_TIMER312, &pc->flags);
 		}
@@ -1272,7 +1272,7 @@ l3dss1_dl_reset(l3_process_t *pc, unsigned int pr, struct l3_msg *arg)
 	c[0] = 0x80 | CAUSE_LOC_USER;
 	c[1] = 0x80 | CAUSE_TEMPORARY_FAILURE;
 	add_layer3_ie(l3m, IE_CAUSE, 2, c);
-	increment_refcnt(l3m);
+	l3_msg_increment_refcnt(l3m);
 	l3dss1_disconnect_req(pc, pr, l3m);
 	mISDN_l3up(pc, MT_DISCONNECT, l3m);
 }

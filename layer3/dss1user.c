@@ -376,7 +376,7 @@ l3dss1_release_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_setup_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	increment_refcnt(l3m);
+	l3_msg_increment_refcnt(l3m);
 	pc->t303msg = l3m;
 	SendMsg(pc, l3m, 1);
 	pc->n303 = N303;
@@ -811,7 +811,7 @@ l3dss1_setup(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 
 	if (!(err = l3dss1_get_cid(pc, l3m))) {
 		if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
-			if (!test_bit(FLG_PTP, &pc->L3->ml3.options)) {
+			if (!test_bit(MISDN_FLG_PTP, &pc->L3->ml3.options)) {
 				if (3 == (pc->cid[1] & 3)) {
 					l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
 					free_l3_msg(l3m);
@@ -1275,7 +1275,7 @@ l3dss1_dummy(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_hold_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	if (!test_bit(FLG_PTP, &pc->L3->ml3.options)) {
+	if (!test_bit(MISDN_FLG_PTP, &pc->L3->ml3.options)) {
 		if ((pc->state & VALID_HOLD_STATES_PTMP) == 0) { /* not a valid HOLD state for PtMP */
 			return;
 		}
@@ -1341,7 +1341,7 @@ l3dss1_hold_ind(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 		free_l3_msg(l3m);
 		return;
 	}
-	if (test_bit(FLG_PTP, &pc->L3->ml3.options)) {
+	if (test_bit(MISDN_FLG_PTP, &pc->L3->ml3.options)) {
 		if ((pc->state & VALID_HOLD_STATES_PTP) == 0) { /* not a valid HOLD state for PtP */
 			l3dss1_message_cause(pc, MT_HOLD_REJECT, CAUSE_NOTCOMPAT_STATE);
 			free_l3_msg(l3m);
@@ -1444,7 +1444,7 @@ l3dss1_hold_ack(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_retrieve_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	if (!test_bit(FLG_PTP, &pc->L3->ml3.options)) {
+	if (!test_bit(MISDN_FLG_PTP, &pc->L3->ml3.options)) {
 		if ((pc->state & (VALID_HOLD_STATES_PTMP | SBIT(12))) == 0) { /* not a valid RETRIEVE state for PtMP */
 			if (l3m)
 				free_l3_msg(l3m);
@@ -1515,7 +1515,7 @@ l3dss1_retrieve_ind(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int	ret;
 
-	if (test_bit(FLG_PTP, &pc->L3->ml3.options)) {
+	if (test_bit(MISDN_FLG_PTP, &pc->L3->ml3.options)) {
 		if ((pc->state & (VALID_HOLD_STATES_PTP | SBIT(12))) == 0) { /* not a valid RETRIEVE state for PtP */
 			l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_NOTCOMPAT_STATE);
 			free_l3_msg(l3m);
@@ -1661,7 +1661,7 @@ l3dss1_t303(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 			struct l3_msg *nl3m = pc->t303msg;
 
 			if (pc->n303 > 0)
-				increment_refcnt(pc->t303msg);
+				l3_msg_increment_refcnt(pc->t303msg);
 			else
 				pc->t303msg = NULL;
 			SendMsg(pc, nl3m, -1);
@@ -1775,9 +1775,7 @@ l3dss1_dl_reset(l3_process_t *pc, unsigned int pr, struct l3_msg *arg)
 	c[0] = 0x80 | CAUSE_LOC_USER;
 	c[1] = 0x80 | CAUSE_TEMPORARY_FAILURE;
 	add_layer3_ie(l3m, IE_CAUSE, 2, c);
-	increment_refcnt(l3m);
 	l3dss1_disconnect_req(pc, pr, l3m);
-	mISDN_l3up(pc, MT_DISCONNECT, l3m);
 }
 
 static void

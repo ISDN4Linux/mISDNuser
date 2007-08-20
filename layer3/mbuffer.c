@@ -189,7 +189,7 @@ free_l3_msg(struct l3_msg *l3m)
 }
 
 void
-increment_refcnt(struct l3_msg *l3m)
+l3_msg_increment_refcnt(struct l3_msg *l3m)
 {
 	struct mbuffer	*m;
 
