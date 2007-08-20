@@ -111,7 +111,6 @@ int play_msg(devinfo_t *di) {
 	
 	hh->prim = PH_DATA_REQ;
 	hh->id = 0;
-	hh->len = len;
 	ret = sendto(di->bchan, buf, len + MISDN_HEADER_LEN, 0, NULL, 0);
 	if (ret < 0)
 		fprintf(stdout,"play send error %d %s\n", errno, strerror(errno));
@@ -145,7 +144,6 @@ int send_data(devinfo_t *di) {
 	
 	hh->prim = DL_DATA_REQ;
 	hh->id = 0;
-	hh->len = len;
 	ret = sendto(di->bchan, buf, len + MISDN_HEADER_LEN, 0, NULL, 0);
 	if (ret < 0)
 		fprintf(stdout,"send_data error %d %s\n", errno, strerror(errno));
@@ -194,7 +192,7 @@ int send_SETUP(devinfo_t *di, int SI, char *PNr) {
 	char			*msg, buf[64];
 	char			*np,*p;
 	struct  mISDNhead 	*hh = (struct  mISDNhead *)buf;
-	int			ret;
+	int			ret, len;
 
 	p = msg = buf + MISDN_HEADER_LEN;
 	MsgHead(p, di->cr, MT_SETUP);
@@ -217,10 +215,10 @@ int send_SETUP(devinfo_t *di, int SI, char *PNr) {
 	*p++ = 0x81;		/* Ext = '1'B, Type = '000'B, Plan = '0001'B. */
 	while (*np)
 		*p++ = *np++ & 0x7f;
-	hh->len = p - msg;
+	len = p - msg;
 	hh->prim = DL_DATA_REQ;
 	hh->id = MISDN_ID_ANY;
-	ret = sendto(di->layer2, buf, hh->len + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+	ret = sendto(di->layer2, buf, len + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
 	if (ret < 0) {
 		fprintf(stdout, "sendto error  %s\n", strerror(errno));
 	}
@@ -239,7 +237,6 @@ int activate_bchan(devinfo_t *di) {
 	else
 		hh->prim = PH_ACTIVATE_REQ;
 	hh->id   = MISDN_ID_ANY;
-	hh->len  = 0;
 	ret = sendto(di->bchan, buf, MISDN_HEADER_LEN, 0, NULL, 0);
 	
 	if (ret < 0) {
@@ -304,7 +301,6 @@ int deactivate_bchan(devinfo_t *di) {
 	else
 		hh->prim = PH_DEACTIVATE_REQ;
 	hh->id   = MISDN_ID_ANY;
-	hh->len  = 0;
 	ret = sendto(di->bchan, buf, MISDN_HEADER_LEN, 0, NULL, 0);
 	
 	if (ret < 0) {
@@ -417,10 +413,10 @@ int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 
 	if (VerifyOn>7)
 		fprintf(stdout,"readloop B prim(%x) id(%x) len(%d)\n",
-			hh->prim, hh->id, hh->len);
+			hh->prim, hh->id, len);
 	if (hh->prim == PH_DATA_IND) {
 		/* received data, save it */
-		write(di->save, buf + MISDN_HEADER_LEN, hh->len);
+		write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
 	} else if (hh->prim == PH_DATA_CNF) {
 		/* get ACK of send data, so we can
 		 * send more
@@ -436,18 +432,18 @@ int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 		}
 	} else if (hh->prim == DL_DATA_IND) {
 		/* received data, save it */
-		write(di->save, buf + MISDN_HEADER_LEN, hh->len);
+		write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
 	} else if (hh->prim == (PH_CONTROL_IND)) {
 		unsigned int	*tone = (unsigned int *)(buf + MISDN_HEADER_LEN);
 
-		if ((hh->len == 4) && ((*tone & ~DTMF_TONE_MASK) == DTMF_TONE_VAL)) {
+		if ((len == (4 + MISDN_HEADER_LEN)) && ((*tone & ~DTMF_TONE_MASK) == DTMF_TONE_VAL)) {
 			fprintf(stdout,"GOT TT %c\n", DTMF_TONE_MASK & *tone);
 		} else
-			fprintf(stdout,"unknown PH_CONTROL len %d/val %x\n", hh->len, *tone);
+			fprintf(stdout,"unknown PH_CONTROL len %d/val %x\n", len, *tone);
 	} else {
 		if (VerifyOn)
 			fprintf(stdout,"got unexpected B frame prim(%x) id(%x) len(%d)\n",
-				hh->prim, hh->id, hh->len);
+				hh->prim, hh->id, len);
 	}
 	return 0;
 }
@@ -456,7 +452,7 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 {
 	struct mISDNhead	*hh = (struct  mISDNhead *)buf;
 	unsigned char		*p, *msg;
-	int			ret;
+	int			ret, l;
 
 	if (len < MISDN_HEADER_LEN) {
 		if (VerifyOn)
@@ -465,11 +461,11 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 	}
 	if (VerifyOn>4)
 		fprintf(stdout,"readloop L2 prim(%x) id(%x) len(%d)\n",
-			hh->prim, hh->id, hh->len);
+			hh->prim, hh->id, len);
 	if (hh->prim != DL_DATA_IND && hh->prim != DL_UNITDATA_IND) {
 		if (VerifyOn)
 			fprintf(stdout,"got unexpected D frame prim(%x) id(%x) len(%d)\n",
-				hh->prim, hh->id, hh->len);
+				hh->prim, hh->id, len);
 		return 0;
 	}
 	if (len > 16 && (((!(di->flag & FLG_CALL_ORGINATE)) && (buf[15] == MT_SETUP)) ||
@@ -525,10 +521,10 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 		if (!(di->flag & FLG_CALL_ORGINATE)) {
 			p = msg = buf + MISDN_HEADER_LEN;
 			MsgHead(p, di->cr, MT_CONNECT);
-			hh->len = p - msg;
+			l = p - msg;
 			hh->prim = DL_DATA_REQ;
 			hh->id = MISDN_ID_ANY;
-			ret = sendto(di->layer2, buf, hh->len + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+			ret = sendto(di->layer2, buf, l + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
 			if (ret < 0) {
 				fprintf(stdout, "sendto error  %s\n", strerror(errno));
 				return 4;
@@ -549,10 +545,10 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 		/* send a CONNECT_ACKNOWLEDGE */
 		p = msg = buf + MISDN_HEADER_LEN;
 		MsgHead(p, di->cr, MT_CONNECT_ACKNOWLEDGE);
-		hh->len = p - msg;
+		l = p - msg;
 		hh->prim = DL_DATA_REQ;
 		hh->id = MISDN_ID_ANY;
-			ret = sendto(di->layer2, buf, hh->len + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+			ret = sendto(di->layer2, buf, l + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
 		if (ret < 0) {
 			fprintf(stdout, "sendto error  %s\n", strerror(errno));
 		}
@@ -615,10 +611,10 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 		/* send a RELEASE */
 		p = msg = buf + MISDN_HEADER_LEN;
 		MsgHead(p, di->cr, MT_RELEASE);
-		hh->len = p - msg;
+		l = p - msg;
 		hh->prim = DL_DATA_REQ;
 		hh->id = MISDN_ID_ANY;
-		ret = sendto(di->layer2, buf, hh->len + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+		ret = sendto(di->layer2, buf, l + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
 		if (ret < 0) {
 			fprintf(stdout, "sendto error  %s\n", strerror(errno));
 		}
@@ -627,10 +623,10 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 		/* send a RELEASE_COMPLETE */
 		p = msg = buf + MISDN_HEADER_LEN;
 		MsgHead(p, di->cr, MT_RELEASE_COMPLETE);
-		hh->len = p - msg;
+		l = p - msg;
 		hh->prim = DL_DATA_REQ;
 		hh->id = MISDN_ID_ANY;
-		ret = sendto(di->layer2, buf, hh->len + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+		ret = sendto(di->layer2, buf, l + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
 		if (ret < 0) {
 			fprintf(stdout, "sendto error  %s\n", strerror(errno));
 		}
@@ -641,11 +637,11 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 	} else {
 		if (VerifyOn) {
 			fprintf(stdout,"got unexpected D frame prim(%x) id(%x) len(%d)\n",
-				hh->prim, hh->id, hh->len);
-			if (hh->len) {
+				hh->prim, hh->id, len);
+			if (len > MISDN_HEADER_LEN) {
 				int	i;
-				for (i = 0; i < hh->len; i++)
-					fprintf(stdout," %02x", buf[MISDN_HEADER_LEN + i]);
+				for (i = MISDN_HEADER_LEN; i < len; i++)
+					fprintf(stdout," %02x", buf[i]);
 				fprintf(stdout,"\n");
 			}
 		}
@@ -660,7 +656,7 @@ int do_connection(devinfo_t *di) {
 	struct sockaddr_mISDN	l2addr;
 	socklen_t		alen;
 	fd_set			rds;
-	int			ret = 0;
+	int			ret = 0, l;
 
 	hh = (struct  mISDNhead *)buf;
 	/* Main loop */
@@ -696,10 +692,10 @@ int do_connection(devinfo_t *di) {
 					/* After last tone disconnect */
 					p = msg = buf + mISDN_HEADER_LEN;
 					MsgHead(p, di->cr, MT_DISCONNECT);
-					hh->len = p - msg;
+					l = p - msg;
 					hh->prim = DL_DATA_REQ;
 					hh->id = MISDN_ID_ANY;
-					ret = sendto(di->layer2, buf, hh->len + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+					ret = sendto(di->layer2, buf, l + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
 					if (ret < 0) {
 						fprintf(stdout, "sendto error  %s\n", strerror(errno));
 					}
@@ -733,10 +729,10 @@ int do_connection(devinfo_t *di) {
 				MsgHead(p, di->cr, MT_DISCONNECT);
 			else
 				MsgHead(p, di->cr, MT_RELEASE_COMPLETE);
-			hh->len = p - msg;
+			l = p - msg;
 			hh->prim = DL_DATA_REQ;
 			hh->id = MISDN_ID_ANY;
-			ret = sendto(di->layer2, buf, hh->len + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+			ret = sendto(di->layer2, buf, l + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
 			if (ret < 0) {
 				fprintf(stdout, "sendto error  %s\n", strerror(errno));
 			}
@@ -779,8 +775,7 @@ int do_connection(devinfo_t *di) {
 	sleep(1);
 	hh->prim = DL_RELEASE_REQ;
 	hh->id   = MISDN_ID_ANY;
-	hh->len  = 0;
-	ret = sendto(di->layer2, buf, hh->len + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+	ret = sendto(di->layer2, buf, MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
 	
 	if (ret < 0) {
 		fprintf(stdout, "could not send DL_RELEASE_REQ %s\n", strerror(errno));
@@ -984,7 +979,6 @@ int do_setup(devinfo_t *di) {
 				
 				hh->prim = DL_ESTABLISH_REQ;
 				hh->id   = MISDN_ID_ANY;
-				hh->len  = 0;
 				ret = sendto(di->layer2, buffer, MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
 				
 				if (ret < 0) {

@@ -274,7 +274,6 @@ SendMsg(l3_process_t *pc, struct l3_msg *l3m, int state) {
 	if (state != -1)
 		newl3state(pc, state);
 	mb->h->id = l3m->pid;
-	mb->h->len = mb->len;
 	msg_push(mb, MISDN_HEADER_LEN);
 	if ((l3m->type == MT_SETUP) && test_bit(FLG_NETWORK, &pc->l2if->l3->ml3.options) &&
 	    !test_bit(MISDN_FLG_PTP, &pc->l2if->l3->ml3.options))
@@ -348,7 +347,6 @@ l3down(struct l2l3if *l2i, u_int prim, struct mbuffer *mb)
 		msg_put(mb, MISDN_HEADER_LEN);
 		mb->h->prim = prim;
 		mb->h->id = 0;
-		mb->h->len = 0;
 		mb->addr = l2i->l2addr;
 	}
 	ret = sendto(l2i->l3->l2sock, mb->head, mb->len, 0, (struct sockaddr *)&mb->addr, sizeof(mb->addr));

@@ -144,8 +144,8 @@ char *argv[];
 			printf("read error %s\n", strerror(errno));
 			break;
 		} else {
-			printf("received %d bytes prim = %x id=%x len=%d\n",
-				result, hh->prim, hh->id, hh->len);
+			printf("received %d bytes prim = %x id=%x\n",
+				result, hh->prim, hh->id);
 			if (result > MISDN_HEADER_LEN)
 				printhex(&buffer[MISDN_HEADER_LEN], result - MISDN_HEADER_LEN);
 		}

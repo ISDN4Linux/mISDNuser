@@ -108,7 +108,6 @@ int play_msg(devinfo_t *di) {
 	
 	hh->prim = PH_DATA_REQ;
 	hh->id = 0;
-	hh->len = len;
 	ret = sendto(di->bchan, buf, len + MISDN_HEADER_LEN, 0, NULL, 0);
 	if (ret < 0)
 		fprintf(stdout,"play send error %d %s\n", errno, strerror(errno));
@@ -142,7 +141,6 @@ int send_data(devinfo_t *di) {
 	
 	hh->prim = DL_DATA_REQ;
 	hh->id = 0;
-	hh->len = len;
 	ret = sendto(di->bchan, buf, len + MISDN_HEADER_LEN, 0, NULL, 0);
 	if (ret < 0)
 		fprintf(stdout,"send_data error %d %s\n", errno, strerror(errno));
@@ -258,7 +256,6 @@ int activate_bchan(devinfo_t *di) {
 	else
 		hh->prim = PH_ACTIVATE_REQ;
 	hh->id   = MISDN_ID_ANY;
-	hh->len  = 0;
 	ret = sendto(di->bchan, buf, MISDN_HEADER_LEN, 0, NULL, 0);
 	
 	if (ret < 0) {
@@ -324,7 +321,6 @@ int deactivate_bchan(devinfo_t *di) {
 	else
 		hh->prim = PH_DEACTIVATE_REQ;
 	hh->id   = MISDN_ID_ANY;
-	hh->len  = 0;
 	ret = sendto(di->bchan, buf, MISDN_HEADER_LEN, 0, NULL, 0);
 	
 	if (ret < 0) {
@@ -400,10 +396,10 @@ int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 
 	if (VerifyOn>7)
 		fprintf(stdout,"readloop B prim(%x) id(%x) len(%d)\n",
-			hh->prim, hh->id, hh->len);
+			hh->prim, hh->id, len);
 	if (hh->prim == PH_DATA_IND) {
 		/* received data, save it */
-		write(di->save, buf + MISDN_HEADER_LEN, hh->len);
+		write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
 	} else if (hh->prim == PH_DATA_CNF) {
 		/* get ACK of send data, so we can
 		 * send more
@@ -419,14 +415,14 @@ int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 		}
 	} else if (hh->prim == DL_DATA_IND) {
 		/* received data, save it */
-		write(di->save, buf + MISDN_HEADER_LEN, hh->len);
+		write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
 	} else if (hh->prim == (PH_CONTROL_IND)) {
 		unsigned int	*tone = (unsigned int *)(buf + MISDN_HEADER_LEN);
 
-		if ((hh->len == 4) && ((*tone & ~DTMF_TONE_MASK) == DTMF_TONE_VAL)) {
+		if ((len == (4 + MISDN_HEADER_LEN)) && ((*tone & ~DTMF_TONE_MASK) == DTMF_TONE_VAL)) {
 			fprintf(stdout,"GOT TT %c\n", DTMF_TONE_MASK & *tone);
 		} else
-			fprintf(stdout,"unknown PH_CONTROL len %d/val %x\n", hh->len, *tone);
+			fprintf(stdout,"unknown PH_CONTROL len %d/val %x\n", len, *tone);
 	} else if ((hh->prim == DL_RELEASE_CNF) || (hh->prim == PH_DEACTIVATE_IND)) {
 		if (VerifyOn)
 			fprintf(stdout,"readloop B got termination request\n");
@@ -438,7 +434,7 @@ int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 	} else {
 		if (VerifyOn)
 			fprintf(stdout,"got unexpected B frame prim(%x) id(%x) len(%d)\n",
-				hh->prim, hh->id, hh->len);
+				hh->prim, hh->id, len);
 	}
 	return 0;
 }
@@ -474,10 +470,10 @@ void do_bconnection(devinfo_t *di) {
 					/* After last tone disconnect */
 					p = msg = buf + mISDN_HEADER_LEN;
 					MsgHead(p, di->cr, MT_DISCONNECT);
-					hh->len = p - msg;
+					l = p - msg;
 					hh->prim = DL_DATA_REQ;
 					hh->id = MISDN_ID_ANY;
-					ret = sendto(di->layer2, buf, hh->len + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+					ret = sendto(di->layer2, buf, l + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
 					if (ret < 0) {
 						fprintf(stdout, "sendto error  %s\n", strerror(errno));
 					}
