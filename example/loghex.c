@@ -11,6 +11,7 @@
 #include <string.h>
 #include <malloc.h>
 #include <unistd.h>
+#include <time.h>
 #include <sys/ioctl.h>
 #include <linux/mISDNif.h>
 
@@ -33,25 +34,37 @@ void printhex(unsigned char *p, int len)
 
 	for (i = 1; i <= len; i++) {
 		printf(" %02x", *p++);
-		if (!(i % 16))
-			printf("\n");
+		if ((i!=len) && !(i % 16))
+			printf("\n                                 ");
 	}
 	printf("\n");
 }
+
+struct ctstamp {
+	size_t		cmsg_len;
+	int		cmsg_level;
+	int		cmsg_type;
+	struct timeval	tv;
+};
 
 int
 main(argc, argv)
 int argc;
 char *argv[];
 {
-	int aidx=1,para=1, idx;
+	int aidx=1;
 	int cardnr = 1;
 	int log_socket;
 	struct sockaddr_mISDN  log_addr;
 	int buflen = 512;
-	char sw, buffer[buflen];
-	int result, ret;
-	int alen;
+	char sw;
+	u_char	buffer[buflen];
+	struct msghdr	mh;
+	struct iovec	iov[1];
+	struct ctstamp	cts;
+	struct tm	*mt;
+	int result;
+	int opt;
 	u_int cnt;
 	struct mISDN_devinfo	di;
 	struct mISDNhead 	*hh;
@@ -135,19 +148,45 @@ char *argv[];
 	if (result < 0) {
 		printf("log bind error %s\n", strerror(errno));
 	}
+	
+	opt = 1;
+	result = setsockopt(log_socket, SOL_MISDN, MISDN_TIME_STAMP, &opt, sizeof(opt));
+	
+	if (result < 0) {
+		printf("log  setsockopt error %s\n", strerror(errno));
+	}
 
 	hh = (struct mISDNhead *)buffer;
 
 	while (1) {
-		result = recvfrom(log_socket, buffer, 512, 0, NULL, NULL);
+		mh.msg_name = NULL;
+		mh.msg_namelen = 0;
+		mh.msg_iov = iov;
+		mh.msg_iovlen = 1;
+		mh.msg_control = &cts;
+		mh.msg_controllen = sizeof(cts);
+		mh.msg_flags = 0;
+		iov[0].iov_base = buffer;
+		iov[0].iov_len = buflen;
+		result = recvmsg(log_socket, &mh, 0);
 		if (result < 0) {
 			printf("read error %s\n", strerror(errno));
 			break;
 		} else {
-			printf("received %d bytes prim = %x id=%x\n",
+			if (mh.msg_flags) {
+				printf("received message with msg_flags(%x)\n", mh.msg_flags);
+			}
+			if (cts.cmsg_type == MISDN_TIME_STAMP) {
+				mt = localtime((time_t *)&cts.tv.tv_sec);
+				printf("%02d.%02d.%04d %02d:%02d:%02d.%06ld", mt->tm_mday, mt->tm_mon + 1, mt->tm_year + 1900,
+					mt->tm_hour, mt->tm_min, mt->tm_sec, cts.tv.tv_usec);
+			}
+			printf(" received %3d bytes prim = %04x id=%08x",
 				result, hh->prim, hh->id);
 			if (result > MISDN_HEADER_LEN)
 				printhex(&buffer[MISDN_HEADER_LEN], result - MISDN_HEADER_LEN);
+			else
+				printf("\n");
 		}
 	}
 	close(log_socket);
