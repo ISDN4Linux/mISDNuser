@@ -12,7 +12,7 @@
 #include <malloc.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
-#include <linux/mISDNif.h>
+#include <mISDNif.h>
 
 void usage(pname) 
 char *pname;

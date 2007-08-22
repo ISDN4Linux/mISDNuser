@@ -12,7 +12,7 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/ioctl.h>
-#include <linux/mISDNif.h>
+#include <mISDNif.h>
 #include <q931.h>
 
 void usage(pname) 

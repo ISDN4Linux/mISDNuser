@@ -13,7 +13,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <sys/ioctl.h>
-#include <linux/mISDNif.h>
+#include <mISDNif.h>
 #include <q931.h>
 #include <mlayer3.h>
 

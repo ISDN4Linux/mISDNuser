@@ -13,7 +13,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <sys/ioctl.h>
-#include <linux/mISDNif.h>
+#include <mISDNif.h>
 
 void usage(pname) 
 char *pname;

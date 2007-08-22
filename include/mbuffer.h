@@ -25,7 +25,7 @@ extern "C" {
 #include <sys/socket.h>
 #include <pthread.h>
 #include <semaphore.h>
-#include <linux/mISDNif.h>
+#include <mISDNif.h>
 #include <mlayer3.h>
 
 struct mqueue {
