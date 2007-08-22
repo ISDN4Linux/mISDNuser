@@ -1122,13 +1122,23 @@ int do_setup(devinfo_t *di) {
 				di->func);
 			return 1;
 	}
+	if (VerifyOn > 8)
+		fprintf(stdout, "init_layer3(4)\n");
 	init_layer3(4);
+	if (VerifyOn > 8)
+		fprintf(stdout, "done\n");
 	if (di->flag & FLG_NT_MODE) {
 		protocol = L3_PROTOCOL_DSS1_NET;
 	} else {
 		protocol = L3_PROTOCOL_DSS1_USER;
 	}
+	prop = 0;
+	if (VerifyOn > 8)
+		fprintf(stdout, "open_layer3(%d, %x, %x, %p, %p)\n",
+			di->cardnr - 1, protocol, prop , do_dchannel, di);
 	di->layer3 = open_layer3(di->cardnr - 1, protocol, prop , do_dchannel, di);
+	if (VerifyOn > 8)
+		fprintf(stdout, "done\n");
 	if (!di->layer3) {
 		fprintf(stdout, "cannot open layer3\n");
 		return 2;
