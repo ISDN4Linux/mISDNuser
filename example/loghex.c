@@ -15,7 +15,7 @@
 #include <sys/ioctl.h>
 #include <mISDNif.h>
 
-void usage(pname) 
+static void usage(pname) 
 char *pname;
 {
 	fprintf(stderr,"Call with %s [options]\n",pname);
@@ -23,12 +23,67 @@ char *pname;
 	fprintf(stderr,"\n     Valid options are:\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr,"  -?              Usage ; printout this information\n");
-	fprintf(stderr,"  -c<n>           use card number n (default 1)\n"); 
+	fprintf(stderr,"  -c<n>           use card number n (default 1)\n");
+	fprintf(stderr,"  -w <file>       write wiresharkdump <file>\n");
 	fprintf(stderr,"\n");
 }
 
 
-void printhex(unsigned char *p, int len)
+static void write_esc (FILE *file, unsigned char *buf, int len)
+{
+    int i, byte;
+    
+    for (i = 0; i < len; ++i) {
+		byte = buf[i];
+		if (byte == 0xff || byte == 0xfe) {
+			fputc(0xfe, file);
+			byte -= 2;
+		}
+		fputc(byte, file);
+	}
+
+	if (ferror(file)) {
+		fprintf(stderr, "Error on writing to file!\nAborting...");
+		exit(1);
+	}
+}
+
+static void write_wfile(FILE *f, unsigned char *buf, int len, struct timeval *tv, int protocol)
+{
+	struct mISDNhead	*hh = (struct mISDNhead *)buf;
+	u_char			head[12], origin;
+
+	if ((hh->prim != PH_DATA_REQ) && (hh->prim != PH_DATA_IND))
+		return;
+	if (protocol == ISDN_P_NT_S0)
+		origin = hh->prim == PH_DATA_REQ ? 0 : 1;
+	else
+		origin = hh->prim == PH_DATA_REQ ? 1 : 0;
+
+	len -= MISDN_HEADER_LEN;
+
+	fputc(0xff, f);
+
+	head[0] = (unsigned char)(0xff & (tv->tv_usec >> 16));
+	head[1] = (unsigned char)(0xff & (tv->tv_usec >> 8));
+	head[2] = (unsigned char)(0xff & tv->tv_usec);
+	head[3] = (unsigned char)0;
+	head[4] = (unsigned char)(0xff & (tv->tv_sec >> 24));
+	head[5] = (unsigned char)(0xff & (tv->tv_sec >> 16));
+	head[6] = (unsigned char)(0xff & (tv->tv_sec >> 8));
+	head[7] = (unsigned char)(0xff & tv->tv_sec);
+	head[8] = (unsigned char) 0;
+	head[9] = (unsigned char) origin;
+	head[10]= (unsigned char)(0xff & (len >> 8));
+	head[11]= (unsigned char)(0xff & len);
+
+	write_esc(f, head, 12);
+	write_esc(f, &buf[MISDN_HEADER_LEN], len);
+	fflush(f);
+}
+
+
+static void printhex(unsigned char *p, int len)
 {
 	int	i;
 
@@ -52,24 +107,27 @@ main(argc, argv)
 int argc;
 char *argv[];
 {
-	int aidx=1;
-	int cardnr = 1;
-	int log_socket;
+	int	aidx=1, idx;
+	int	cardnr = 1;
+	int	log_socket;
 	struct sockaddr_mISDN  log_addr;
-	int buflen = 512;
-	char sw;
+	int	buflen = 512;
+	char	sw;
+	char	wfilename[512];
 	u_char	buffer[buflen];
 	struct msghdr	mh;
 	struct iovec	iov[1];
 	struct ctstamp	cts;
 	struct tm	*mt;
-	int result;
-	int opt;
-	u_int cnt;
+	int	result;
+	int	opt;
+	u_int	cnt;
 	struct mISDN_devinfo	di;
 	struct mISDNhead 	*hh;
-
-
+	struct mISDNversion	ver;
+	FILE	*wfile = NULL;
+ 
+	*wfilename = 0;
 	while (aidx < argc) {
 		if (argv[aidx] && argv[aidx][0]=='-') {
 			sw=argv[aidx][1];
@@ -77,6 +135,24 @@ char *argv[];
 				case 'c':
 					if (argv[aidx][2]) {
 						cardnr=atol(&argv[aidx][2]);
+					}
+					break;
+				case 'w':
+					if (!argv[aidx][2]) {
+						idx = 0;
+						aidx++;
+					} else {
+						idx=2;
+					}
+					if (aidx<=argc) {
+						if (512 <= strlen(&argv[aidx][idx])) {
+							fprintf(stderr," -w filename too long\n");
+							exit(1);
+						}
+						strcpy(wfilename, &argv[aidx][idx]);
+					} else {
+						fprintf(stderr," Switch %c without value\n",sw);
+						exit(1);
 					}
 					break;
 				case '?' :
@@ -104,6 +180,20 @@ char *argv[];
 		printf("could not open socket %s\n", strerror(errno));
 		exit(1);
 	}
+	
+	result = ioctl(log_socket, IMGETVERSION, &ver);
+	if (result < 0) {
+		printf("ioctl error %s\n", strerror(errno));
+		exit(1);
+	}
+	printf("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
+	printf("mISDN user   version %d.%02d.%d found\n", MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
+	
+	if (ver.major != MISDN_MAJOR_VERSION) {
+		printf("VERSION incompatible please update\n");
+		exit(1);
+	}
+	
 	result = ioctl(log_socket, IMGETCOUNT, &cnt);
 	if (result < 0) {
 		printf("ioctl error %s\n", strerror(errno));
@@ -123,6 +213,11 @@ char *argv[];
 		printf("	Dprotocols:	%08x\n", di.Dprotocols);
 		printf("	Bprotocols:	%08x\n", di.Bprotocols);
 		printf("	protocol:	%d\n", di.protocol);
+		printf("	channelmap:	%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
+			di.channelmap[15], di.channelmap[14], di.channelmap[13], di.channelmap[12],
+			di.channelmap[11], di.channelmap[10], di.channelmap[9], di.channelmap[8],
+			di.channelmap[7], di.channelmap[6], di.channelmap[5], di.channelmap[4],
+			di.channelmap[3], di.channelmap[2], di.channelmap[1], di.channelmap[0]);
 		printf("	nrbchan:	%d\n", di.nrbchan);
 		printf("	name:		%s\n", di.name);
 	}
@@ -155,6 +250,15 @@ char *argv[];
 	if (result < 0) {
 		printf("log  setsockopt error %s\n", strerror(errno));
 	}
+	
+	if (strlen(wfilename)) {
+		wfile = fopen(wfilename, "w");
+		if (wfile) {
+			fprintf(wfile, "EyeSDN");
+			fflush(wfile);
+		} else 
+			printf("cannot open wireshark dump file(%s)\n", wfilename);
+	}
 
 	hh = (struct mISDNhead *)buffer;
 
@@ -180,7 +284,12 @@ char *argv[];
 				mt = localtime((time_t *)&cts.tv.tv_sec);
 				printf("%02d.%02d.%04d %02d:%02d:%02d.%06ld", mt->tm_mday, mt->tm_mon + 1, mt->tm_year + 1900,
 					mt->tm_hour, mt->tm_min, mt->tm_sec, cts.tv.tv_usec);
+			} else {
+				cts.tv.tv_sec = 0;
+				cts.tv.tv_usec = 0;
 			}
+			if (wfile && (result > MISDN_HEADER_LEN))
+				write_wfile(wfile, buffer, result, &cts.tv, di.protocol);	
 			printf(" received %3d bytes prim = %04x id=%08x",
 				result, hh->prim, hh->id);
 			if (result > MISDN_HEADER_LEN)
@@ -190,5 +299,7 @@ char *argv[];
 		}
 	}
 	close(log_socket);
+	if (wfile)
+		fclose(wfile);
 	return (0);
 }
