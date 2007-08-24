@@ -117,6 +117,22 @@ dprint(unsigned int mask, int port, const char *fmt, ...)
 }
 
 int
+iprint(const char *fmt, ...)
+{
+	int	ret = 0;
+	va_list	args;
+
+	va_start(args, fmt);
+	if (debug_file != stderr) {
+		ret = vfprintf(debug_file, fmt, args);
+		fflush(debug_file);
+	}
+	va_end(args);
+	return(ret);
+}
+
+
+int
 wprint(const char *fmt, ...)
 {
 	int	ret = 0;

@@ -27,6 +27,7 @@
 #include <errno.h>
 #include "helper.h"
 #include "layer3.h"
+#include "debug.h"
 
 static	int	__init_done = 0;
 
@@ -63,6 +64,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 {
 	struct _layer3		*l3;
 	int			fd, cnt, ret;
+	struct mISDNversion	ver;
 	struct mISDN_devinfo	devinfo;
 
 	if (__init_done == 0) {
@@ -71,9 +73,25 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	}
 	fd = socket(AF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (fd < 0) {
-		fprintf(stderr,"could not open socket %s\n", strerror(errno));
+		fprintf(stderr, "could not open socket %s\n", strerror(errno));
 		return NULL;
 	}
+	ret = ioctl(fd, IMGETVERSION, &ver);
+	if (ret < 0) {
+		fprintf(stderr, "could not send IOCTL IMGETVERSION %s\n", strerror(errno));
+		return NULL;
+	}
+	iprint("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
+	iprint("mISDN user   version %d.%02d.%d found\n", MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
+	
+	if (ver.major != MISDN_MAJOR_VERSION) {
+		fprintf(stderr, "VERSION incompatible please update\n");
+		return NULL;
+	}
+	/* handle version backward compatibility specific  stuff here */
+	
+	/* nothing yet */
+	
 	ret = ioctl(fd, IMGETCOUNT, &cnt);
 	if (ret < 0) {
 		fprintf(stderr,"could not send IOCTL IMGETCOUNT %s\n", strerror(errno));
@@ -83,6 +101,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 		fprintf(stderr,"device %d do not exist\n", dev);
 		return NULL;
 	}
+
 	l3 = calloc(1, sizeof(struct _layer3));
 	if (!l3)
 		return NULL;

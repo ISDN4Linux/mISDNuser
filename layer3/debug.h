@@ -34,6 +34,7 @@
 #define DBGM_ALL	0xffffffff
 
 extern	int		dprint(unsigned int mask, int port, const char *fmt, ...);
+extern	int		iprint(const char *fmt, ...);
 extern	int		eprint(const char *fmt, ...);
 extern	int		wprint(const char *fmt, ...);
 extern	int		dhexprint(unsigned int, char *, unsigned char *, int);
