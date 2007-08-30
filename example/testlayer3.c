@@ -920,9 +920,11 @@ int do_dchannel(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, struct l
 	}
 	switch (cmd) {
 	case MT_FREE:
-		di->pid = 0;
-		di->flag |= FLG_STOP;
-		pthread_mutex_unlock(&di->wait);
+		if (di->pid == pid) {
+			di->pid = 0;
+			di->flag |= FLG_STOP;
+			pthread_mutex_unlock(&di->wait);
+		}
 		break;
 	case MT_SETUP_ACKNOWLEDGE:
 	case MT_CALL_PROCEEDING:
