@@ -73,7 +73,7 @@ char *argv[];
 		fprintf(stderr,"card nr %d wrong it should be 1 ... nr of installed cards\n", cardnr);
 		exit(1);
 	}
-	if ((sock = socket(AF_ISDN, SOCK_RAW, 0)) < 0) {
+	if ((sock = socket(PF_ISDN, SOCK_RAW, 0)) < 0) {
 		printf("could not open socket %s\n", strerror(errno));
 		exit(1);
 	}
@@ -113,7 +113,7 @@ char *argv[];
 		protocol = ISDN_P_LAPD_NT;
 	}
 
-	if ((sock = socket(AF_ISDN, SOCK_DGRAM, protocol)) < 0) {
+	if ((sock = socket(PF_ISDN, SOCK_DGRAM, protocol)) < 0) {
 		printf("could not open socket %s\n", strerror(errno));
 		exit(1);
 	}

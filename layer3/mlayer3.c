@@ -71,7 +71,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 		fprintf(stderr, "You should call init_layer3(nr of message cache entres) first\n"); 
 		init_layer3(10);
 	}
-	fd = socket(AF_ISDN, SOCK_RAW, ISDN_P_BASE);
+	fd = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (fd < 0) {
 		fprintf(stderr, "could not open socket %s\n", strerror(errno));
 		return NULL;
@@ -126,7 +126,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 			fprintf(stderr,"protocol L3_PROTOCOL_DSS1_USER device do not support ISDN_P_TE_S0\n");
 			goto fail;
 		}
-		fd = socket(AF_ISDN, SOCK_DGRAM, ISDN_P_LAPD_TE);
+		fd = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_LAPD_TE);
 		if (fd < 0) {
 			fprintf(stderr,"could not open ISDN_P_LAPD_TE socket %s\n", strerror(errno));
 			goto fail;
@@ -138,7 +138,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 			fprintf(stderr,"protocol L3_PROTOCOL_DSS1_NET device do not support ISDN_P_NT_S0\n");
 			goto fail;
 		}
-		fd = socket(AF_ISDN, SOCK_DGRAM, ISDN_P_LAPD_NT);
+		fd = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_LAPD_NT);
 		if (fd < 0) {
 			fprintf(stderr,"could not open ISDN_P_LAPD_NT socket %s\n", strerror(errno));
 			goto fail;

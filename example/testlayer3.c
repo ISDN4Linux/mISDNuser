@@ -161,7 +161,7 @@ int setup_bchannel(devinfo_t *di) {
 		fprintf(stdout, "wrong channel %d\n", di->used_bchannel);
 		return 2;
 	}
-	di->bchan = socket(AF_ISDN, SOCK_DGRAM, di->bproto);
+	di->bchan = socket(PF_ISDN, SOCK_DGRAM, di->bproto);
 	if (di->bchan < 0) {
 		fprintf(stdout, "could not open bchannel socket %s\n", strerror(errno));
 		return 3;
@@ -1288,7 +1288,7 @@ char *argv[];
                                    aidx++;
 		} while (aidx<argc);
 	}
-	err = socket(AF_ISDN, SOCK_RAW, ISDN_P_BASE);
+	err = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (err < 0) {
 		printf("TestmISDN cannot open mISDN due to %s\n",
 			strerror(errno));

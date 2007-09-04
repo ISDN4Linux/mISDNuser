@@ -160,7 +160,7 @@ int setup_bchannel(devinfo_t *di) {
 		fprintf(stdout, "wrong channel %d\n", di->used_bchannel);
 		return 1;
 	}
-	di->bchan = socket(AF_ISDN, SOCK_DGRAM, di->bproto);
+	di->bchan = socket(PF_ISDN, SOCK_DGRAM, di->bproto);
 	if (di->bchan < 0) {
 		fprintf(stdout, "could not open bchannel socket %s\n", strerror(errno));
 		return 2;
@@ -860,7 +860,7 @@ int do_setup(devinfo_t *di) {
 				di->func);
 			return 1;
 	}
-	sk = socket(AF_ISDN, SOCK_RAW, ISDN_P_BASE);
+	sk = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (sk < 1) {
 		fprintf(stdout, "could not open socket %s\n", strerror(errno));
 		return 2;
@@ -895,7 +895,7 @@ int do_setup(devinfo_t *di) {
 
 	close(sk);
 
-	di->layer2 = socket(AF_ISDN, SOCK_DGRAM, ISDN_P_LAPD_TE);
+	di->layer2 = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_LAPD_TE);
 	if (di->layer2 < 0) {
 		fprintf(stdout, "could not open layer2 socket %s\n", strerror(errno));
 		return 5;
@@ -1083,7 +1083,7 @@ char *argv[];
                                    aidx++;
 		} while (aidx<argc);
 	}
-	err = socket(AF_ISDN, SOCK_RAW, ISDN_P_BASE);
+	err = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (err < 0) {
 		printf("TestmISDN cannot open mISDN due to %s\n",
 			strerror(errno));

@@ -176,7 +176,7 @@ char *argv[];
 		fprintf(stderr,"card nr %d wrong it should be 1 ... nr of installed cards\n", cardnr);
 		exit(1);
 	}
-	if ((log_socket = socket(AF_ISDN, SOCK_RAW, 0)) < 0) {
+	if ((log_socket = socket(PF_ISDN, SOCK_RAW, 0)) < 0) {
 		printf("could not open socket %s\n", strerror(errno));
 		exit(1);
 	}
@@ -227,7 +227,7 @@ char *argv[];
 	if (di.protocol == ISDN_P_NONE) /* default TE */
 		di.protocol = ISDN_P_TE_S0;
 
-	if ((log_socket = socket(AF_ISDN, SOCK_DGRAM, di.protocol)) < 0) {
+	if ((log_socket = socket(PF_ISDN, SOCK_DGRAM, di.protocol)) < 0) {
 		printf("could not open log socket %s\n", strerror(errno));
 		exit(1);
 	}
