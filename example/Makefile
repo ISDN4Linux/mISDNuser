@@ -1,5 +1,5 @@
 LIBINCL	:= $(INCLUDEDIR)/mISDNlib.h
-PROGS	:= testcon loghex testlayer3 cleanl2
+PROGS	:= testcon loghex testlayer3 cleanl2 misdnportinfo
 # PROGS   := testcon testnet loadfirm logger
 
 all: $(PROGS)
@@ -16,6 +16,8 @@ install:
 	for i in $(PROGS) ; do \
 		install -m 755 $$i $(INSTALL_PREFIX)/usr/bin ;\
 	done
+
+misdnportinfo: misdnportinfo.o
 
 testcon: testcon.o
 
