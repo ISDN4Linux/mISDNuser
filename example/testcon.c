@@ -156,6 +156,10 @@ int setup_bchannel(devinfo_t *di) {
 	int			ret;
 	struct sockaddr_mISDN	addr;
 
+	if (VerifyOn>3)
+		fprintf(stdout,"%s used_bchannel %d\n", __FUNCTION__, di->used_bchannel);
+	if (di->flag & FLG_BCHANNEL_SETUP)
+		return 0;
 	if ((di->used_bchannel < 1) || (di->used_bchannel > 2)) {
 		fprintf(stdout, "wrong channel %d\n", di->used_bchannel);
 		return 1;
@@ -178,7 +182,7 @@ int setup_bchannel(devinfo_t *di) {
 	addr.family = AF_ISDN;
 	addr.dev = di->cardnr - 1;
 	addr.channel = di->used_bchannel;
-
+	
 	ret = bind(di->bchan, (struct sockaddr *) &addr, sizeof(addr));
 
 	if (ret < 0) {
@@ -448,6 +452,9 @@ int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 	return 0;
 }
 
+#define L3_MT_OFF	(MISDN_HEADER_LEN + 3)
+#define L3_CR_VAL	(MISDN_HEADER_LEN + 2)
+
 int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 {
 	struct mISDNhead	*hh = (struct  mISDNhead *)buf;
@@ -468,14 +475,14 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 				hh->prim, hh->id, len);
 		return 0;
 	}
-	if (len > 16 && (((!(di->flag & FLG_CALL_ORGINATE)) && (buf[15] == MT_SETUP)) ||
-	    ((di->flag & FLG_CALL_ORGINATE) && (buf[15] == MT_CALL_PROCEEDING)) ||
-	    ((di->flag & FLG_CALL_ORGINATE) && (buf[15] == MT_ALERTING)))) {
-		int	idx = 16;
+	if (len > (L3_MT_OFF +1) && (((!(di->flag & FLG_CALL_ORGINATE)) && (buf[L3_MT_OFF] == MT_SETUP)) ||
+	    ((di->flag & FLG_CALL_ORGINATE) && (buf[L3_MT_OFF] == MT_CALL_PROCEEDING)) ||
+	    ((di->flag & FLG_CALL_ORGINATE) && (buf[L3_MT_OFF] == MT_ALERTING)))) {
+		int	idx = L3_MT_OFF + 1;
 
 		di->flag |= FLG_CALL_ACTIVE;
 		if (!(di->flag & FLG_CALL_ORGINATE))
-			di->cr = buf[14];
+			di->cr = buf[L3_CR_VAL];
 		while (idx<len) {
 			if (buf[idx] == IE_CHANNEL_ID) {
 				di->used_bchannel=buf[idx+2] & 0x3;
@@ -530,7 +537,7 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 				return 4;
 			}
 		}
-	} else if ((len > 15) && (buf[15] == MT_CONNECT) && (di->flag & FLG_CALL_ORGINATE)) {
+	} else if ((len > L3_MT_OFF) && (buf[L3_MT_OFF] == MT_CONNECT) && (di->flag & FLG_CALL_ORGINATE)) {
 		/* We got connect, so bring B-channel up */
 		if (!(di->flag & FLG_BCHANNEL_SETUP)) {
 			fprintf(stdout,"CONNECT but no bchannel selected\n");
@@ -573,7 +580,7 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 			do_hw_loop(di);
 			break;
 		}
-	} else if ((len > 15) && (buf[15] == MT_CONNECT_ACKNOWLEDGE) && (!(di->flag & FLG_CALL_ORGINATE))) {
+	} else if ((len > L3_MT_OFF) && (buf[L3_MT_OFF] == MT_CONNECT_ACKNOWLEDGE) && (!(di->flag & FLG_CALL_ORGINATE))) {
 		/* We got connect ack, so bring B-channel up */
 		if (!(di->flag & FLG_BCHANNEL_SETUP)) {
 			fprintf(stdout,"CONNECT but no bchannel selected\n");
@@ -607,7 +614,7 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 			do_hw_loop(di);
 			break;
 		}
-	} else if ((len > 15) && (buf[15] == MT_DISCONNECT)) {
+	} else if ((len > L3_MT_OFF) && (buf[L3_MT_OFF] == MT_DISCONNECT)) {
 		/* send a RELEASE */
 		p = msg = buf + MISDN_HEADER_LEN;
 		MsgHead(p, di->cr, MT_RELEASE);
@@ -618,7 +625,7 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 		if (ret < 0) {
 			fprintf(stdout, "sendto error  %s\n", strerror(errno));
 		}
-	} else if ((len > 15) && (buf[15] == MT_RELEASE)) {
+	} else if ((len > L3_MT_OFF) && (buf[L3_MT_OFF] == MT_RELEASE)) {
 		/* on a disconnecting msg leave loop */
 		/* send a RELEASE_COMPLETE */
 		p = msg = buf + MISDN_HEADER_LEN;
@@ -631,7 +638,7 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 			fprintf(stdout, "sendto error  %s\n", strerror(errno));
 		}
 		return 7;
-	} else if ((len > 15) && (buf[15] == MT_RELEASE_COMPLETE)) {
+	} else if ((len > L3_MT_OFF) && (buf[L3_MT_OFF] == MT_RELEASE_COMPLETE)) {
 		/* on a disconnecting msg leave loop */
 		return 8;
 	} else {
