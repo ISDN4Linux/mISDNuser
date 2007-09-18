@@ -37,10 +37,10 @@
  */
 #define	MISDN_MAJOR_VERSION	1
 #define	MISDN_MINOR_VERSION	0
-#define MISDN_RELEASE		16
+#define MISDN_RELEASE		17
 
 #define MISDN_REVISION		"$Revision: 2.0 $"
-#define MISDN_DATE		"$Date: 2007/06/05 15:39:31 $"
+#define MISDN_DATE		"$Date: 2007/09/18 17:39:31 $"
 
 
 #define MISDN_MSG_STATS

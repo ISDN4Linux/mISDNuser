@@ -325,6 +325,10 @@ mISDN_l3up(l3_process_t *l3p, u_int prim, struct l3_msg *l3m)
 {
 	int	ret;
 
+	if (!l3p->L3) {
+		eprint("%s no L3 for l3p(%p) pid(%x)\n", __FUNCTION__, l3p, l3p->pid);
+		return;
+	}
 	ret = l3p->L3->ml3.from_layer3(&l3p->L3->ml3, prim, l3p->pid, l3m);
 	if (ret) {
 		eprint("%s cannot deliver mesage %x process %x to application\n", __FUNCTION__, prim, l3p->pid);
@@ -605,6 +609,8 @@ void
 init_l3(layer3_t *l3)
 {
 	INIT_LIST_HEAD(&l3->plist);
+	l3->global.L3 = l3;
+	l3->dummy.L3 = l3;
 	L3TimerInit(l3, MISDN_PID_GLOBAL, &l3->global.timer1);
 	L3TimerInit(l3, MISDN_PID_GLOBAL, &l3->global.timer2);
 	L3TimerInit(l3, MISDN_PID_DUMMY, &l3->dummy.timer1);
