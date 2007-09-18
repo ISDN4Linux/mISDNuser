@@ -23,13 +23,17 @@ testcon: testcon.o
 
 testlayer3: testlayer3.o
 
-testcon.o : testcon.c ../include/q931.h
+testcon.o : testcon.c ../include/q931.h ../include/mISDNif.h
 
-testlayer3.o: testlayer3.c ../include/q931.h ../include/mlayer3.h
+testlayer3.o: testlayer3.c ../include/q931.h ../include/mlayer3.h ../include/mISDNif.h
 
 loghex: loghex.o
 
+loghex.o: loghex.c ../include/mISDNif.h
+
 cleanl2: cleanl2.o
+
+cleanl2.o: cleanl2.c ../include/mISDNif.h
 
 clean:
 	rm -f *.o *.lo *~ DEADJOE

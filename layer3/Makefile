@@ -38,6 +38,7 @@ libmisdn.so: $(MISDN_OBJ)
 .c.lo:
 	$(CC) $(CFLAGS) -fPIC -o $@ -c $<
 
+$(INCLUDEDIR)/mlayer3.h: $(INCLUDEDIR)/mISDNif.h
 debug.o debug.lo:	debug.c debug.h
 mbuffer.o mbuffer.lo:	mbuffer.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h debug.h
 q931.o q931.lo:		q931.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h $(INCLUDEDIR)/q931.h debug.h
