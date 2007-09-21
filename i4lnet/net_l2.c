@@ -984,7 +984,8 @@ invoke_retransmission(layer2_t *l2, unsigned int nr)
 			p1 = (p1 + l2->sow) % l2->window;
 //			if (test_bit(FLG_LAPB, &l2->flag))
 //				st->l1.bcs->tx_cnt += l2->windowar[p1]->len + l2headersize(l2, 0);
-			msg_queue_head(&l2->i_queue, l2->windowar[p1]);
+			if ( l2->windowar[p1] ) 
+				msg_queue_head(&l2->i_queue, l2->windowar[p1]);
 			l2->windowar[p1] = NULL;
 		}
 		FsmEvent(&l2->l2m, EV_L2_ACK_PULL, NULL);
