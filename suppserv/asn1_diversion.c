@@ -322,3 +322,4 @@ int encodeInvokeDeflection(__u8 *dest, struct FacCDeflection *CD)
 	dest[1] = p - &dest[2];
 	return p - dest;
 }
+
