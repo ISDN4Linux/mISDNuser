@@ -34,6 +34,8 @@
 
 enum FacFunction {
 	Fac_None 					= 0xffff,
+	Fac_ERROR					= 0xfffe,
+	Fac_RESULT					= 0xfffd,
 	Fac_GetSupportedServices 	= 0x0000,
 	Fac_Listen 					= 0x0001,
 	Fac_Suspend 				= 0x0004,
@@ -45,6 +47,15 @@ enum FacFunction {
 	Fac_CD 						= 0x000d,
 	Fac_AOCDCurrency 			= 0x0021,
 	Fac_AOCDChargingUnit 		= 0x0022,
+};
+
+struct FacERROR {
+	__u8 errorValue;
+	__u8 error[32];
+};
+
+struct FacRESULT {
+	__u8 result;
 };
 
 struct FacListen {
@@ -118,6 +129,8 @@ struct FacParm {
 		struct FacCDeflection CDeflection;
 		struct FacAOCDChargingUnit AOCDchu;
 		struct FacAOCDCurrency AOCDcur;
+		struct FacRESULT RESULT;
+		struct FacERROR	ERROR;
 	} u;
 };
 

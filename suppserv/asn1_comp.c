@@ -136,6 +136,8 @@ ParseReturnErrorComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dumm
 	}
 	print_asn1msg(PRT_DEBUG_DECODE, "ReturnError: %s\n", error);
 
+	strcpy(pc->u.retError.error,error);
+
 	return p - beg;
 }
 

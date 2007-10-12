@@ -99,6 +99,7 @@ struct asn1ReturnResult {
 struct asn1ReturnError {
 	__u16 invokeId;
 	__u16 errorValue;
+	__u8 error[32];
 };
 
 struct asn1Reject {
