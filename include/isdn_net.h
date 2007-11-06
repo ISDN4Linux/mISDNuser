@@ -101,6 +101,7 @@ struct _manager	{
 #define FEATURE_NET_PTP		0x00000002
 #define FEATURE_NET_CRLEN2	0x00000004
 #define FEATURE_NET_EXTCID	0x00000008
+#define FEATURE_NET_KEEPCALLS	0x0000000f
 
 struct _net_stack {
 	int			device;

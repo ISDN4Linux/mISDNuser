@@ -2975,7 +2975,9 @@ l3_msg(layer3_t *l3, u_int pr, int dinfo, void *arg)
 				break;
 			if (l3->nst->l3_manager(l3->nst->manager, lmsg))
 				free_msg(lmsg);
-			remove_proc(&l3->proc, dinfo);
+
+			if (! l3->nst->feature& FEATURE_NET_KEEPCALLS)
+				remove_proc(&l3->proc, dinfo);
 			break;
 		case (DL_RELEASE | CONFIRM):
 			if (ces == 0) {
