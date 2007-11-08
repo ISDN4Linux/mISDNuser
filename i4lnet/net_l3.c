@@ -1933,6 +1933,22 @@ l3dss1_release_cmpl_req(layer3_proc_t *pc, int pr, void *arg)
 	send_proc(pc, IMSG_END_PROC_M, NULL);
 }
 
+
+static void
+l3dss1_restart_req(layer3_proc_t *pc, int pr, void *arg)
+{
+	RESTART_t *restart = arg;
+	
+	if (!restart) return ;
+	
+	MsgStart(pc, MT_RESTART);
+	if (restart->CHANNEL_ID) 
+		AddvarIE(pc, IE_CHANNEL_ID, restart->CHANNEL_ID);
+	if (restart->RESTART_IND)
+		AddvarIE(pc, IE_RESTART_IND, restart->RESTART_IND);
+	SendMsg(pc, -1);
+}
+
 static void
 l3dss1_t302(layer3_proc_t *pc, int pr, void *arg)
 {
@@ -2726,6 +2742,18 @@ manager_l3(net_stack_t *nst, msg_t *msg)
 		(hh->dinfo>>16)& 0xffff);
 	if (!proc) {
 		switch (hh->prim) {
+			case CC_RESTART | REQUEST:
+				{
+					layer3_proc_t dummy;
+					memset( &dummy, 0, sizeof(layer3_proc_t));
+					dummy.l3 = nst->layer3;
+					dummy.ces = 0;
+					dummy.callref = 0;
+					l3dss1_restart_req(&dummy, hh->prim, msg->data); 
+					free_msg(msg);
+					return(0);
+				}
+			break;
 			case CC_SETUP | REQUEST:
 			{
 				int l4id;
