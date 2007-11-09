@@ -96,7 +96,7 @@ static inline msg_t *msg_dequeue(msg_queue_t *list)
 	prev = (msg_t *) list;
 	next = prev->next;
 	result = NULL;
-	if (next != prev) {
+	if (next && next != prev) {
 		result = next;
 		next = next->next;
 		list->len--;
