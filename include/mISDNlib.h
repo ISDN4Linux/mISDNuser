@@ -15,6 +15,8 @@
 #endif
 
 typedef unsigned short u16;
+typedef unsigned char u8;
+
 
 #include <sys/types.h>
 #include <stdio.h>
