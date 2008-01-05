@@ -2033,7 +2033,9 @@ dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: pc=%p del timer2\n", __FUNCTION__, pc)
 	relc->CAUSE[2] = CAUSE_NOUSER_RESPONDING | 0x80;
 	if (mISDN_l3up(pc, msg))
 		free_msg(msg);
-	newl3state(pc, 22);
+//	newl3state(pc, 22);
+	newl3state(pc, 0);
+	send_proc(pc, IMSG_END_PROC_M, NULL);
 }
 
 static void

@@ -920,7 +920,7 @@ int main(int argc, char *argv[])
 		}
 		if (pid != 0)
 		{
-			printf("PBX: Starting daemon.\n");
+			printf("%s: Starting daemon.\n", argv[0]);
 			exit(0);
 		}
 		nooutput = 1;
