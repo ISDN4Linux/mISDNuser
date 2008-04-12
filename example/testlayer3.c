@@ -863,7 +863,7 @@ int check_number(devinfo_t *di, struct l3_msg *l3m) {
 
 int do_dchannel(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, struct l3_msg *l3m)
 {
-	devinfo_t		*di = l3->private;
+	devinfo_t		*di = l3->priv;
 	int			ret;
 
 	if (VerifyOn>3)

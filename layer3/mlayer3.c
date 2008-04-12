@@ -107,7 +107,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 		return NULL;
 	l3->ml3.options = prop;
 	l3->ml3.from_layer3 = f;
-	l3->ml3.private = p;
+	l3->ml3.priv = p;
 
 	init_l3(l3);
 	devinfo.id = dev;

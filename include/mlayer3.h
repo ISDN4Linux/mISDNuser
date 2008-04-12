@@ -97,7 +97,7 @@ struct mlayer3 {
 	unsigned long	options;
 	mlayer3_cb_t	*to_layer3;
 	mlayer3_cb_t	*from_layer3;
-	void		*private; /* free user for applications */
+	void		*priv; /* free user for applications */
 };
 
 /*
