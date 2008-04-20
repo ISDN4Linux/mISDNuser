@@ -213,10 +213,7 @@ char *argv[];
 		printf("	Dprotocols:	%08x\n", di.Dprotocols);
 		printf("	Bprotocols:	%08x\n", di.Bprotocols);
 		printf("	protocol:	%d\n", di.protocol);
-		printf("	channelmap:	%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
-			di.channelmap[15], di.channelmap[14], di.channelmap[13], di.channelmap[12],
-			di.channelmap[11], di.channelmap[10], di.channelmap[9], di.channelmap[8],
-			di.channelmap[7], di.channelmap[6], di.channelmap[5], di.channelmap[4],
+		printf("	channelmap:	%08x%08x%08x%08x\n",
 			di.channelmap[3], di.channelmap[2], di.channelmap[1], di.channelmap[0]);
 		printf("	nrbchan:	%d\n", di.nrbchan);
 		printf("	name:		%s\n", di.name);

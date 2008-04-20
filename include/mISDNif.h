@@ -255,7 +255,7 @@ struct mISDNhead {
 #define TEI_SAPI		63
 #define CTRL_SAPI		0
 
-#define MISDN_CHMAP_SIZE	16
+#define MISDN_CHMAP_SIZE	4
 
 /* socket */
 #ifndef	AF_ISDN
@@ -294,7 +294,7 @@ struct mISDN_devinfo {
 	u_int			Dprotocols;
 	u_int			Bprotocols;
 	u_int			protocol;
-	u_char			channelmap[MISDN_CHMAP_SIZE];
+	u_long			channelmap[MISDN_CHMAP_SIZE];
 	u_int			nrbchan;
 	char			name[MISDN_MAX_IDLEN];
 };
