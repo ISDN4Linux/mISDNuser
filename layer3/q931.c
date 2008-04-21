@@ -211,10 +211,10 @@ assembleQ931(l3_process_t *pc, struct l3_msg *l3m)
 	if (pc->pid == MISDN_PID_DUMMY) {
 		mb->l3h.crlen = 0;
 	} else {
-		if (pc->L3->ml3.nr_bchannel > 2)
-			mb->l3h.crlen = 2;
-		else
+		if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options))
 			mb->l3h.crlen = 1;
+		else
+			mb->l3h.crlen = 2;
 		mb->l3h.cr = pc->pid & 0xffff;
 	}
 	mb->l3h.type = l3m->type & 0xff;

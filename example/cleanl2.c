@@ -107,7 +107,7 @@ char *argv[];
 		exit(0);
 	}
 
-	if (di.protocol == ISDN_P_TE_S0) {
+	if (di.protocol == ISDN_P_TE_S0 || di.protocol == ISDN_P_TE_E1) {
 		protocol = ISDN_P_LAPD_TE;
 	} else {
 		protocol = ISDN_P_LAPD_NT;

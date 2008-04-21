@@ -1038,7 +1038,7 @@ send_timeout(l3_process_t *pc, char *nr)
 	c[1] = 0x80 | CAUSE_TIMER_EXPIRED;
 	c[2] = nr[0];
 	c[3] = nr[1];
-	c[4] = 0x80 | nr[2];
+	c[4] = nr[2];
 	add_layer3_ie(l3m, IE_CAUSE, 5, c);
 	mISDN_l3up(pc, MT_TIMEOUT, l3m);
 }
@@ -1138,15 +1138,48 @@ l3dss1_t312(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 //	if (pc->state == 22 || pc->state == 25 || pc->state == 9 || pc->state == 7) {
 	if (pc->state == 22) {
 		StopAllL3Timer(pc);
-//		if (!pc->child) {
+//		if (list_empty(&pc->child)) {
 //			if_link(pc->L3->nst->manager, (ifunc_t)pc->L3->nst->L3_manager,
 //				CC_TIMEOUT | INDICATION,pc->ces |
 //				(pc->callref << 16), sizeof(int), &t, 0);
 			send_proc(pc, IMSG_END_PROC_M, NULL);
 //		}
 	}
-#warning send_timeout muss noch, auch die states bedenken
 }
+#warning hier lesen
+// t312 feuert nur im state 22. wenn aber vorher z.b. ein alerting war,
+// dann ist der state auf 7, auch wenn der child-process ausgelöst hat.
+// (wenn ich also während der 6 sekunde (T312) das gespräch abweise,
+//  dann bekomme ich erst nach ende von T312 ein disconnect vom stack.
+//  es könnte ja noch ein gerät antworten und auch alerting oder connect
+//  senden.)
+//
+// wir sollten eher prüfen, ob noch ein child da ist. der ist dann in einem
+// der states "setup acknowledge", proceeding oder alerting.
+// NUR DANN sollte der stack beendet werden und nach oben ein timeout geschickt,
+// dann weiss man als applikation, dass der stack aufgrund von T312 beendet
+// wurde, kein child mehr da ist und man dann den gesammelten cause an den
+// anrufer (innerhalb der applikation) weiterreichen muss.
+//
+// im call abort state (22) ist ja auch kein child mehr da, da in diesem state
+// jede antwort vom user sofort abgewiesen wird.
+// hier mein code:
+/*
+static void
+l3dss1_t312(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
+{
+	test_and_clear_bit(FLG_L3P_TIMER312, &pc->flags);
+	L3DelTimer(&pc->timer2);
+	dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
+	l3_debug(pc->L3, "%s: state %d", __FUNCTION__, pc->state);
+	if (list_empty(&pc->child)) {
+		StopAllL3Timer(pc);
+		newl3state(pc, 0);
+		send_timeout(pc, "312");
+		send_proc(pc, IMSG_END_PROC_M, NULL);
+	}
+}
+*/
 
 static void
 l3dss1_holdack_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
@@ -1166,16 +1199,12 @@ l3dss1_holdrej_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (pc->aux_state != AUX_HOLD_IND)
 		return;
-	pc->aux_state = AUX_IDLE; 
-// What is cause 0x47 ??? not defined by ETSI or ITU
-//		add_layer3_ie(l3m, IE_CAUSE, 2, c);
-//			*pc->op++ = IE_CAUSE;
-//			*pc->op++ = 2;
-//			*pc->op++ = 0x80;
-//			*pc->op++ = 0x80 | 0x47;
-//		}
-#warning NEED checking for mandatory IE CAUSE
-	SendMsg(pc, l3m, -1);
+	pc->aux_state = AUX_IDLE;
+	if (!l3m->cause)
+		l3dss1_message_cause(pc,
+			MT_HOLD_REJECT, CAUSE_NORMALUNSPECIFIED);
+	else
+		SendMsg(pc, l3m, -1);
 }
 
 static void
@@ -1197,13 +1226,11 @@ l3dss1_retrrej_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	if (pc->aux_state != AUX_RETRIEVE_IND)
 		return;
 	pc->aux_state = AUX_CALL_HELD; 
-// What is cause 0x47 ??? not defined by ETSI or ITU
-//		*pc->op++ = IE_CAUSE;
-//		*pc->op++ = 2;
-//		*pc->op++ = 0x80;
-//		*pc->op++ = 0x80 | 0x47;
-#warning NEED checking for mandatory IE CAUSE
-	SendMsg(pc, l3m, -1);
+	if (!l3m->cause)
+		l3dss1_message_cause(pc,
+			MT_RETRIEVE_REJECT, CAUSE_NORMALUNSPECIFIED);
+	else
+		SendMsg(pc, l3m, -1);
 }
 
 static void
@@ -1222,11 +1249,11 @@ l3dss1_suspack_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_susprej_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-//		*pc->op++ = 2;
-//		*pc->op++ = 0x80;
-//		*pc->op++ = 0x80 | 0x47;
-#warning NEED checking for mandatory IE CAUSE
-	SendMsg(pc, l3m, -1);
+	if (!l3m->cause)
+		l3dss1_message_cause(pc,
+			MT_SUSPEND_REJECT, CAUSE_NORMALUNSPECIFIED);
+	else
+		SendMsg(pc, l3m, -1);
 	newl3state(pc, 10);
 }
 
@@ -1245,11 +1272,11 @@ l3dss1_resack_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_resrej_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-//			*pc->op++ = 2;
-//			*pc->op++ = 0x80;
-//			*pc->op++ = 0x80 | 0x47;
-#warning NEED checking for mandatory IE CAUSE
-	SendMsg(pc, l3m, -1);
+	if (!l3m->cause)
+		l3dss1_message_cause(pc,
+			MT_RESUME_REJECT, CAUSE_NORMALUNSPECIFIED);
+	else
+		SendMsg(pc, l3m, -1);
 	newl3state(pc, 0);
 	send_proc(pc, IMSG_END_PROC_M, NULL);
 }

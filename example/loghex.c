@@ -55,7 +55,7 @@ static void write_wfile(FILE *f, unsigned char *buf, int len, struct timeval *tv
 
 	if ((hh->prim != PH_DATA_REQ) && (hh->prim != PH_DATA_IND))
 		return;
-	if (protocol == ISDN_P_NT_S0)
+	if (protocol == ISDN_P_NT_S0 || protocol == ISDN_P_NT_E1)
 		origin = hh->prim == PH_DATA_REQ ? 0 : 1;
 	else
 		origin = hh->prim == PH_DATA_REQ ? 1 : 0;
@@ -213,7 +213,7 @@ char *argv[];
 		printf("	Dprotocols:	%08x\n", di.Dprotocols);
 		printf("	Bprotocols:	%08x\n", di.Bprotocols);
 		printf("	protocol:	%d\n", di.protocol);
-		printf("	channelmap:	%08x%08x%08x%08x\n",
+		printf("	channelmap:	%08lx%08lx%08lx%08lx\n",
 			di.channelmap[3], di.channelmap[2], di.channelmap[1], di.channelmap[0]);
 		printf("	nrbchan:	%d\n", di.nrbchan);
 		printf("	name:		%s\n", di.name);

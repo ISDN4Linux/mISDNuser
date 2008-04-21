@@ -212,26 +212,30 @@ l3_process_t *
 create_new_process(layer3_t *l3, unsigned int ces, unsigned int cr, l3_process_t *master)
 {
 	l3_process_t	*pc;
+	unsigned int	max_cr = 0x7fff;
+	int		try;
+	
 
 	if ((cr & 0xffff) > 0) { /* remote owned callref */
 		pc = get_l3process4pid(l3, ((ces & 0xff) << 16) | cr);
 		if (pc && (pc != master)) /* already here */
 			return NULL;
 	} else {
-		cr = l3->next_cr++;
-#warning check einfügen
-		if (l3->ml3.nr_bchannel > 2) {
-			if (l3->next_cr > 0x7f)
+		if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options))
+			max_cr = 0x7f;
+		for (try = 0; try < l3->ml3.nr_bchannel; try++) { /* more tries for more channels */
+			cr = l3->next_cr++;
+			if (l3->next_cr > max_cr)
 				l3->next_cr = 1;
-		} else {
-			if (l3->next_cr > 0x7fff)
-				l3->next_cr = 1;
+			if (!get_l3process4cref(l3, cr))
+				break;
 		}
+		if (get_l3process4cref(l3, cr))
+			return NULL;
 		cr |= MISDN_PID_CR_FLAG; /* we own it */
 	}
 	pc = calloc(1, sizeof(l3_process_t));
 	if (!pc)
-		return NULL;
 	pc->l2if = get_l2if(l3, ces);
 	if (ces == MISDN_CES_MASTER) {
 		if (test_bit(FLG_USER, &l3->ml3.options) || test_bit(MISDN_FLG_PTP, &l3->ml3.options)) {
