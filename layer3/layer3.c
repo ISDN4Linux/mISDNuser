@@ -223,7 +223,7 @@ create_new_process(layer3_t *l3, unsigned int ces, unsigned int cr, l3_process_t
 	} else {
 		if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options))
 			max_cr = 0x7f;
-		for (try = 0; try < l3->ml3.nr_bchannel; try++) { /* more tries for more channels */
+		for (try = 0; try <= l3->ml3.nr_bchannel; try++) { /* more tries for more channels */
 			cr = l3->next_cr++;
 			if (l3->next_cr > max_cr)
 				l3->next_cr = 1;
@@ -308,7 +308,7 @@ release_l3_process(l3_process_t *pc)
 	StopAllL3Timer(pc);
 	free(pc);
 	pc = get_first_l3process4ces(l3, ces);
-	if ((!pc) && !test_bit(MISDN_FLG_PTP, &l3->ml3.options)) {
+	if ((!pc) && !test_bit(MISDN_FLG_L2_HOLD, &l3->ml3.options)) {
 		if (!mqueue_len(&l2i->squeue)) {
 			FsmEvent(&l2i->l3m, EV_RELEASE_REQ, NULL);
 		}
@@ -389,7 +389,7 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 		dequeued++;
 	}
 	pc = get_first_l3process4ces(l2i->l3, l2i->l2addr.channel);
-	if ((!pc) && (!test_bit(MISDN_FLG_PTP, &l2i->l3->ml3.options)) && dequeued) {
+	if ((!pc) && (!test_bit(MISDN_FLG_L2_HOLD, &l2i->l3->ml3.options)) && dequeued) {
 		FsmEvent(fi, EV_RELEASE_REQ, NULL);
 	} else {
 		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
@@ -412,7 +412,7 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 		dequeued++;
 	}
 	pc = get_first_l3process4ces(l2i->l3, l2i->l2addr.channel);
-	if ((!pc) && (!test_bit(MISDN_FLG_PTP, &l2i->l3->ml3.options)) && dequeued) {
+	if ((!pc) && (!test_bit(MISDN_FLG_L2_HOLD, &l2i->l3->ml3.options)) && dequeued) {
 		FsmEvent(fi, EV_RELEASE_REQ, NULL);
 	} else {
 		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
