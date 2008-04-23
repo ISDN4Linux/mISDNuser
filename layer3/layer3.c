@@ -393,7 +393,7 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 		FsmEvent(fi, EV_RELEASE_REQ, NULL);
 	} else {
 		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
-		l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, 0, NULL);
+		l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, l2i->l2addr.tei, NULL);
 	}
 }
 
@@ -416,7 +416,7 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 		FsmEvent(fi, EV_RELEASE_REQ, NULL);
 	} else {
 		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
-		l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, 0, NULL);
+		l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, l2i->l2addr.tei, NULL);
 	}
 }
 
@@ -452,7 +452,7 @@ lc_release_ind(struct FsmInst *fi, int event, void *arg)
 	FsmChangeState(fi, ST_L3_LC_REL);
 	mqueue_purge(&l2i->squeue);
 	l3ml3p(l2i->l3, DL_RELEASE_IND, l2i->l2addr.channel);
-	l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2RELEASE, 0, NULL);
+	l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2RELEASE, l2i->l2addr.tei, NULL);
 }
 
 static void
@@ -463,7 +463,7 @@ lc_release_cnf(struct FsmInst *fi, int event, void *arg)
 	FsmChangeState(fi, ST_L3_LC_REL);
 	mqueue_purge(&l2i->squeue);
 	l3ml3p(l2i->l3, DL_RELEASE_CNF, l2i->l2addr.channel);
-	l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2RELEASE, 0, NULL);
+	l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2RELEASE, l2i->l2addr.tei, NULL);
 }
 
 
@@ -622,7 +622,8 @@ init_l3(layer3_t *l3)
 	L3TimerInit(l3, MISDN_PID_DUMMY, &l3->dummy.timer2);
 	l3->debug = 0xff; // FIXME dynamic
 	init_l2if(&l3->l2master, l3);
-	l3->l2master.l3m.state = ST_L3_LC_ESTAB; /* broadcast is always enabled */
+	if (!test_bit(MISDN_FLG_PTP, &l3->ml3.options))
+		l3->l2master.l3m.state = ST_L3_LC_ESTAB; /* broadcast is always enabled */
 	mqueue_init(&l3->app_queue);
 	INIT_LIST_HEAD(&l3->pending_timer);
 	l3->ml3.to_layer3 = to_layer3;
@@ -712,6 +713,27 @@ free_out:
 	free_mbuffer(mb);
 }
 
+static void
+to_l2(layer3_t *l3, struct l3_msg *l3m)
+{
+	struct l2l3if	*l2i;
+
+	list_for_each_entry(l2i, &l3->l2master.list, list) {
+		if (l3m->pid == l2i->l2addr.tei) {
+			switch(l3m->type) {
+			case MT_L2ESTABLISH:
+				FsmEvent(&l2i->l3m, EV_ESTABLISH_REQ, NULL);
+				break;
+			case MT_L2RELEASE:
+				FsmEvent(&l2i->l3m, EV_RELEASE_REQ, NULL);
+				break;
+			}
+			break;
+		}
+	}
+	free_l3_msg(l3m);
+}
+
 static void *
 layer3_thread(void *arg)
 {
@@ -762,7 +784,10 @@ layer3_thread(void *arg)
 			}
 		}
 		while ((mb = mdequeue(&l3->app_queue))) {
-			l3->to_l3(l3, &mb->l3);
+			if (mb->l3.type == DL_ESTABLISH_REQ || mb->l3.type == DL_RELEASE_REQ)
+				to_l2(l3, &mb->l3);
+			else
+				l3->to_l3(l3, &mb->l3);
 		}
 		while ((mb = mdequeue(&l3->l2master.squeue))) {
 			ret = sendto(l3->l2sock, mb->head, mb->len, 0, (struct sockaddr *)&mb->addr, sizeof(mb->addr));
