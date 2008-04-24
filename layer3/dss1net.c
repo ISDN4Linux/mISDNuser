@@ -1127,6 +1127,8 @@ l3dss1_t308(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	}
 }
 
+#warning hier lesen
+#if 0
 static void
 l3dss1_t312(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
@@ -1146,7 +1148,6 @@ l3dss1_t312(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 //		}
 	}
 }
-#warning hier lesen
 // t312 feuert nur im state 22. wenn aber vorher z.b. ein alerting war,
 // dann ist der state auf 7, auch wenn der child-process ausgelöst hat.
 // (wenn ich also während der 6 sekunde (T312) das gespräch abweise,
@@ -1164,7 +1165,7 @@ l3dss1_t312(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 // im call abort state (22) ist ja auch kein child mehr da, da in diesem state
 // jede antwort vom user sofort abgewiesen wird.
 // hier mein code:
-/*
+#endif
 static void
 l3dss1_t312(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
@@ -1179,7 +1180,6 @@ l3dss1_t312(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 		send_proc(pc, IMSG_END_PROC_M, NULL);
 	}
 }
-*/
 
 static void
 l3dss1_holdack_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)

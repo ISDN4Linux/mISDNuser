@@ -719,7 +719,9 @@ to_l2(layer3_t *l3, struct l3_msg *l3m)
 	struct l2l3if	*l2i;
 
 	list_for_each_entry(l2i, &l3->l2master.list, list) {
-		if (l3m->pid == l2i->l2addr.tei) {
+		/* given tei or 0=first tei, but not 127 */
+		if (l3m->pid == l2i->l2addr.tei
+		 || (l3m->pid == 0 && l2i->l2addr.tei != 127)) {
 			switch(l3m->type) {
 			case MT_L2ESTABLISH:
 				FsmEvent(&l2i->l3m, EV_ESTABLISH_REQ, NULL);
