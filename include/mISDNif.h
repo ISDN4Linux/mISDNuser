@@ -134,12 +134,6 @@
 #define DTMF_TONE_START		0x2100
 #define DTMF_TONE_STOP		0x2200
 #define DTMF_HFC_COEF		0x4000
-#define HW_LOS			0x2301
-#define HW_LOS_OFF		0x2302
-#define HW_AIS			0x2303
-#define HW_AIS_OFF		0x2304
-#define HW_SLIP_TX		0x2305
-#define HW_SLIP_RX		0x2306
 #define DSP_ECHOCAN_ON 		0x2401
 #define DSP_ECHOCAN_OFF 	0x2402
 #define DSP_CONF_JOIN		0x2403
