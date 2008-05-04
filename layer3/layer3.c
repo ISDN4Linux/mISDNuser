@@ -221,7 +221,7 @@ create_new_process(layer3_t *l3, unsigned int ces, unsigned int cr, l3_process_t
 		if (pc && (pc != master)) /* already here */
 			return NULL;
 	} else {
-		if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options))
+		if (test_bit(FLG_BASICRATE, &l3->ml3.options))
 			max_cr = 0x7f;
 		for (try = 0; try <= l3->ml3.nr_bchannel; try++) { /* more tries for more channels */
 			cr = l3->next_cr++;
@@ -235,7 +235,10 @@ create_new_process(layer3_t *l3, unsigned int ces, unsigned int cr, l3_process_t
 		cr |= MISDN_PID_CR_FLAG; /* we own it */
 	}
 	pc = calloc(1, sizeof(l3_process_t));
-	if (!pc)
+	if (!pc) {
+		eprint("%s: no memory for layer3 process\n", __FUNCTION__);
+		return NULL;
+	}
 	pc->l2if = get_l2if(l3, ces);
 	if (ces == MISDN_CES_MASTER) {
 		if (test_bit(FLG_USER, &l3->ml3.options) || test_bit(MISDN_FLG_PTP, &l3->ml3.options)) {
@@ -520,6 +523,8 @@ to_layer3(struct mlayer3 *ml3, unsigned int prim, unsigned int pid, struct l3_ms
 			__FUNCTION__, proc->pid);
 		ml3->from_layer3(ml3, MT_ASSIGN, proc->pid, NULL);
 		break;
+	case MT_L2ESTABLISH:
+	case MT_L2RELEASE:
 	case MT_ALERTING:
 	case MT_CALL_PROCEEDING:
 	case MT_CONNECT:
@@ -678,6 +683,7 @@ static void
 handle_l2msg(struct _layer3 *l3, struct mbuffer *mb)
 {
 	struct l2l3if	*l2i;
+	int ret;
 
 	switch (mb->h->prim) {
 	case DL_DATA_IND:
@@ -687,6 +693,13 @@ handle_l2msg(struct _layer3 *l3, struct mbuffer *mb)
 	case DL_INFORMATION_IND:
 		l2i = create_l2l3if(l3, &mb->addr);
 		goto free_out;
+	case MPH_INFORMATION_IND:
+	case MPH_ACTIVATE_IND:
+	case MPH_DEACTIVATE_IND:
+		ret = l3->ml3.from_layer3(&l3->ml3, mb->h->prim, mb->h->id, &mb->l3);
+		if (ret)
+			goto free_out;
+		return;
 	}
 	l2i = get_l2if(l3, mb->addr.channel);
 	if (!l2i) {
@@ -786,7 +799,7 @@ layer3_thread(void *arg)
 			}
 		}
 		while ((mb = mdequeue(&l3->app_queue))) {
-			if (mb->l3.type == DL_ESTABLISH_REQ || mb->l3.type == DL_RELEASE_REQ)
+			if (mb->l3.type == MT_L2ESTABLISH || mb->l3.type == MT_L2RELEASE)
 				to_l2(l3, &mb->l3);
 			else
 				l3->to_l3(l3, &mb->l3);

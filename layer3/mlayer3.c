@@ -170,6 +170,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	l3->mdev = open("/dev/mISDNtimer", O_RDWR);
 	if (l3->mdev < 0) {
 		fprintf(stderr,"could not open /dev/mISDNtimer %s\n", strerror(errno));
+		fprintf(stderr," -> try to create device: 'mknod /dev/mISDNtimer 10 TODO'\n\n", strerror(errno));
 		goto fail;
 	}
 	if (l3->l2sock < l3->mdev)

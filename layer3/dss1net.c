@@ -1090,15 +1090,19 @@ l3dss1_t303(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	if (pc->t303msg)
 		free_l3_msg(pc->t303msg);
 	pc->t303msg = NULL;
-	StopAllL3Timer(pc);
 	l3m = alloc_l3_msg();
 	if (!l3m)
 		return;
 	c[0] = 0x80 | CAUSE_LOC_PRVN_RMTUSER;
 	c[1] = 0x80 | CAUSE_NOUSER_RESPONDING;
 	add_layer3_ie(l3m, IE_CAUSE, 2, c);
-	mISDN_l3up(pc, MT_RELEASE_COMPLETE , l3m);
-	newl3state(pc, 22);
+	mISDN_l3up(pc, MT_RELEASE_COMPLETE , l3m); // indicate CC_REJECT
+	if (test_bit(FLG_L3P_TIMER312, &pc->flags)) {
+		newl3state(pc, 22);
+	} else {
+		StopAllL3Timer(pc);
+		send_proc(pc, IMSG_END_PROC_M, NULL);
+	}
 }
 
 static void
@@ -1412,7 +1416,7 @@ static struct stateentry manstatelist[] =
 	 CC_T308_1, l3dss1_t308},
 	{SBIT(10),
 	 CC_T309, l3dss1_dl_release},
-	{SBIT(22), // Action for timer T312 only in state 22 !!!
+	{ALL_STATES, // muss sein, sonst gibt es probleme.
 	 CC_T312, l3dss1_t312},
 	{SBIT(6),
 	 CC_TCTRL, l3dss1_reset},
