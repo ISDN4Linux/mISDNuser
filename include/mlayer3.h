@@ -116,6 +116,7 @@ struct mlayer3 {
 #define MISDN_FLG_PTP		1
 #define MISDN_FLG_NET_HOLD	2
 #define	MISDN_FLG_L2_HOLD	3
+#define	MISDN_FLG_L2_CLEAN	4
 
 /* 
  * Layer3 <----> Application additional message types

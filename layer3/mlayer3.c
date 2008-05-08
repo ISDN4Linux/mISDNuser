@@ -66,6 +66,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	int			fd, cnt, ret;
 	struct mISDNversion	ver;
 	struct mISDN_devinfo	devinfo;
+	int			clean = 1;
 
 	if (__init_done == 0) {
 		fprintf(stderr, "You should call init_layer3(nr of message cache entres) first\n"); 
@@ -79,6 +80,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	ret = ioctl(fd, IMGETVERSION, &ver);
 	if (ret < 0) {
 		fprintf(stderr, "could not send IOCTL IMGETVERSION %s\n", strerror(errno));
+		close(fd);
 		return NULL;
 	}
 	iprint("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
@@ -86,19 +88,22 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	
 	if (ver.major != MISDN_MAJOR_VERSION) {
 		fprintf(stderr, "VERSION incompatible please update\n");
+		close(fd);
 		return NULL;
 	}
 	/* handle version backward compatibility specific  stuff here */
 	
 	/* nothing yet */
-	
+
 	ret = ioctl(fd, IMGETCOUNT, &cnt);
 	if (ret < 0) {
 		fprintf(stderr,"could not send IOCTL IMGETCOUNT %s\n", strerror(errno));
+		close(fd);
 		return NULL;
 	}
 	if (cnt < dev) {
 		fprintf(stderr,"device %d do not exist\n", dev);
+		close(fd);
 		return NULL;
 	}
 
@@ -166,11 +171,19 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 		fprintf(stderr,"could not bind socket for device %d:%s\n", dev, strerror(errno));
 		goto fail;
 	}
+        if ((prop & (1 << MISDN_FLG_L2_CLEAN))
+		&& proto == L3_PROTOCOL_DSS1_NET) {
+		ret = ioctl(fd, IMCLEAR_L2, &clean);
+       		if (ret < 0) {
+			fprintf(stderr, "could not send IOCTL IMCLEAN_L2 %s\n", strerror(errno));
+			goto fail;
+		}
+	}
 	l3->l2sock = fd;
 	l3->mdev = open("/dev/mISDNtimer", O_RDWR);
 	if (l3->mdev < 0) {
 		fprintf(stderr,"could not open /dev/mISDNtimer %s\n", strerror(errno));
-		fprintf(stderr," -> try to create device: 'mknod /dev/mISDNtimer 10 TODO'\n\n", strerror(errno));
+		fprintf(stderr," -> try to create device: 'mknod /dev/mISDNtimer 10 TODO'\n\n");
 		goto fail;
 	}
 	if (l3->l2sock < l3->mdev)
