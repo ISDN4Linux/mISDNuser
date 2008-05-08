@@ -171,7 +171,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 		fprintf(stderr,"could not bind socket for device %d:%s\n", dev, strerror(errno));
 		goto fail;
 	}
-        if ((prop & (1 << MISDN_FLG_L2_CLEAN))
+	if (test_bit(MISDN_FLG_L2_CLEAN, &l3->ml3.options)
 		&& proto == L3_PROTOCOL_DSS1_NET) {
 		ret = ioctl(fd, IMCLEAR_L2, &clean);
        		if (ret < 0) {

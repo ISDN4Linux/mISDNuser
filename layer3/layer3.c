@@ -476,6 +476,7 @@ static struct FsmNode L3FnList[] =
 	{ST_L3_LC_REL,		EV_ESTABLISH_REQ,	lc_activate},
 	{ST_L3_LC_REL,		EV_ESTABLISH_IND,	lc_connect},
 	{ST_L3_LC_REL,		EV_ESTABLISH_CNF,	lc_connect},
+	{ST_L3_LC_ESTAB_WAIT,	EV_ESTABLISH_IND,	lc_connected},
 	{ST_L3_LC_ESTAB_WAIT,	EV_ESTABLISH_CNF,	lc_connected},
 	{ST_L3_LC_ESTAB_WAIT,	EV_RELEASE_REQ,		lc_start_delay},
 	{ST_L3_LC_ESTAB_WAIT,	EV_RELEASE_IND,		lc_release_ind},
