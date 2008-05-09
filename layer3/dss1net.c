@@ -1627,7 +1627,7 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 		fprintf(stderr, "dss1up: parse IE error %x\n", ret); 
 		goto freemsg;
 	}
-	dprint(DBGM_L3, msg->addr.dev, "%s: mt(%x) pid(%x)\n", __FUNCTION__, msg->l3.type, msg->l3.pid);
+	dprint(DBGM_L3, msg->addr.dev, "%s: mt(%x) pid(%x) crlen(%d)\n", __FUNCTION__, msg->l3.type, msg->l3.pid, msg->l3h.crlen);
 	if (msg->l3h.crlen == 0) {	/* Dummy Callref */
 		if (msg->l3h.type == MT_FACILITY) {
 			l3dss1_facility(&l3->dummy, msg->h->prim, &msg->l3);

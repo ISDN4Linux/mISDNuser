@@ -84,7 +84,7 @@ parseQ931(struct mbuffer *mb) {
 		mb->l3h.cr = *__msg_pull(mb, 1);
 	if (mb->l3h.crlen == 2) {
 		mb->l3h.cr <<= 8;
-		mb->l3h.cr |= *p++;
+		mb->l3h.cr |= *__msg_pull(mb, 1);
 	} else if (mb->l3h.crlen == 1)
 		if (mb->l3h.cr & 0x80) {
 			mb->l3h.cr |= MISDN_PID_CR_FLAG;
