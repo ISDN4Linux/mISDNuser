@@ -5,32 +5,26 @@
 **---------------------------------------------------------------------------**
 ** Copyright: Andreas Eversberg  (GPL)                                       **
 **                                                                           **
-** user space utility to bridge two mISDN ports.                             **
+** user space utility to bridge two mISDN ports via layer 1                  **
 **                                                                           **
 \*****************************************************************************/ 
 
 
 #include <stdio.h>
-#include <signal.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
-//#include <poll.h>
-#include <errno.h>
-//#include <sys/ioctl.h>
+#include <signal.h>
+#include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <mISDNlib.h>
+#include <mlayer3.h>
+#include <mbuffer.h>
+#include <errno.h>
 
-#define ISDN_PID_L4_B_USER 0x440000ff
-
-/* used for udevice */
-int entity = 0;
-
-/* the device handler and port list */
-int mISDNdevice = -1;
 int portcount = 0; /* counts all open ports for finding pair */
+int mISDNsocket = -1;
 
 /* quit flag */
 int quit = 0;
@@ -51,12 +45,9 @@ struct mISDNport {
 	time_t l1establish; /* time until establishing after link failure */
 	int ntmode; /* is TRUE if port is nt mode */
 	int pri; /* is TRUE if port is a primary rate interface */
-	int upper_id; /* id to transfer data down */
-	int lower_id; /* id to transfer data up */
-	int d_stid;
+	int d_sock;
 	int b_num; /* number of ports */
-	int b_stid[256];
-	int b_addr[256];
+	int b_sock[256];
 	int b_state[256]; /* state 0 = IDLE */
 	unsigned char que_frm[2048]; /* queue while layer 1 is down */
 	int que_len;
@@ -153,34 +144,38 @@ static void sighandler(int sigset)
 /*
  * send control information to the channel (dsp-module)
  */
-static void ph_control(unsigned long b_addr, int c1, int c2)
+static void ph_control(int sock, int c1, int c2)
 {
-	unsigned char buffer[mISDN_HEADER_LEN+sizeof(int)+sizeof(int)];
-	iframe_t *ctrl = (iframe_t *)buffer; 
-	unsigned long *d = (unsigned long *)&ctrl->data.p;
+	unsigned char data[MISDN_HEADER_LEN+sizeof(int)+sizeof(int)];
+	struct mISDNhead *hh = (struct mISDNhead *)data;
+	int len;
+	unsigned long *d = (unsigned long *)(data + MISDN_HEADER_LEN);
 
-	ctrl->prim = PH_CONTROL | REQUEST;
-	ctrl->addr = b_addr | FLG_MSG_DOWN;
-	ctrl->dinfo = 0;
-	ctrl->len = sizeof(unsigned long)*2;
+	hh->prim = PH_CONTROL_REQ;
+	hh->id = 0;
+	len = MISDN_HEADER_LEN + sizeof(unsigned long)*2;
 	*d++ = c1;
 	*d++ = c2;
-	mISDN_write(mISDNdevice, ctrl, mISDN_HEADER_LEN+ctrl->len, TIMEOUT_1SEC);
+	len = sendto(sock, hh, len, 0, NULL, 0);
+	if (len <= 0)
+		fprintf(stderr, "Failed to send to socket %d\n", sock);
 }
 
-void ph_control_block(unsigned long b_addr, int c1, void *c2, int c2_len)
+void ph_control_block(int sock, int c1, void *c2, int c2_len)
 {
-	unsigned char buffer[mISDN_HEADER_LEN+sizeof(int)+c2_len];
-	iframe_t *ctrl = (iframe_t *)buffer;
-	unsigned long *d = (unsigned long *)&ctrl->data.p;
+	unsigned char data[MISDN_HEADER_LEN+sizeof(int)+c2_len];
+	struct mISDNhead *hh = (struct mISDNhead *)data;
+	int len;
+	unsigned long *d = (unsigned long *)(data + MISDN_HEADER_LEN);
 
-	ctrl->prim = PH_CONTROL | REQUEST;
-	ctrl->addr = b_addr | FLG_MSG_DOWN;
-	ctrl->dinfo = 0;
-	ctrl->len = sizeof(unsigned long)*2;
+	hh->prim = PH_CONTROL_REQ;
+	hh->id = 0;
+	len = MISDN_HEADER_LEN + sizeof(unsigned long) + c2_len;
 	*d++ = c1;
 	memcpy(d, c2, c2_len);
-	mISDN_write(mISDNdevice, ctrl, mISDN_HEADER_LEN+ctrl->len, TIMEOUT_1SEC);
+	len = sendto(sock, hh, len, 0, NULL, 0);
+	if (len <= 0)
+		fprintf(stderr, "Failed to send to socket %d\n", sock);
 }
 
 
@@ -189,18 +184,19 @@ void ph_control_block(unsigned long b_addr, int c1, void *c2, int c2_len)
  */
 static void bchannel_activate(struct mISDNport *mISDNport, int i)
 {
-	iframe_t act;
+	struct mISDNhead hh;
+	int len;
 
 	/* we must activate if we are deactivated */
 	if (mISDNport->b_state[i] == B_STATE_IDLE)
 	{
 		/* activate bchannel */
-		PDEBUG("activating bchannel (index %d), because currently idle (address 0x%x).\n", i, mISDNport->b_addr[i]);
-		act.prim = DL_ESTABLISH | REQUEST; 
-		act.addr = mISDNport->b_addr[i] | FLG_MSG_DOWN;
-		act.dinfo = 0;
-		act.len = 0;
-		mISDN_write(mISDNdevice, &act, mISDN_HEADER_LEN+act.len, TIMEOUT_1SEC);
+		PDEBUG("activating bchannel (index %d), because currently idle.\n", i);
+		hh.prim = PH_ACTIVATE_REQ; 
+		hh.id = 0;
+		len = sendto(mISDNport->b_sock[i], &hh, MISDN_HEADER_LEN, 0, NULL, 0);
+		if (len <= 0)
+			fprintf(stderr, "Failed to send to socket %d of port %d channel index %d\n", mISDNport->b_sock[i], mISDNport->portnum, i);
 		mISDNport->b_state[i] = B_STATE_ACTIVATING;
 		return;
 	}
@@ -210,9 +206,9 @@ static void bchannel_activate(struct mISDNport *mISDNport, int i)
 	{
 		/* it is an error if this channel is not associated with a port object */
 		PDEBUG("during activation, we add conference to %d.\n", ((mISDNport->count&(~1)) << 23) + (i<<16) + dsp_pid);
-		ph_control(mISDNport->b_addr[i], CMX_CONF_JOIN, ((mISDNport->count&(~1)) << 23) + (i<<16) + dsp_pid);
+		ph_control(mISDNport->b_sock[i], DSP_CONF_JOIN, ((mISDNport->count&(~1)) << 23) + (i<<16) + dsp_pid);
 		PDEBUG("during activation, we set rxoff.\n");
-		ph_control(mISDNport->b_addr[i], CMX_RECEIVE_OFF, 0);
+		ph_control(mISDNport->b_sock[i], DSP_RECEIVE_OFF, 0);
 #if 0
 		if (sadks->crypt)
 		{
@@ -226,19 +222,20 @@ static void bchannel_activate(struct mISDNport *mISDNport, int i)
 
 static void bchannel_deactivate(struct mISDNport *mISDNport, int i)
 {
-	iframe_t dact;
+	struct mISDNhead hh;
+	int len;
 
 	if (mISDNport->b_state[i] == B_STATE_ACTIVE)
 	{
-		ph_control(mISDNport->b_addr[i], CMX_CONF_SPLIT, 0);
-		ph_control(mISDNport->b_addr[i], CMX_RECEIVE_ON, 0);
+		ph_control(mISDNport->b_sock[i], DSP_CONF_SPLIT, 0);
+		ph_control(mISDNport->b_sock[i], DSP_RECEIVE_ON, 0);
 		/* deactivate bchannel */
 		PDEBUG("deactivating bchannel (index %d), because currently active.\n", i);
-		dact.prim = DL_RELEASE | REQUEST; 
-		dact.addr = mISDNport->b_addr[i] | FLG_MSG_DOWN;
-		dact.dinfo = 0;
-		dact.len = 0;
-		mISDN_write(mISDNdevice, &dact, mISDN_HEADER_LEN+dact.len, TIMEOUT_1SEC);
+		hh.prim = PH_DEACTIVATE_REQ; 
+		hh.id = 0;
+		len = sendto(mISDNport->b_sock[i], &hh, MISDN_HEADER_LEN, 0, NULL, 0);
+		if (len <= 0)
+			fprintf(stderr, "Failed to send to socket %d of port %d channel index %d\n", mISDNport->b_sock[i], mISDNport->portnum, i);
 		mISDNport->b_state[i] = B_STATE_DEACTIVATING;
 		return;
 	}
@@ -249,62 +246,27 @@ static void bchannel_deactivate(struct mISDNport *mISDNport, int i)
  */
 int mISDN_handler(void)
 {
-	iframe_t *frm;
 	struct mISDNport *mISDNport;
 	int i;
 	unsigned char data[2048];
+	struct mISDNhead *hh = (struct mISDNhead *)data;
 	int len;
+	int work = 0;
 
-	/* get message from kernel */
-	len = mISDN_read(mISDNdevice, data, sizeof(data), 0);
-	if (len < 0)
-	{
-		if (errno == EAGAIN)
-			return(0);
-		fprintf(stderr, "FATAL ERROR: failed to do mISDN_read()\n");
-		exit(-1);
-	}
-	if (!len)
-	{
-		return(0);
-	}
-	frm = (iframe_t *)data;
-
-	/* global prim */
-	switch(frm->prim)
-	{
-		case MGR_INITTIMER | CONFIRM:
-		case MGR_ADDTIMER | CONFIRM:
-		case MGR_DELTIMER | CONFIRM:
-		case MGR_REMOVETIMER | CONFIRM:
-		return(1);
-	}
-
-	/* find the port */
+	/* handle all ports */
 	mISDNport = mISDNport_first;
 	while(mISDNport)
 	{
-		if ((frm->addr&STACK_ID_MASK) == (unsigned int)(mISDNport->upper_id&STACK_ID_MASK))
+		len = recv(mISDNport->d_sock, data, sizeof(data), 0);
+		if (len >= (int)MISDN_HEADER_LEN)
 		{
+			work = 1;
 			/* d-message */
-			switch(frm->prim)
+			switch(hh->prim)
 			{
-				case MGR_SHORTSTATUS | INDICATION:
-				case MGR_SHORTSTATUS | CONFIRM:
-				switch(frm->dinfo) {
-					case SSTATUS_L1_ACTIVATED:
-					PDEBUG("Received SSTATUS_L1_ACTIVATED for port %d.\n", mISDNport->portnum);
-					goto ss_act;
-					case SSTATUS_L1_DEACTIVATED:
-					PDEBUG("Received SSTATUS_L1_DEACTIVATED for port %d.\n", mISDNport->portnum);
-					goto ss_deact;
-				}
-				break;
-
-				case PH_ACTIVATE | CONFIRM:
-				case PH_ACTIVATE | INDICATION:
+				case PH_ACTIVATE_CNF:
+				case PH_ACTIVATE_IND:
 				PDEBUG("Received PH_ACTIVATE for port %d.\n", mISDNport->portnum);
-				ss_act:
 				if (!mISDNport->l1link)
 				{
 					mISDNport->l1link = 1;
@@ -313,15 +275,16 @@ int mISDN_handler(void)
 				if (mISDNport->que_len)
 				{
 					PDEBUG("Data in que, due to inactive link on port %d.\n", mISDNport->portnum);
-					mISDN_write(mISDNdevice, mISDNport->que_frm, mISDNport->que_len, TIMEOUT_1SEC);
+					len = sendto(mISDNport->d_sock, mISDNport->que_frm, mISDNport->que_len, 0, NULL, 0);
+					if (len <= 0)
+						fprintf(stderr, "Failed to send to socket %d of port %d\n", mISDNport->d_sock, mISDNport->portnum);
 					mISDNport->que_len = 0;
 				}
 				break;
 
-				case PH_DEACTIVATE | CONFIRM:
-				case PH_DEACTIVATE | INDICATION:
+				case PH_DEACTIVATE_CNF:
+				case PH_DEACTIVATE_IND:
 				PDEBUG("Received PH_DEACTIVATE for port %d.\n", mISDNport->portnum);
-				ss_deact:
 				if (mISDNport->l1link)
 				{
 					mISDNport->l1link = 0;
@@ -330,15 +293,15 @@ int mISDN_handler(void)
 				mISDNport->que_len = 0;
 				break;
 
-				case PH_CONTROL | CONFIRM:
-				case PH_CONTROL | INDICATION:
+				case PH_CONTROL_CNF:
+				case PH_CONTROL_IND:
 				PDEBUG("Received PH_CONTROL for port %d.\n", mISDNport->portnum);
 				break;
 
-				case PH_DATA | INDICATION:
+				case PH_DATA_IND:
 				if (traffic)
-					show_traffic(mISDNport, data + mISDN_HEADER_LEN, frm->len);
-				PDEBUG("GOT data from %s port %d prim 0x%x dinfo 0x%x addr 0x%x\n", (mISDNport->ntmode)?"NT":"TE", mISDNport->portnum, frm->prim, frm->dinfo, frm->addr);
+					show_traffic(mISDNport, data + MISDN_HEADER_LEN, len-MISDN_HEADER_LEN);
+				PDEBUG("GOT data from %s port %d prim 0x%x id 0x%x\n", (mISDNport->ntmode)?"NT":"TE", mISDNport->portnum, hh->prim, hh->id);
 				if (mISDNport->count & 1)
 				{
 					if (mISDNport->prev == NULL)
@@ -347,19 +310,22 @@ int mISDN_handler(void)
 						exit (0);
 					}
 					/* sending to previous port */
-					frm->prim = PH_DATA | REQUEST;
-					frm->addr = mISDNport->prev->upper_id | FLG_MSG_DOWN;
-				PDEBUG("sending to %s port %d prim 0x%x dinfo 0x%x addr 0x%x\n", (mISDNport->prev->ntmode)?"NT":"TE", mISDNport->prev->portnum, frm->prim, frm->dinfo, frm->addr);
+					PDEBUG("sending to %s port %d prim 0x%x id 0x%x\n", (mISDNport->prev->ntmode)?"NT":"TE", mISDNport->prev->portnum, hh->prim, hh->id);
+					hh->prim = PH_DATA_REQ; 
 					if (mISDNport->prev->l1link)
-						mISDN_write(mISDNdevice, frm, mISDN_HEADER_LEN+frm->len, TIMEOUT_1SEC);
-					else {
+					{
+						len = sendto(mISDNport->prev->d_sock, data, len, 0, NULL, 0);
+						if (len <= 0)
+							fprintf(stderr, "Failed to send to socket %d of port %d\n", mISDNport->d_sock, mISDNport->portnum);
+					} else {
 						PDEBUG("layer 1 is down, so we queue and activate link.\n");
-						memcpy(mISDNport->prev->que_frm, frm, len);
+						memcpy(mISDNport->prev->que_frm, data, len);
 						mISDNport->prev->que_len = len;
-						frm->prim = PH_ACTIVATE | REQUEST; 
-						frm->dinfo = 0;
-						frm->len = 0;
-						mISDN_write(mISDNdevice, frm, mISDN_HEADER_LEN+frm->len, TIMEOUT_1SEC);
+						hh->prim = PH_ACTIVATE_REQ; 
+						hh->id = 0;
+						len = sendto(mISDNport->d_sock, data, MISDN_HEADER_LEN, 0, NULL, 0);
+						if (len <= 0)
+							fprintf(stderr, "Failed to send to socket %d of port %d\n", mISDNport->d_sock, mISDNport->portnum);
 					}
 				} else {
 
@@ -369,220 +335,194 @@ int mISDN_handler(void)
 						exit (0);
 					}
 					/* sending to next port */
-					frm->prim = PH_DATA | REQUEST; 
-					frm->addr = mISDNport->next->upper_id | FLG_MSG_DOWN;
-				PDEBUG("sending to %s port %d prim 0x%x dinfo 0x%x addr 0x%x\n", (mISDNport->next->ntmode)?"NT":"TE", mISDNport->next->portnum, frm->prim, frm->dinfo, frm->addr);
+					PDEBUG("sending to %s port %d prim 0x%x id 0x%x\n", (mISDNport->next->ntmode)?"NT":"TE", mISDNport->next->portnum, hh->prim, hh->id);
+					hh->prim = PH_DATA_REQ; 
 					if (mISDNport->next->l1link)
-						mISDN_write(mISDNdevice, frm, mISDN_HEADER_LEN+frm->len, TIMEOUT_1SEC);
-					else {
+					{
+						len = sendto(mISDNport->next->d_sock, data, len, 0, NULL, 0);
+						if (len <= 0)
+							fprintf(stderr, "Failed to send to socket %d of port %d\n", mISDNport->d_sock, mISDNport->portnum);
+					} else {
 						PDEBUG("layer 1 is down, so we queue and activate link.\n");
-						memcpy(mISDNport->next->que_frm, frm, len);
+						memcpy(mISDNport->next->que_frm, data, len);
 						mISDNport->next->que_len = len;
-						frm->prim = PH_ACTIVATE | REQUEST; 
-						frm->dinfo = 0;
-						frm->len = 0;
-						mISDN_write(mISDNdevice, frm, mISDN_HEADER_LEN+frm->len, TIMEOUT_1SEC);
+						hh->prim = PH_ACTIVATE_REQ; 
+						hh->id = 0;
+						len = sendto(mISDNport->d_sock, data, MISDN_HEADER_LEN, 0, NULL, 0);
+						if (len <= 0)
+							fprintf(stderr, "Failed to send to socket %d of port %d\n", mISDNport->d_sock, mISDNport->portnum);
 					}
 				}
 				break;
 
-				case PH_DATA | CONFIRM:
-				//PDEBUG("GOT confirm from %s port %d prim 0x%x dinfo 0x%x addr 0x%x\n", (mISDNport->ntmode)?"NT":"TE", mISDNport->portnum, frm->prim, frm->dinfo, frm->addr);
+				case PH_DATA_CNF:
+				//PDEBUG("GOT confirm from %s port %d prim 0x%x id 0x%x\n", (mISDNport->ntmode)?"NT":"TE", mISDNport->portnum, hh->prim, hh->id);
 				break;
 
-				case PH_DATA | REQUEST:
-				PDEBUG("GOT strange PH_DATA REQUEST from %s port %d prim 0x%x dinfo 0x%x addr 0x%x\n", (mISDNport->ntmode)?"NT":"TE", mISDNport->portnum, frm->prim, frm->dinfo, frm->addr);
+				case PH_DATA_REQ:
+				PDEBUG("GOT strange PH_DATA REQUEST from %s port %d prim 0x%x id 0x%x 0x%x\n", (mISDNport->ntmode)?"NT":"TE", mISDNport->portnum, hh->prim, hh->id);
 				break;
 
 				default:
 				break;
 			}
-			break;
 		}
-//PDEBUG("flg:%d upper_id=%x addr=%x\n", (frm->addr&FLG_CHILD_STACK), (mISDNport->b_addr[0])&(~IF_CHILDMASK), (frm->addr)&(~IF_CHILDMASK));
-		/* check if child, and if parent stack match */
-		if ((frm->addr&FLG_CHILD_STACK) && (((unsigned int)(mISDNport->b_addr[0])&(~CHILD_ID_MASK)&STACK_ID_MASK) == ((frm->addr)&(~CHILD_ID_MASK)&STACK_ID_MASK)))
+		i = 0;
+		while(i < mISDNport->b_num)
 		{
-			/* b-message */
-			switch(frm->prim)
+			len = recv(mISDNport->b_sock[i], data, sizeof(data), 0);
+			if (len >= (int)MISDN_HEADER_LEN)
 			{
-				/* we don't care about confirms, we use rx data to sync tx */
-				case PH_DATA | CONFIRM:
-				case DL_DATA | CONFIRM:
-				break;
-
-				/* we receive audio data, we respond to it AND we send tones */
-				case PH_DATA | INDICATION:
-				case DL_DATA | INDICATION:
-				case PH_CONTROL | INDICATION:
-				i = 0;
-				while(i < mISDNport->b_num)
+				work = 1;
+				/* b-message */
+				switch(hh->prim)
 				{
-					if ((unsigned int)(mISDNport->b_addr[i]&STACK_ID_MASK) == (frm->addr&STACK_ID_MASK))
-						break;
-					i++;
-				}
-				if (i == mISDNport->b_num)
-				{
-					fprintf(stderr, "unhandled b-message (address 0x%x).\n", frm->addr);
+					/* we don't care about confirms, we use rx data to sync tx */
+					case PH_DATA_CNF:
+					//case DL_DATA_CNF:
 					break;
-				}
-				PDEBUG("got B-channel data, this should not happen all the time. (just a few until cmx release tx-data are ok)\n");
-				break;
 
-				case PH_ACTIVATE | INDICATION:
-				case DL_ESTABLISH | INDICATION:
-				case PH_ACTIVATE | CONFIRM:
-				case DL_ESTABLISH | CONFIRM:
-				PDEBUG("DL_ESTABLISH confirm: bchannel is now activated (address 0x%x).\n", frm->addr);
-				i = 0;
-				while(i < mISDNport->b_num)
-				{
-					if ((unsigned int)(mISDNport->b_addr[i]&STACK_ID_MASK) == (frm->addr&STACK_ID_MASK))
-						break;
-					i++;
-				}
-				if (i == mISDNport->b_num)
-				{
-					fprintf(stderr, "unhandled b-establish (address 0x%x).\n", frm->addr);
+					/* we receive audio data, we respond to it AND we send tones */
+					case PH_DATA_IND:
+					case DL_DATA_IND:
+					case PH_CONTROL_IND:
+					PDEBUG("got B-channel data, this should not happen all the time. (just a few until DSP release tx-data are ok)\n");
 					break;
-				}
-				mISDNport->b_state[i] = B_STATE_ACTIVE;
-				bchannel_activate(mISDNport, i);
-				break;
 
-				case PH_DEACTIVATE | INDICATION:
-				case DL_RELEASE | INDICATION:
-				case PH_DEACTIVATE | CONFIRM:
-				case DL_RELEASE | CONFIRM:
-				PDEBUG("DL_RELEASE confirm: bchannel is now de-activated (address 0x%x).\n", frm->addr);
-				i = 0;
-				while(i < mISDNport->b_num)
-				{
-					if ((unsigned int)(mISDNport->b_addr[i]&STACK_ID_MASK) == (frm->addr&STACK_ID_MASK))
-						break;
-					i++;
-				}
-				if (i == mISDNport->b_num)
-				{
-					fprintf(stderr, "unhandled b-release (address 0x%x).\n", frm->addr);
+					case PH_ACTIVATE_IND:
+					case DL_ESTABLISH_IND:
+					case PH_ACTIVATE_CNF:
+					case DL_ESTABLISH_CNF:
+					PDEBUG("DL_ESTABLISH confirm: bchannel is now activated (port %d index %i).\n", mISDNport->portnum, i);
+					mISDNport->b_state[i] = B_STATE_ACTIVE;
+					bchannel_activate(mISDNport, i);
 					break;
+
+					case PH_DEACTIVATE_IND:
+					case DL_RELEASE_IND:
+					case PH_DEACTIVATE_CNF:
+					case DL_RELEASE_CNF:
+					PDEBUG("DL_RELEASE confirm: bchannel is now de-activated (port %d index %i).\n", mISDNport->portnum, i);
+					mISDNport->b_state[i] = B_STATE_IDLE;
+					break;
+
+					default:
+					PDEBUG("unknown bchannel data (port %d index %i).\n", mISDNport->portnum, i);
 				}
-				mISDNport->b_state[i] = B_STATE_IDLE;
-				break;
 			}
-			break;
+			i++;
 		}
 
 		mISDNport = mISDNport->next;
 	} 
-	if (!mISDNport)
-	{
-		if (frm->prim == (MGR_TIMER | INDICATION))
-			fprintf(stderr, "unhandled timer indication message: prim(0x%x) addr(0x%x) len(%d)\n", frm->prim, frm->addr, len);
-		else
-			fprintf(stderr, "unhandled message: prim(0x%x) addr(0x%x) len(%d)\n", frm->prim, frm->addr, len);
-	}
-
-	return(1);
+	return(work);
 }
 
 
 /*
  * global function to add a new card (port)
  */
-struct mISDNport *mISDN_port_open(int port)
+struct mISDNport *mISDN_port_open(int port, int nt_mode)
 {
 	int ret;
-	unsigned char buff[1025];
-	iframe_t *frm = (iframe_t *)buff;
-	stack_info_t *stinf;
+	struct mISDNhead hh;
 	struct mISDNport *mISDNport, **mISDNportp, *mISDNport_prev;
 	int i, cnt;
-	layer_info_t li;
-//	interface_info_t ii;
-	mISDN_pid_t pid;
-	int pri = 0;
-	int nt = 0;
-	iframe_t dact;
+	int bri = 0, pri = 0, pots = 0;
+	int nt = 0, te = 0;
 
-	/* open mISDNdevice if not already open */
-	if (mISDNdevice < 0)
-	{
-		ret = mISDN_open();
-		if (ret < 0)
-		{
-			fprintf(stderr, "cannot open mISDN device ret=%d errno=%d (%s) Check for mISDN modules!\nAlso did you create \"/dev/mISDN\"? Do: \"mknod /dev/mISDN c 46 0\"\n", ret, errno, strerror(errno));
-			return(0);
-		}
-		mISDNdevice = ret;
-		PDEBUG("mISDN device opened.\n");
-
-		/* create entity for layer 3 TE-mode */
-		mISDN_write_frame(mISDNdevice, buff, 0, MGR_NEWENTITY | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
-		ret = mISDN_read_frame(mISDNdevice, frm, sizeof(iframe_t), 0, MGR_NEWENTITY | CONFIRM, TIMEOUT_1SEC);
-		if (ret < (int)mISDN_HEADER_LEN)
-		{
-			noentity:
-			fprintf(stderr, "cannot request MGR_NEWENTITY from mISDN. Exitting due to software bug.");
-			exit(-1);
-		}
-		entity = frm->dinfo & 0xffff;
-		if (!entity)
-			goto noentity;
-		PDEBUG("our entity for l3-processes is %d.\n", entity);
-	}
+	struct mISDN_devinfo devinfo;
+	unsigned long on = 1;
+	struct sockaddr_mISDN addr;
 
 	/* query port's requirements */
-	cnt = mISDN_get_stack_count(mISDNdevice);
+	ret = ioctl(mISDNsocket, IMGETCOUNT, &cnt);
+	if (ret < 0)
+	{
+		fprintf(stderr, "Cannot get number of mISDN devices. (ioctl IMGETCOUNT failed ret=%d)\n", ret);
+		return(NULL);
+	}
 	if (cnt <= 0)
 	{
 		fprintf(stderr, "Found no card. Please be sure to load card drivers.\n");
-		return(0);
+		return(NULL);
 	}
 	if (port>cnt || port<1)
 	{
 		fprintf(stderr, "Port (%d) given is out of existing port range (%d-%d)\n", port, 1, cnt);
-		return(0);
+		return(NULL);
 	}
-	ret = mISDN_get_stack_info(mISDNdevice, port, buff, sizeof(buff));
+	devinfo.id = port - 1;
+	ret = ioctl(mISDNsocket, IMGETDEVINFO, &devinfo);
 	if (ret < 0)
 	{
-		fprintf(stderr, "Cannot get stack info for port %d (ret=%d)\n", port, ret);
-		return(0);
+		fprintf(stderr, "Cannot get device information for port %d. (ioctl IMGETDEVINFO failed ret=%d)\n", i, ret);
+		return(NULL);
 	}
-	stinf = (stack_info_t *)&frm->data.p;
-	switch(stinf->pid.protocol[0] & ~ISDN_PID_FEATURE_MASK)
+	/* output the port info */
+	if (devinfo.Dprotocols & (1 << ISDN_P_TE_S0))
 	{
-		case ISDN_PID_L0_TE_S0:
-		PDEBUG("TE-mode BRI S/T interface line\n");
-		break;
-		case ISDN_PID_L0_NT_S0:
-		PDEBUG("NT-mode BRI S/T interface port\n");
+		bri = 1;
+		te = 1;
+	}
+	if (devinfo.Dprotocols & (1 << ISDN_P_NT_S0))
+	{
+		bri = 1;
 		nt = 1;
-		break;
-		case ISDN_PID_L0_TE_E1:
-		PDEBUG("TE-mode PRI E1  interface line\n");
+	}
+	if (devinfo.Dprotocols & (1 << ISDN_P_TE_E1))
+	{
 		pri = 1;
-		break;
-		case ISDN_PID_L0_NT_E1:
-		PDEBUG("LT-mode PRI E1  interface port\n");
+		te = 1;
+	}
+	if (devinfo.Dprotocols & (1 << ISDN_P_NT_E1))
+	{
 		pri = 1;
 		nt = 1;
-		break;
-		default:
-		fprintf(stderr, "unknown port(%d) type 0x%08x\n", port, stinf->pid.protocol[0]);
-		return(0);
 	}
-	if (stinf->pid.protocol[1] == 0)
+#ifdef ISDN_P_FXS
+	if (devinfo.Dprotocols & (1 << ISDN_P_FXS))
 	{
-		fprintf(stderr, "Given port %d: Missing layer 1 protocol.\n", port);
-		return(0);
+		pots = 1;
+		te = 1;
 	}
-	if (stinf->pid.protocol[2])
+#endif
+#ifdef ISDN_P_FXO
+	if (devinfo.Dprotocols & (1 << ISDN_P_FXO))
 	{
-		fprintf(stderr, "Given port %d: Layer 2 protocol 0x%08x is detected, but not allowed for bridging layer 1.\n", port, stinf->pid.protocol[2]);
-		return(0);
+		pots = 1;
+		nt = 1;
+	}
+#endif
+	if (bri && pri)
+	{
+		fprintf(stderr, "Port %d supports BRI and PRI?? What kind of controller is that?. (Can't use this!)\n", port);
+		return(NULL);
+	}
+	if (pots && !bri && !pri)
+	{
+		fprintf(stderr, "Port %d supports POTS, LCR does not!\n", port);
+		return(NULL);
+	}
+	if (!bri && !pri)
+	{
+		fprintf(stderr, "Port %d does not support BRI nor PRI!\n", port);
+		return(NULL);
+	}
+	if (!nt && !te)
+	{
+		fprintf(stderr, "Port %d does not support NT-mode nor TE-mode!\n", port);
+		return(NULL);
+	}
+	if (!nt && nt_mode)
+	{
+		fprintf(stderr, "Port %d does not support NT-mode as requested!\n", port);
+		return(NULL);
+	}
+	if (!te && !nt_mode)
+	{
+		fprintf(stderr, "Port %d does not support TE-mode as requested!\n", port);
+		return(NULL);
 	}
 
 	/* add mISDNport structure */
@@ -599,7 +539,7 @@ struct mISDNport *mISDN_port_open(int port)
 	if (!mISDNport)
 	{
 		fprintf(stderr, "Cannot alloc mISDNport structure\n");
-		return(0);
+		return(NULL);
 	}
 	memset(mISDNport, 0, sizeof(mISDNport));
 	*mISDNportp = mISDNport;
@@ -608,132 +548,75 @@ struct mISDNport *mISDN_port_open(int port)
 	/* allocate ressources of port */
 	mISDNport->count = portcount++;
 	mISDNport->portnum = port;
-	mISDNport->ntmode = nt;
+	mISDNport->b_num = devinfo.nrbchan;
+	mISDNport->ntmode = nt_mode;
 	mISDNport->pri = pri;
-	mISDNport->d_stid = stinf->id;
-	PDEBUG("d_stid = 0x%x.\n", mISDNport->d_stid);
-	mISDNport->b_num = stinf->childcnt;
-	PDEBUG("Port has %d b-channels.\n", mISDNport->b_num);
-	i = 0;
-	while(i < stinf->childcnt)
+
+	/* open dchannel */
+	if (nt_mode)
+		mISDNport->d_sock = socket(PF_ISDN, SOCK_DGRAM, pri?ISDN_P_NT_E1:ISDN_P_NT_S0);
+	else
+		mISDNport->d_sock = socket(PF_ISDN, SOCK_DGRAM, pri?ISDN_P_TE_E1:ISDN_P_TE_S0);
+	if (mISDNport->d_sock < 0)
 	{
-		mISDNport->b_stid[i] = stinf->child[i];
-		PDEBUG("b_stid[%d] = 0x%x.\n", i, mISDNport->b_stid[i]);
+		return(NULL);
+	}
+	/* set nonblocking io */
+	ret = ioctl(mISDNport->d_sock, FIONBIO, &on);
+	if (ret < 0)
+	{
+		fprintf(stderr, "Error: Failed to set dchannel-socket into nonblocking IO\n");
+		return(NULL);
+	}
+	PDEBUG("Port %d (%s) opened with %d b-channels.\n", port, devinfo.name, mISDNport->b_num);
+
+	/* open bchannels */
+	i = 0;
+	while(i < mISDNport->b_num)
+	{
+		mISDNport->b_sock[i] = -1;
 		i++;
 	}
-	memset(&li, 0, sizeof(li));
-	strcpy(&li.name[0], "bridge l2");
-	li.object_id = -1;
-	li.extentions = 0;
-	li.pid.protocol[2] = (nt)?ISDN_PID_L2_LAPD_NET:ISDN_PID_L2_LAPD;
-	li.pid.layermask = ISDN_LAYER(2);
-	li.st = mISDNport->d_stid;
-	ret = mISDN_new_layer(mISDNdevice, &li);
-	if (ret)
+	i = 0;
+	while(i < mISDNport->b_num)
 	{
-		fprintf(stderr, "Cannot add layer 2 of port %d (ret %d)\n", port, ret);
-		return(0);
+		mISDNport->b_sock[i] = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_B_L2DSP);
+		if (mISDNport->b_sock[i] < 0)
+		{
+			fprintf(stderr, "Error: Failed to open bchannel-socket for index %d with mISDN-DSP layer. Did you load mISDNdsp.ko?\n", i);
+			return(NULL);
+		}
+		/* set nonblocking io */
+		ret = ioctl(mISDNport->b_sock[i], FIONBIO, &on);
+		if (ret < 0)
+		{
+			fprintf(stderr, "Error: Failed to set bchannel-socket index %d into nonblocking IO\n", i);
+			return(NULL);
+		}
+		/* bind socket to bchannel */
+		addr.family = AF_ISDN;
+		addr.dev = mISDNport->portnum-1;
+		addr.channel = i+1+(i>=15);
+		ret = bind(mISDNport->b_sock[i], (struct sockaddr *)&addr, sizeof(addr));
+		if (ret < 0)
+		{
+			fprintf(stderr, "Error: Failed to bind bchannel-socket for index %d with mISDN-DSP layer. Did you load mISDNdsp.ko?\n", i);
+			return(NULL);
+		}
+		i++;
 	}
-	mISDNport->upper_id = li.id;
-	ret = mISDN_register_layer(mISDNdevice, mISDNport->d_stid, mISDNport->upper_id);
-	if (ret)
-	{
-		fprintf(stderr, "Cannot register layer 2 of port %d\n", port);
-		return(0);
-	}
-	mISDNport->lower_id = mISDN_get_layerid(mISDNdevice, mISDNport->d_stid, 1);
-	if (mISDNport->lower_id < 0)
-	{
-		fprintf(stderr, "Cannot get layer(1) id of port %d\n", port);
-		return(0);
-	}
-	mISDNport->upper_id = mISDN_get_layerid(mISDNdevice, mISDNport->d_stid, 2);
-	if (mISDNport->upper_id < 0)
-	{
-		fprintf(stderr, "Cannot get layer(2) id of port %d\n", port);
-		return(0);
-	}
-	PDEBUG("Layer 2 of port %d added.\n", port);
 
 	/* try to activate link layer 1 */
-	{
-		iframe_t act;
-		/* L1 */
-		PDEBUG("sending PH_ACTIVATE to port %d.\n", port);
-		act.prim = PH_ACTIVATE | REQUEST; 
-		act.addr = mISDNport->upper_id | FLG_MSG_DOWN;
-		act.dinfo = 0;
-		act.len = 0;
-		mISDN_write(mISDNdevice, &act, mISDN_HEADER_LEN+act.len, TIMEOUT_1SEC);
-	}
+	hh.prim = PH_ACTIVATE_REQ; 
+	hh.id = 0;
+	ret = sendto(mISDNport->d_sock, &hh, MISDN_HEADER_LEN, 0, NULL, 0);
+	if (ret <= 0)
+		fprintf(stderr, "Failed to send to socket %d of port %d\n", mISDNport->d_sock, mISDNport->portnum);
 	/* initially, we assume that the link is down */
 	mISDNport->l1link = 0;
 
 	PDEBUG("using 'mISDN_dsp.o' module\n");
-
-	/* add all bchannel layers */
-	i = 0;
-	while(i < mISDNport->b_num)
-	{
-		mISDNport->b_state[i] = B_STATE_IDLE;
-		/* create new layer */
-		PDEBUG("creating bchannel %d (index %d).\n" , i+1+(i>=15), i);
-		memset(&li, 0, sizeof(li));
-		memset(&pid, 0, sizeof(pid));
-		li.object_id = -1;
-		li.extentions = 0;
-		li.st = mISDNport->b_stid[i];
-		strcpy(li.name, "B L4");
-		li.pid.layermask = ISDN_LAYER((4));
-		li.pid.protocol[4] = ISDN_PID_L4_B_USER;
-		ret = mISDN_new_layer(mISDNdevice, &li);
-		if (ret)
-		{
-			failed_new_layer:
-			fprintf(stderr, "mISDN_new_layer() failed to add bchannel %d (index %d)\n", i+1+(i>=15), i);
-			return(0);
-		}
-		mISDNport->b_addr[i] = li.id;
-		if (!li.id)
-		{
-			goto failed_new_layer;
-		}
-		PDEBUG("new layer (b_addr=0x%x)\n", mISDNport->b_addr[i]);
-
-		/* create new stack */
-		pid.protocol[1] = ISDN_PID_L1_B_64TRANS;
-		pid.protocol[2] = ISDN_PID_L2_B_TRANS;
-		pid.protocol[3] = ISDN_PID_L3_B_DSP;
-		pid.protocol[4] = ISDN_PID_L4_B_USER;
-		pid.layermask = ISDN_LAYER((1)) | ISDN_LAYER((2)) | ISDN_LAYER((3)) | ISDN_LAYER((4));
-		ret = mISDN_set_stack(mISDNdevice, mISDNport->b_stid[i], &pid);
-		if (ret)
-		{
-			stack_error:
-			fprintf(stderr, "mISDN_set_stack() failed (ret=%d) to add bchannel (index %d) stid=0x%x\n", ret, i, mISDNport->b_stid[i]);
-			mISDN_write_frame(mISDNdevice, buff, mISDNport->b_addr[i], MGR_DELLAYER | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
-			mISDNport->b_addr[i] = 0;
-			return(0);
-		}
-		ret = mISDN_get_setstack_ind(mISDNdevice, mISDNport->b_addr[i]);
-		if (ret)
-			goto stack_error;
-
-		/* get layer id */
-		mISDNport->b_addr[i] = mISDN_get_layerid(mISDNdevice, mISDNport->b_stid[i], 4);
-		if (!mISDNport->b_addr[i])
-			goto stack_error;
-		/* deactivate bchannel if already enabled due to crash */
-		PDEBUG("deactivating bchannel (index %d) as a precaution.\n", i);
-		dact.prim = DL_RELEASE | REQUEST; 
-		dact.addr = mISDNport->b_addr[i] | FLG_MSG_DOWN;
-		dact.dinfo = 0;
-		dact.len = 0;
-		mISDN_write(mISDNdevice, &dact, mISDN_HEADER_LEN+dact.len, TIMEOUT_1SEC);
-
-		i++;
-	}
-	PDEBUG("using port %d %s %d b-channels\n", mISDNport->portnum, (mISDNport->ntmode)?"NT-mode":"TE-mode", mISDNport->b_num);
+	printf("Port %d (%s) %s %d b-channels\n", mISDNport->portnum, devinfo.name, (mISDNport->ntmode)?"NT-mode":"TE-mode", mISDNport->b_num);
 	return(mISDNport);
 }
 
@@ -744,7 +627,6 @@ struct mISDNport *mISDN_port_open(int port)
 void mISDN_port_close(void)
 {
 	struct mISDNport *mISDNport, *mISDNporttemp;
-	unsigned char buf[32];
 	int i;
 
 	/* free all ports */
@@ -756,22 +638,14 @@ void mISDN_port_close(void)
 		{
 			bchannel_deactivate(mISDNport, i);
 			PDEBUG("freeing %s port %d bchannel (index %d).\n", (mISDNport->ntmode)?"NT":"TE", mISDNport->portnum, i);
-			if (mISDNport->b_stid[i])
-			{
-				mISDN_clear_stack(mISDNdevice, mISDNport->b_stid[i]);
-				if (mISDNport->b_addr[i])
-					mISDN_write_frame(mISDNdevice, buf, mISDNport->b_addr[i] | FLG_MSG_DOWN, MGR_DELLAYER | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
-			}
+			if (mISDNport->b_sock[i])
+				close(mISDNport->b_sock[i]);
 			i++;
 		}
 
 		PDEBUG("freeing d-stack.\n");
-		if (mISDNport->d_stid)
-		{
-//			mISDN_clear_stack(mISDNdevice, mISDNport->d_stid);
-			if (mISDNport->lower_id)
-				mISDN_write_frame(mISDNdevice, buf, mISDNport->lower_id, MGR_DELLAYER | REQUEST, 0, 0, NULL, TIMEOUT_1SEC);
-		}
+		if (mISDNport->d_sock)
+			close(mISDNport->d_sock);
 
 		mISDNporttemp = mISDNport;
 		mISDNport = mISDNport->next;
@@ -779,17 +653,6 @@ void mISDN_port_close(void)
 		free(mISDNporttemp);
 	}
 	mISDNport_first = NULL;
-	
-	/* close mISDNdevice */
-	if (mISDNdevice >= 0)
-	{
-		/* free entity */
-		mISDN_write_frame(mISDNdevice, buf, 0, MGR_DELENTITY | REQUEST, entity, 0, NULL, TIMEOUT_1SEC);
-		/* close device */
-		mISDN_close(mISDNdevice);
-		mISDNdevice = -1;
-		PDEBUG("mISDN device closed.\n");
-	}
 }
 
 
@@ -799,18 +662,20 @@ void mISDN_port_close(void)
 int main(int argc, char *argv[])
 {
 	struct mISDNport *mISDNport_a, *mISDNport_b;
-	int i, j;
+	int i, j, nt_a, nt_b;
 	int forking = 0;
 
 	if (argc <= 1)
 	{
 		usage:
-		printf("Usage: %s [--<option> [...]] <port a> <port b> [<port a> <port b> [...]]\n\n", argv[0]);
+		printf("Usage: %s [--<option> [...]] te|nt <port a> te|nt <port b> \\\n"
+			" [te|nt <port c> te|nt <port d> [...]]\n\n", argv[0]);
+		printf("Example: %s --traffic te 1 nt 2 # bridges port 1 (TE-mode) with port 2 (NT-mode)\n", argv[0]);
 		printf("Bridges given pairs of ports. The number of given ports must be even.\n");
 		printf("Each pair of ports must be the same interface size (equal channel number).\n");
-		printf("Both ports may have same mode, e.g. TE-mode, to bridge ISDN to leased line.\n");
+		printf("Both ports may have same mode, e.g. 'te', to bridge ISDN leased line.\n");
 		printf("Also bridging a card to ISDN over IP tunnel is possible. (L1oIP)\n");
-		printf("Note: Ports must have layer 1 only, so layermask must be 0x3 to make it work.\n");
+		printf("Note: .\n");
 		printf("--fork will make a daemon fork.\n");
 		printf("--traffic will show D-channel traffic.\n");
 		printf("--debug will show debug info.\n");
@@ -819,7 +684,15 @@ int main(int argc, char *argv[])
 	if (strstr("help", argv[1]))
 		goto usage;
 
-	/* open mISDN */
+	/* try to open raw socket to check kernel */
+	mISDNsocket = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
+	if (mISDNsocket < 0)
+	{
+		fprintf(stderr, "Cannot open mISDN due to '%s'. (Does your Kernel support socket based mISDN?)\n", strerror(errno));
+		return(mISDNsocket);
+	}
+
+	/* read options and ports */
 	i = 1;
 	while (i < argc)
 	{
@@ -843,23 +716,56 @@ int main(int argc, char *argv[])
 			continue;
 		}
 
+		/* get mode a */
+		if (!strcasecmp(argv[i], "te"))
+			nt_a = 0;
+		else if (!strcasecmp(argv[i], "nt"))
+			nt_a = 1;
+		else {
+			fprintf(stderr, "Expecting 'te' or 'nt' keyword for argument #%d\n\n", i);
+			goto error;
+		}
+		i++; // first port
+		if (i == argc)
+		{
+			fprintf(stderr, "Expecting port a number after given mode.\n\n");
+			goto error;
+		}
+
 		/* open port a */
-		mISDNport_a = mISDN_port_open(strtol(argv[i], NULL, 0));
+		mISDNport_a = mISDN_port_open(strtol(argv[i], NULL, 0), nt_a);
 		if (!mISDNport_a)
 			goto error;
 		printf("port A: #%d %s, %d b-channels\n", mISDNport_a->portnum, (mISDNport_a->ntmode)?"NT-mode":"TE-mode", mISDNport_a->b_num);
-		i++; // two ports at the same time
+		i++; // second mode
 		if (i == argc)
 		{
 			fprintf(stderr, "The number of ports given are not even.\nYou may only bridge two or more pairs of ports.\n\n");
 			goto error;
 		}
-		mISDNport_b = mISDN_port_open(strtol(argv[i], NULL, 0));
+		mISDNport_b = mISDN_port_open(strtol(argv[i], NULL, 0), nt_b);
 		if (!mISDNport_b)
 			goto error;
+		
+		/* get mode b */
+		if (!strcasecmp(argv[i], "te"))
+			nt_b = 0;
+		else if (!strcasecmp(argv[i], "nt"))
+			nt_b = 1;
+		else {
+			fprintf(stderr, "Expecting 'te' or 'nt' keyword for argument #%d\n\n", i);
+			goto error;
+		}
+		i++; // second port
+		if (i == argc)
+		{
+			fprintf(stderr, "Expecting port b number after given mode.\n\n");
+			goto error;
+		}
+
 		/* open port b */
 		printf("port B: #%d %s, %d b-channels\n", mISDNport_b->portnum, (mISDNport_b->ntmode)?"NT-mode":"TE-mode", mISDNport_b->b_num);
-		i++; // two ports at the same time
+		i++; // next port / arg
 
 		if (mISDNport_a->b_num != mISDNport_b->b_num)
 		{
@@ -948,9 +854,12 @@ int main(int argc, char *argv[])
 
 free:
 	mISDN_port_close();
+	close(mISDNsocket);
 	return(0);
 
 	error:
+	mISDN_port_close();
+	close(mISDNsocket);
 	return(-1);
 }
 

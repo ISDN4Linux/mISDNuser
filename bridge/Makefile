@@ -2,10 +2,6 @@
 # SF_DIR = /home/kkeil/speak_freely-7.2
 # endif
 
-mISDNLIB = $(mISDN_DIR)/lib/libmISDN.a
-
-HLIBINCL = $(mISDN_DIR)/include/mISDNlib.h
-
 EXTRA_CFLAGS :=
 EXTRA_INCLUDE :=
 EXTRA_LIB :=
@@ -32,10 +28,8 @@ CFLAGS	:= $(CFLAGS) $(DEBUG) $(EXTRA_INCLUDE) \
 
 BRIDGEOBJ = bridge.o
 
-isdnbridge: $(BRIDGEOBJ) $(mISDNLIB) \
-		$(HLIBINCL)
-	$(CC) $(BRIDGEOBJ) $(mISDNLIB) \
-		$(LFLAGS) -o $@
+isdnbridge: $(BRIDGEOBJ)
+	$(CC) $(BRIDGEOBJ) $(LFLAGS) -o $@
 
 bridge.o: bridge.c
 
