@@ -205,10 +205,10 @@ static void bchannel_activate(struct mISDNport *mISDNport, int i)
 	if (mISDNport->b_state[i] == B_STATE_ACTIVE)
 	{
 		/* it is an error if this channel is not associated with a port object */
-		PDEBUG("during activation, we add conference to %d.\n", ((mISDNport->count&(~1)) << 23) + (i<<16) + dsp_pid);
-		ph_control(mISDNport->b_sock[i], DSP_CONF_JOIN, ((mISDNport->count&(~1)) << 23) + (i<<16) + dsp_pid);
 		PDEBUG("during activation, we set rxoff.\n");
 		ph_control(mISDNport->b_sock[i], DSP_RECEIVE_OFF, 0);
+		PDEBUG("during activation, we add conference to %d.\n", ((mISDNport->count&(~1)) << 23) + (i<<16) + dsp_pid);
+		ph_control(mISDNport->b_sock[i], DSP_CONF_JOIN, ((mISDNport->count&(~1)) << 23) + (i<<16) + dsp_pid);
 #if 0
 		if (sadks->crypt)
 		{
@@ -360,7 +360,7 @@ int mISDN_handler(void)
 				break;
 
 				case PH_DATA_REQ:
-				PDEBUG("GOT strange PH_DATA REQUEST from %s port %d prim 0x%x id 0x%x 0x%x\n", (mISDNport->ntmode)?"NT":"TE", mISDNport->portnum, hh->prim, hh->id);
+				//PDEBUG("GOT strange PH_DATA REQUEST from %s port %d prim 0x%x id 0x%x 0x%x\n", (mISDNport->ntmode)?"NT":"TE", mISDNport->portnum, hh->prim, hh->id);
 				break;
 
 				default:
@@ -568,6 +568,17 @@ struct mISDNport *mISDN_port_open(int port, int nt_mode)
 		fprintf(stderr, "Error: Failed to set dchannel-socket into nonblocking IO\n");
 		return(NULL);
 	}
+	/* bind socket to dchannel */
+	memset(&addr, 0, sizeof(addr));
+	addr.family = AF_ISDN;
+	addr.dev = mISDNport->portnum-1;
+	addr.channel = 0;
+	ret = bind(mISDNport->d_sock, (struct sockaddr *)&addr, sizeof(addr));
+	if (ret < 0)
+	{
+		fprintf(stderr, "Error: Failed to bind dchannel-socket.\n");
+		return(NULL);
+	}
 	PDEBUG("Port %d (%s) opened with %d b-channels.\n", port, devinfo.name, mISDNport->b_num);
 
 	/* open bchannels */
@@ -594,6 +605,7 @@ struct mISDNport *mISDN_port_open(int port, int nt_mode)
 			return(NULL);
 		}
 		/* bind socket to bchannel */
+		memset(&addr, 0, sizeof(addr));
 		addr.family = AF_ISDN;
 		addr.dev = mISDNport->portnum-1;
 		addr.channel = i+1+(i>=15);
@@ -616,7 +628,7 @@ struct mISDNport *mISDN_port_open(int port, int nt_mode)
 	mISDNport->l1link = 0;
 
 	PDEBUG("using 'mISDN_dsp.o' module\n");
-	printf("Port %d (%s) %s %d b-channels\n", mISDNport->portnum, devinfo.name, (mISDNport->ntmode)?"NT-mode":"TE-mode", mISDNport->b_num);
+	printf("Port %d (%s) %s %s %d b-channels\n", mISDNport->portnum, devinfo.name, (mISDNport->ntmode)?"NT-mode":"TE-mode", pri?"PRI":"BRI", mISDNport->b_num);
 	return(mISDNport);
 }
 
@@ -664,6 +676,8 @@ int main(int argc, char *argv[])
 	struct mISDNport *mISDNport_a, *mISDNport_b;
 	int i, j, nt_a, nt_b;
 	int forking = 0;
+
+	dsp_pid = getpid();
 
 	if (argc <= 1)
 	{
@@ -743,9 +757,6 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "The number of ports given are not even.\nYou may only bridge two or more pairs of ports.\n\n");
 			goto error;
 		}
-		mISDNport_b = mISDN_port_open(strtol(argv[i], NULL, 0), nt_b);
-		if (!mISDNport_b)
-			goto error;
 		
 		/* get mode b */
 		if (!strcasecmp(argv[i], "te"))
@@ -764,6 +775,9 @@ int main(int argc, char *argv[])
 		}
 
 		/* open port b */
+		mISDNport_b = mISDN_port_open(strtol(argv[i], NULL, 0), nt_b);
+		if (!mISDNport_b)
+			goto error;
 		printf("port B: #%d %s, %d b-channels\n", mISDNport_b->portnum, (mISDNport_b->ntmode)?"NT-mode":"TE-mode", mISDNport_b->b_num);
 		i++; // next port / arg
 
@@ -784,6 +798,8 @@ int main(int argc, char *argv[])
 			while(mISDN_handler())
 				;
 			j++;
+#warning testing
+//break;
 		}
 		j = 0;
 		while(j < mISDNport_b->b_num)
@@ -792,6 +808,8 @@ int main(int argc, char *argv[])
 			while(mISDN_handler())
 				;
 			j++;
+#warning testing
+//break;
 		}
 	}
 
@@ -831,7 +849,6 @@ int main(int argc, char *argv[])
 		}
 		nooutput = 1;
 	}
-	dsp_pid = getpid();
 	
 	/* signal handlers */	
 	signal(SIGINT,sighandler);
