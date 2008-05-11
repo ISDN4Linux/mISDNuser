@@ -798,8 +798,9 @@ int main(int argc, char *argv[])
 			while(mISDN_handler())
 				;
 			j++;
-#warning testing
-//break;
+//#warning testing
+//if (j==10)
+//  break;
 		}
 		j = 0;
 		while(j < mISDNport_b->b_num)
@@ -808,8 +809,9 @@ int main(int argc, char *argv[])
 			while(mISDN_handler())
 				;
 			j++;
-#warning testing
-//break;
+//#warning testing
+//if (j==10)
+//  break;
 		}
 	}
 
