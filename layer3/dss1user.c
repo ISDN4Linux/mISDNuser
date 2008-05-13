@@ -1643,12 +1643,32 @@ l3dss1_tretrieve(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 }
 
 static void
+send_timeout(l3_process_t *pc, char *nr)
+{
+	struct l3_msg	*l3m;
+	unsigned char	c[5];
+
+	l3m = alloc_l3_msg();
+	if (!l3m) {
+		eprint("%s no memory for l3 message\n", __FUNCTION__);
+		return;
+	}
+	c[0] = 0x80 | CAUSE_LOC_USER;
+	c[1] = 0x80 | CAUSE_TIMER_EXPIRED;
+	c[2] = nr[0];
+	c[3] = nr[1];
+	c[4] = nr[2];
+	add_layer3_ie(l3m, IE_CAUSE, 5, c);
+	mISDN_l3up(pc, MT_TIMEOUT, l3m);
+}
+
+static void
 l3dss1_t302(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	L3DelTimer(&pc->timer1);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_INVALID_NUMBER);
-	mISDN_l3up(pc, MT_TIMEOUT, NULL);
+	send_timeout(pc, "302");
 }
 
 static void
@@ -1673,7 +1693,7 @@ l3dss1_t303(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 		free_l3_msg(pc->t303msg);
 	pc->t303msg = NULL;
 	l3dss1_message_cause(pc, MT_RELEASE_COMPLETE, CAUSE_TIMER_EXPIRED);
-	mISDN_l3up(pc, MT_TIMEOUT, NULL);
+	send_timeout(pc, "303");
 	release_l3_process(pc);
 }
 
@@ -1683,7 +1703,7 @@ l3dss1_t304(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	L3DelTimer(&pc->timer1);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
-	mISDN_l3up(pc, MT_TIMEOUT, NULL);
+	send_timeout(pc, "304");
 }
 
 static void
@@ -1709,7 +1729,7 @@ l3dss1_t310(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	L3DelTimer(&pc->timer1);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
-	mISDN_l3up(pc, MT_TIMEOUT, NULL);
+	send_timeout(pc, "310");
 }
 
 static void
@@ -1718,7 +1738,7 @@ l3dss1_t313(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	L3DelTimer(&pc->timer1);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
-	mISDN_l3up(pc, MT_TIMEOUT, NULL);
+	send_timeout(pc, "313");
 }
 
 static void
@@ -1734,7 +1754,7 @@ static void
 l3dss1_t308_2(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	L3DelTimer(&pc->timer1);
-	mISDN_l3up(pc, MT_TIMEOUT, NULL);
+	send_timeout(pc, "308");
 	release_l3_process(pc);
 }
 

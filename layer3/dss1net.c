@@ -874,7 +874,7 @@ l3dss1_connect_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_connect_ack_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	int	cause;
+	unsigned char	cause[2];
 
 	L3DelTimer(&pc->timer1);
 	send_proc(pc, IMSG_SEL_PROC, NULL);
@@ -884,8 +884,9 @@ l3dss1_connect_ack_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 		newl3state(pc, 10);
 		l3dss1_message(pc, MT_CONNECT_ACKNOWLEDGE);
 	}
-	cause = CAUSE_NONSELECTED_USER;
-	send_proc(pc, IMSG_RELEASE_CHILDS, &cause);
+	cause[0] = CAUSE_LOC_PRVN_LOCUSER | 0x80;
+	cause[1] = CAUSE_NONSELECTED_USER | 0x80;
+	send_proc(pc, IMSG_RELEASE_CHILDS, cause);
 }
 
 static void
@@ -961,7 +962,7 @@ l3dss1_notify_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_disconnect_req_out(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	int		cause;
+	unsigned char	cause[2];
 
 	if (pc->master) { /* child */
 		l3dss1_disconnect_req_out(pc->master, pr, l3m);
@@ -970,19 +971,21 @@ l3dss1_disconnect_req_out(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	L3DelTimer(&pc->timer1);
 	if (l3m) {
 		if (l3m->cause){
-			cause = l3m->cause[2] & 0x7f;
+			cause[0] = l3m->cause[2] & 0x7f;
+			cause[1] = l3m->cause[3] & 0x7f;
 		} else {
-			cause = CAUSE_NORMALUNSPECIFIED;
+			cause[0] = CAUSE_LOC_PRVN_LOCUSER | 0x80;
+			cause[1] = CAUSE_NORMALUNSPECIFIED | 0x80;
 		}
 	}
-	send_proc(pc, IMSG_RELEASE_CHILDS, &cause);
+	send_proc(pc, IMSG_RELEASE_CHILDS, cause);
 	if (test_bit(FLG_L3P_TIMER312, &pc->flags)) {
 		newl3state(pc, 22);
 	} else {
 //		if_link(pc->L3->nst->manager, (ifunc_t)pc->L3->nst->L3_manager,
 //			CC_RELEASE | CONFIRM, pc->ces |
 //			(pc->callref << 16), 0, NULL, 0);
-		newl3state(pc, 0);
+//		newl3state(pc, 0);
 		if (list_empty(&pc->child))
 			send_proc(pc, IMSG_END_PROC_M, NULL);
 	}
@@ -1428,7 +1431,7 @@ static struct stateentry manstatelist[] =
 static int
 imsg_intrelease(l3_process_t *master, l3_process_t *child)
 {
-	int	cause;
+	unsigned char	cause[2];
 
 	if ((!master) || (!child))
 		return(-EINVAL);
@@ -1459,8 +1462,9 @@ imsg_intrelease(l3_process_t *master, l3_process_t *child)
 			break;
 		case 8:
 			if (master->selpid == child->pid) {
-				cause = CAUSE_NONSELECTED_USER;
-				send_proc(master, IMSG_RELEASE_CHILDS, &cause);
+				cause[0] = CAUSE_LOC_PRVN_LOCUSER | 0x80;
+				cause[1] = CAUSE_NONSELECTED_USER | 0x80;
+				send_proc(master, IMSG_RELEASE_CHILDS, cause);
 				if (test_bit(FLG_L3P_TIMER312, &master->flags)) {
 					newl3state(master, 22);
 				} else {
@@ -1484,7 +1488,6 @@ send_proc(l3_process_t *proc, int op, void *arg)
 	int		i;
 	struct l3_msg	*l3m = arg;
 	struct l3_msg	*nl3m;
-	unsigned char	cause[2];
 	l3_process_t	*p, *np;
 
 	if (proc->L3 && proc->L3->debug & L3_DEB_PROC)
@@ -1592,15 +1595,13 @@ send_proc(l3_process_t *proc, int op, void *arg)
 			send_proc(p, IMSG_END_PROC, NULL);
 			break;
 		case IMSG_RELEASE_CHILDS:
-			cause[0] = CAUSE_LOC_PRVN_LOCUSER | 0x80;
-			cause[1] = *((int *)arg) | 0x80;
 			list_for_each_entry_safe(p, np, &proc->child, list) {
 				nl3m = alloc_l3_msg();
 				if (!nl3m) {
 					eprint("%s: no memory\n", __FUNCTION__);
 					return -ENOMEM;
 				}
-				add_layer3_ie(nl3m, IE_CAUSE, 2, cause);
+				add_layer3_ie(nl3m, IE_CAUSE, 2, arg);
 				nl3m->type = MT_RELEASE;
 				nl3m->pid = p->pid;
 				send_proc(p, IMSG_L4_DATA, nl3m);
