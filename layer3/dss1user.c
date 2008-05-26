@@ -1094,12 +1094,32 @@ l3dss1_facility(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int		ret;
 
+#warning facility disabled
+#if 0
+Program received signal SIGSEGV, Segmentation fault.
+       [Switching to Thread 16386 (LWP 4174)]
+       0xb7f321ef in SendMsg (pc=0x81003b4, l3m=0x8112c28, state=-1) at layer3.c:291
+       291             mb->addr = pc->l2if->l2addr;
+(gdb) where
+#0  0xb7f321ef in SendMsg (pc=0x81003b4, l3m=0x8112c28, state=-1) at layer3.c:291
+#1  0xb7f33ede in l3dss1_status_send (pc=0x81003b4, cause=99 'c') at dss1user.c:70
+#2  0xb7f3412e in l3dss1_std_ie_err (pc=0x81003b4, ret=2097152) at dss1user.c:296
+#3  0xb7f359fa in l3dss1_facility (pc=0x81003b4, pr=12552, l3m=0x8103aa8) at dss1user.c:1098
+#4  0xb7f3725b in dss1_fromdown (l3=0x8100268, msg=0x8103a68) at dss1user.c:2068
+#5  0xb7f330ec in handle_l2msg (l3=0x8100268, mb=0x8103a68) at layer3.c:692
+#6  0xb7f335f1 in layer3_thread (arg=0x8100268) at layer3.c:799
+#7  0xb7edfb05 in pthread_start_thread (arg=0xbf5ffbe0) at manager.c:300
+#8  0xb7edfb7a in pthread_start_thread_event (arg=0xbf5ffbe0) at manager.c:324
+#9  0xb7dad2e7 in __clone () from /lib/libc.so.6
+
+crash because dummy process has no l2if
 	ret = check_infoelements(pc, l3m, ie_FACILITY);
 	l3dss1_std_ie_err(pc, ret);
 	if (!l3m->facility) {
 		free_l3_msg(l3m);
 		return;
 	}
+#endif
 	mISDN_l3up(pc, MT_FACILITY, l3m);
 }
 
