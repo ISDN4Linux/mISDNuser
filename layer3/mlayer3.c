@@ -183,7 +183,10 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	l3->mdev = open("/dev/mISDNtimer", O_RDWR);
 	if (l3->mdev < 0) {
 		fprintf(stderr,"could not open /dev/mISDNtimer %s\n", strerror(errno));
-		fprintf(stderr," -> try to create device: 'mknod /dev/mISDNtimer 10 TODO'\n\n");
+		fprintf(stderr,"It seems that you don't use udev device. You may use this workarround:\n\n");
+		fprintf(stderr,"Do 'cat /proc/misc' and see the number in front of 'mISDNtimer'.\n");
+		fprintf(stderr,"Do 'mknod /dev/mISDNtimer c 10 xx', where xx is the number you saw.\n");
+		fprintf(stderr,"Note: This number changes if you load modules in different order, that use misc device.\n");
 		goto fail;
 	}
 	if (l3->l2sock < l3->mdev)
