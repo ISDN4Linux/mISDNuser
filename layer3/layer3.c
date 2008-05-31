@@ -620,7 +620,9 @@ void
 init_l3(layer3_t *l3)
 {
 	INIT_LIST_HEAD(&l3->plist);
+	l3->global.l2if = &l3->l2master;
 	l3->global.L3 = l3;
+	l3->dummy.l2if = &l3->l2master;
 	l3->dummy.L3 = l3;
 	L3TimerInit(l3, MISDN_PID_GLOBAL, &l3->global.timer1);
 	L3TimerInit(l3, MISDN_PID_GLOBAL, &l3->global.timer2);
@@ -802,8 +804,11 @@ layer3_thread(void *arg)
 		while ((mb = mdequeue(&l3->app_queue))) {
 			if (mb->l3.type == MT_L2ESTABLISH || mb->l3.type == MT_L2RELEASE)
 				to_l2(l3, &mb->l3);
-			else
-				l3->to_l3(l3, &mb->l3);
+			else {
+				ret = l3->to_l3(l3, &mb->l3);
+				if (ret < 0)
+					free_mbuffer(mb);
+			}
 		}
 		while ((mb = mdequeue(&l3->l2master.squeue))) {
 			ret = sendto(l3->l2sock, mb->head, mb->len, 0, (struct sockaddr *)&mb->addr, sizeof(mb->addr));
