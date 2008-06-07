@@ -557,7 +557,7 @@ l3dss1_connect_i(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_hold(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	if (!(pc->L3->ml3.options & MISDN_FLG_NET_HOLD)) {
+	if (!test_bit(MISDN_FLG_NET_HOLD, &pc->L3->ml3.options)) {
 		l3dss1_message_cause(pc, MT_HOLD_REJECT, CAUSE_MT_NOTIMPLEMENTED);
 		return;
 	}
@@ -576,7 +576,7 @@ l3dss1_hold(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_retrieve(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	if (!(pc->L3->ml3.options & MISDN_FLG_NET_HOLD)) {
+	if (!test_bit(MISDN_FLG_NET_HOLD, &pc->L3->ml3.options)) {
 		l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_MT_NOTIMPLEMENTED);
 		return;
 	}
