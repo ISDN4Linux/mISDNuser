@@ -307,23 +307,47 @@ l3dss1_std_ie_err(l3_process_t *pc, int ret) {
 static int
 l3dss1_get_cid(l3_process_t *pc, struct l3_msg *l3m) {
 
-	if (!l3m->channel_id)
-		return -1; /* IE missing */
-	if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
-		if (l3m->channel_id[0] != 1)
-			return -2; /* wrong length */
-		if (l3m->channel_id[1] & 0x60)
-			return -3; /* wrong interface */
-		memcpy(pc->cid, l3m->channel_id, 2);
-	} else { /* primary rate */
-		if (l3m->channel_id[0] < 3)
-			return -2; /* wrong length, maybe wrong if D-channel */
-		if ((l3m->channel_id[1] & 0x60) != 0x20) /* not other */
-			return -3; /* wrong interface */
-		if (l3m->channel_id[2] & 0x10) /* map not allowed by ETSI */
-			return -4;
-		memcpy(pc->cid, l3m->channel_id, 4); 
+	memset(pc->cid, 0, 4); /* clear cid */
+
+	if (!l3m->channel_id) {
+		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s no channel id\n", __FUNCTION__);
+		return -1;
 	}
+	if (l3m->channel_id[0] < 1) {
+		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id short read\n", __FUNCTION__);
+		return -2;
+	}
+	if (l3m->channel_id[0] > 3) {
+		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id too large\n", __FUNCTION__);
+		return -3;
+	}
+	if (l3m->channel_id[1] & 0x40) {
+		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id for adjected channels not supported\n", __FUNCTION__);
+		return -4;
+	}
+	if (l3m->channel_id[1] & 0x04) {
+		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s channel id with dchannel\n", __FUNCTION__);
+		goto done;
+	}
+	if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
+		if (l3m->channel_id[1] & 0x20) {
+			dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id not for BRI interface\n", __FUNCTION__);
+			return -11;
+		}
+	} else { /* primary rate */
+		if (!(l3m->channel_id[1] & 0x20)) {
+			dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id not for PRI interface\n", __FUNCTION__);
+			return -11;
+		}
+		if (l3m->channel_id[0] < 3)
+			goto done;
+		if (l3m->channel_id[2] & 0x10) { /* map not allowed by ETSI */
+			dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id uses channel map\n", __FUNCTION__);
+			return -12;
+		}
+	}
+done:
+	memcpy(pc->cid, l3m->channel_id, l3m->channel_id[0] + 1);
 	return 0;
 }
 
@@ -1232,7 +1256,7 @@ l3dss1_global_restart(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 				return;
 			}
 		} /* valid test for primary rate ??? */
-	} else if (ret == -1) {
+	} else if (ret != -1) {
 		l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
 		free_l3_msg(l3m);
 		return;
@@ -1252,7 +1276,7 @@ l3dss1_global_restart(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	nl3m = MsgStart(pc, MT_RESTART_ACKNOWLEDGE);
 	if (pc->cid[0])
 		/*copy channel ie*/
-		add_layer3_ie(nl3m, IE_CHANNEL_ID, pc->cid[0], pc->cid);
+		add_layer3_ie(nl3m, IE_CHANNEL_ID, pc->cid[0], pc->cid + 1);
 	free_l3_msg(l3m);
 	add_layer3_ie(nl3m, IE_RESTART_IND, 1, &ri);
 	SendMsg(pc, nl3m, -1);
