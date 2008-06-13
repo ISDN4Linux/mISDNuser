@@ -201,6 +201,8 @@ get_l2if(layer3_t *l3, unsigned int ces)
 
 	if (ces == MISDN_CES_MASTER)
 		return &l3->l2master;
+	if (ces == l3->l2master.l2addr.channel)
+		return &l3->l2master;
 	list_for_each_entry(l2i, &l3->l2master.list, list) {
 		if (ces == l2i->l2addr.channel)
 			return l2i;
@@ -241,7 +243,7 @@ create_new_process(layer3_t *l3, unsigned int ces, unsigned int cr, l3_process_t
 	}
 	pc->l2if = get_l2if(l3, ces);
 	if (ces == MISDN_CES_MASTER) {
-		if (test_bit(FLG_USER, &l3->ml3.options) || test_bit(MISDN_FLG_PTP, &l3->ml3.options)) {
+		if (test_bit(FLG_USER, &l3->ml3.options) && !test_bit(MISDN_FLG_PTP, &l3->ml3.options)) {
 			if (list_empty(&l3->l2master.list)) {
 				eprint("%s: no layer2 assigned\n", __FUNCTION__);
 				pc->l2if = NULL;
@@ -598,7 +600,10 @@ create_l2l3if(layer3_t *l3, struct sockaddr_mISDN *addr)
 {
 	struct l2l3if	*l2i;
 
-	l2i = get_l2if(l3, addr->channel);
+	if (l3->l2master.l2addr.tei == addr->tei)
+		l2i = &l3->l2master;
+	else
+		l2i = get_l2if(l3, addr->channel);
 	if (l2i) {
 		dprint(DBGM_L3, l2i->l2addr.dev, "%s: already have layer2/3 interface for ces(%x) tei(%x/%x)\n",
 			__FUNCTION__, addr->channel, addr->tei, l2i->l2addr.tei);
@@ -630,8 +635,12 @@ init_l3(layer3_t *l3)
 	L3TimerInit(l3, MISDN_PID_DUMMY, &l3->dummy.timer2);
 	l3->debug = 0xff; // FIXME dynamic
 	init_l2if(&l3->l2master, l3);
+	/*
+	 * Broadcast is always established.
+	 * PTP l2master process follows tei 0 process
+	 */
 	if (!test_bit(MISDN_FLG_PTP, &l3->ml3.options))
-		l3->l2master.l3m.state = ST_L3_LC_ESTAB; /* broadcast is always enabled */
+		l3->l2master.l3m.state = ST_L3_LC_ESTAB;
 	mqueue_init(&l3->app_queue);
 	INIT_LIST_HEAD(&l3->pending_timer);
 	l3->ml3.to_layer3 = to_layer3;
@@ -810,11 +819,13 @@ layer3_thread(void *arg)
 					free_mbuffer(mb);
 			}
 		}
-		while ((mb = mdequeue(&l3->l2master.squeue))) {
-			ret = sendto(l3->l2sock, mb->head, mb->len, 0, (struct sockaddr *)&mb->addr, sizeof(mb->addr));
-			if (ret < 0)
-				eprint("%s write socket error %s\n", __FUNCTION__, strerror(errno));
-			free_mbuffer(mb);
+		if (l3->l2master.l3m.state == ST_L3_LC_ESTAB) {
+			while ((mb = mdequeue(&l3->l2master.squeue))) {
+				ret = sendto(l3->l2sock, mb->head, mb->len, 0, (struct sockaddr *)&mb->addr, sizeof(mb->addr));
+				if (ret < 0)
+					eprint("%s write socket error %s\n", __FUNCTION__, strerror(errno));
+				free_mbuffer(mb);
+			}
 		}
 		list_for_each_entry(l2i, &l3->l2master.list, list) {
 			if (l2i->l3m.state == ST_L3_LC_ESTAB) {
