@@ -748,10 +748,10 @@ to_l2(layer3_t *l3, struct l3_msg *l3m)
 	 || (l3m->pid == 0 && l3->l2master.l2addr.tei != 127)) {
 		switch(l3m->type) {
 		case MT_L2ESTABLISH:
-			FsmEvent(&l2i->l3m, EV_ESTABLISH_REQ, NULL);
+			FsmEvent(&l3->l2master.l3m, EV_ESTABLISH_REQ, NULL);
 			break;
 		case MT_L2RELEASE:
-			FsmEvent(&l2i->l3m, EV_RELEASE_REQ, NULL);
+			FsmEvent(&l3->l2master.l3m, EV_RELEASE_REQ, NULL);
 			break;
 		}
 		free_l3_msg(l3m);
