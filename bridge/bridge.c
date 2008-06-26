@@ -385,8 +385,10 @@ int mISDN_handler(void)
 					/* we receive audio data, we respond to it AND we send tones */
 					case PH_DATA_IND:
 					case DL_DATA_IND:
-					case PH_CONTROL_IND:
 					PDEBUG("got B-channel data, this should not happen all the time. (just a few until DSP release tx-data are ok)\n");
+					break;
+
+					case PH_CONTROL_IND:
 					break;
 
 					case PH_ACTIVATE_IND:
