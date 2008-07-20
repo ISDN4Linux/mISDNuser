@@ -600,11 +600,14 @@ create_l2l3if(layer3_t *l3, struct sockaddr_mISDN *addr)
 {
 	struct l2l3if	*l2i;
 
-	if (l3->l2master.l2addr.tei == addr->tei)
+	if (l3->l2master.l2addr.tei == addr->tei &&
+			!(test_bit(FLG_USER, &l3->ml3.options) && !test_bit(MISDN_FLG_PTP, &l3->ml3.options)))
 		l2i = &l3->l2master;
 	else
 		l2i = get_l2if(l3, addr->channel);
 	if (l2i) {
+		if (l2i->l2addr.tei != 127)
+			eprint("overwrite tei %d with tei %d\n", l2i->l2addr.tei, addr->tei);
 		dprint(DBGM_L3, l2i->l2addr.dev, "%s: already have layer2/3 interface for ces(%x) tei(%x/%x)\n",
 			__FUNCTION__, addr->channel, addr->tei, l2i->l2addr.tei);
 		l2i->l2addr = *addr;
