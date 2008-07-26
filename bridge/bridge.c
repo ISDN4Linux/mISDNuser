@@ -424,7 +424,7 @@ int mISDN_handler(void)
 /*
  * global function to add a new card (port)
  */
-struct mISDNport *mISDN_port_open(int port, int nt_mode)
+struct mISDNport *mISDN_port_open(int port, int nt_mode, int hdlc)
 {
 	int ret;
 	struct mISDNhead hh;
@@ -593,7 +593,7 @@ struct mISDNport *mISDN_port_open(int port, int nt_mode)
 	i = 0;
 	while(i < mISDNport->b_num)
 	{
-		mISDNport->b_sock[i] = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_B_L2DSP);
+		mISDNport->b_sock[i] = socket(PF_ISDN, SOCK_DGRAM, (hdlc)?ISDN_P_B_L2DSPHDLC:ISDN_P_B_L2DSP);
 		if (mISDNport->b_sock[i] < 0)
 		{
 			fprintf(stderr, "Error: Failed to open bchannel-socket for index %d with mISDN-DSP layer. Did you load mISDNdsp.ko?\n", i);
@@ -677,7 +677,7 @@ int main(int argc, char *argv[])
 {
 	struct mISDNport *mISDNport_a, *mISDNport_b;
 	int i, j, nt_a, nt_b;
-	int forking = 0;
+	int forking = 0, hdlc = 0;
 
 	dsp_pid = getpid();
 
@@ -691,9 +691,10 @@ int main(int argc, char *argv[])
 		printf("Each pair of ports must be the same interface size (equal channel number).\n");
 		printf("Both ports may have same mode, e.g. 'te', to bridge ISDN leased line.\n");
 		printf("Also bridging a card to ISDN over IP tunnel is possible. (L1oIP)\n");
-		printf("Note: .\n");
+		printf("Use the following options before listing mode and ports:\n");
 		printf("--fork will make a daemon fork.\n");
 		printf("--traffic will show D-channel traffic.\n");
+		printf("--hdlc will bridge all bchannel via HDLC.\n");
 		printf("--debug will show debug info.\n");
 		return(0);
 	}
@@ -725,6 +726,12 @@ int main(int argc, char *argv[])
 			i++;
 			continue;
 		}
+		if (!strcmp(argv[i], "--hdlc"))
+		{
+			hdlc = 1;
+			i++;
+			continue;
+		}
 		if (!strcmp(argv[i], "--debug"))
 		{
 			debug = 1;
@@ -749,7 +756,7 @@ int main(int argc, char *argv[])
 		}
 
 		/* open port a */
-		mISDNport_a = mISDN_port_open(strtol(argv[i], NULL, 0), nt_a);
+		mISDNport_a = mISDN_port_open(strtol(argv[i], NULL, 0), nt_a, hdlc);
 		if (!mISDNport_a)
 			goto error;
 		printf("port A: #%d %s, %d b-channels\n", mISDNport_a->portnum, (mISDNport_a->ntmode)?"NT-mode":"TE-mode", mISDNport_a->b_num);
@@ -777,7 +784,7 @@ int main(int argc, char *argv[])
 		}
 
 		/* open port b */
-		mISDNport_b = mISDN_port_open(strtol(argv[i], NULL, 0), nt_b);
+		mISDNport_b = mISDN_port_open(strtol(argv[i], NULL, 0), nt_b, hdlc);
 		if (!mISDNport_b)
 			goto error;
 		printf("port B: #%d %s, %d b-channels\n", mISDNport_b->portnum, (mISDNport_b->ntmode)?"NT-mode":"TE-mode", mISDNport_b->b_num);
@@ -797,6 +804,7 @@ int main(int argc, char *argv[])
 		while(j < mISDNport_a->b_num)
 		{
 			bchannel_activate(mISDNport_a, j);
+			usleep(5000);
 			while(mISDN_handler())
 				;
 			j++;
@@ -805,6 +813,7 @@ int main(int argc, char *argv[])
 		while(j < mISDNport_b->b_num)
 		{
 			bchannel_activate(mISDNport_b, j);
+			usleep(5000);
 			while(mISDN_handler())
 				;
 			j++;
@@ -829,7 +838,7 @@ int main(int argc, char *argv[])
 		{
 			exit(0);
 		}
-		usleep(200000);
+		usleep(30000);
 		printf("\n");
 		
 		/* do second fork */
