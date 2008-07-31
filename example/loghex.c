@@ -14,6 +14,8 @@
 #include <time.h>
 #include <sys/ioctl.h>
 #include <mISDNif.h>
+#define AF_COMPATIBILITY_FUNC
+#include <compat_af_isdn.h>
 
 static void usage(pname) 
 char *pname;
@@ -107,7 +109,7 @@ main(argc, argv)
 int argc;
 char *argv[];
 {
-	int	aidx=1, idx;
+	int	aidx=1, idx, i;
 	int	cardnr = 1;
 	int	log_socket;
 	struct sockaddr_mISDN  log_addr;
@@ -176,6 +178,9 @@ char *argv[];
 		fprintf(stderr,"card nr %d wrong it should be 1 ... nr of installed cards\n", cardnr);
 		exit(1);
 	}
+
+	init_af_isdn();
+
 	if ((log_socket = socket(PF_ISDN, SOCK_RAW, 0)) < 0) {
 		printf("could not open socket %s\n", strerror(errno));
 		exit(1);
@@ -213,8 +218,10 @@ char *argv[];
 		printf("	Dprotocols:	%08x\n", di.Dprotocols);
 		printf("	Bprotocols:	%08x\n", di.Bprotocols);
 		printf("	protocol:	%d\n", di.protocol);
-		printf("	channelmap:	%08lx%08lx%08lx%08lx\n",
-			di.channelmap[3], di.channelmap[2], di.channelmap[1], di.channelmap[0]);
+		printf("	channelmap:	");
+		for (i = MISDN_CHMAP_SIZE - 1; i >= 0; i--)
+			printf("%02x", di.channelmap[i]);
+		printf("\n");			
 		printf("	nrbchan:	%d\n", di.nrbchan);
 		printf("	name:		%s\n", di.name);
 	}

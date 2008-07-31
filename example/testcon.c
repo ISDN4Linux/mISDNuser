@@ -15,6 +15,9 @@
 #include <mISDNif.h>
 #include <q931.h>
 
+#define AF_COMPATIBILITY_FUNC
+#include <compat_af_isdn.h>
+
 void usage(pname) 
 char *pname;
 {
@@ -1090,6 +1093,7 @@ char *argv[];
                                    aidx++;
 		} while (aidx<argc);
 	}
+	init_af_isdn();
 	err = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (err < 0) {
 		printf("TestmISDN cannot open mISDN due to %s\n",

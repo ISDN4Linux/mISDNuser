@@ -28,7 +28,7 @@ INFOOBJ = info.o
 isdninfo: $(INFOOBJ)
 	$(CC) $(INFOOBJ) $(LFLAGS) -o $@
 
-info.o: info.c
+info.o: info.c ../include/mlayer3.h ../include/compat_af_isdn.h
 
 clean:
 	rm -f *.o DEADJOE

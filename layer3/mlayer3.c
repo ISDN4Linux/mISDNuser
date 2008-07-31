@@ -28,12 +28,15 @@
 #include "helper.h"
 #include "layer3.h"
 #include "debug.h"
+#define AF_COMPATIBILITY_FUNC
+#include <compat_af_isdn.h>
 
 static	int	__init_done = 0;
 
 void
 init_layer3(int nr)
 {
+	init_af_isdn();
 	init_mbuffer(nr);
 	mISDNl3New();
 	__init_done = 1;

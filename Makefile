@@ -22,6 +22,8 @@ export LIBDIR
 
 CFLAGS:= -g -Wall -I $(INCLUDEDIR)
 
+CFLAGS += -DMISDN_OLD_AF_COMPATIBILITY
+
 LDFLAGS:= -g -L $(LIBDIR)
 
 #disable this if your system does not support PIC (position independent code)

@@ -23,17 +23,17 @@ testcon: testcon.o
 
 testlayer3: testlayer3.o
 
-testcon.o : testcon.c ../include/q931.h ../include/mISDNif.h
+testcon.o : testcon.c ../include/q931.h ../include/mISDNif.h ../include/compat_af_isdn.h
 
-testlayer3.o: testlayer3.c ../include/q931.h ../include/mlayer3.h ../include/mISDNif.h
+testlayer3.o: testlayer3.c ../include/q931.h ../include/mlayer3.h ../include/mISDNif.h ../include/compat_af_isdn.h
 
 loghex: loghex.o
 
-loghex.o: loghex.c ../include/mISDNif.h
+loghex.o: loghex.c ../include/mISDNif.h  ../include/compat_af_isdn.h
 
 cleanl2: cleanl2.o
 
-cleanl2.o: cleanl2.c ../include/mISDNif.h
+cleanl2.o: cleanl2.c ../include/mISDNif.h ../include/compat_af_isdn.h
 
 clean:
 	rm -f *.o *.lo *~ DEADJOE

@@ -18,6 +18,8 @@
 #include <mlayer3.h>
 #include <mbuffer.h>
 #include <errno.h>
+#define AF_COMPATIBILITY_FUNC
+#include <compat_af_isdn.h>
 
 int main(int argc, char *argv[])
 {
@@ -27,6 +29,7 @@ int main(int argc, char *argv[])
 	struct mISDN_devinfo devinfo;
 	int sock;
 
+	init_af_isdn();
 	/* open mISDN */
 	sock = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (sock < 0)

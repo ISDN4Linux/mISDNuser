@@ -44,7 +44,7 @@ mbuffer.o mbuffer.lo:	mbuffer.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h 
 q931.o q931.lo:		q931.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h $(INCLUDEDIR)/q931.h debug.h
 fsm.o fsm.lo:		fsm.c fsm.h mtimer.h debug.h
 mtimer.o mtimer.lo:	mtimer.c mtimer.h mlist.h debug.h
-mlayer3.o mlayer3.lo:	mlayer3.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h $(INCLUDEDIR)/q931.h $(INCLUDEDIR)/mISDNif.h mlist.h debug.h layer3.h
+mlayer3.o mlayer3.lo:	mlayer3.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h $(INCLUDEDIR)/q931.h $(INCLUDEDIR)/mISDNif.h  $(INCLUDEDIR)/compat_af_isdn.h mlist.h debug.h layer3.h
 dss1user.o dss1user.lo:	dss1user.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h $(INCLUDEDIR)/q931.h dss1.h layer3.h debug.h
 dss1net.o dss1net.lo:	dss1net.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h $(INCLUDEDIR)/q931.h dss1.h layer3.h debug.h
 layer3.o layer3.lo:	layer3.c $(INCLUDEDIR)/mbuffer.h $(INCLUDEDIR)/mlayer3.h $(INCLUDEDIR)/q931.h $(INCLUDEDIR)/mISDNif.h mlist.h mtimer.h layer3.h debug.h

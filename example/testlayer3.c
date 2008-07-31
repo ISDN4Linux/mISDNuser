@@ -16,6 +16,7 @@
 #include <mISDNif.h>
 #include <q931.h>
 #include <mlayer3.h>
+#include <compat_af_isdn.h>
 
 void usage(pname) 
 char *pname;
@@ -1126,7 +1127,6 @@ int do_setup(devinfo_t *di) {
 	}
 	if (VerifyOn > 8)
 		fprintf(stdout, "init_layer3(4)\n");
-	init_layer3(4);
 	if (VerifyOn > 8)
 		fprintf(stdout, "done\n");
 	if (di->flag & FLG_NT_MODE) {
@@ -1288,6 +1288,9 @@ char *argv[];
                                    aidx++;
 		} while (aidx<argc);
 	}
+
+	init_layer3(4);
+
 	err = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (err < 0) {
 		printf("TestmISDN cannot open mISDN due to %s\n",
