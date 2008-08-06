@@ -441,12 +441,10 @@ int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 		/* received data, save it */
 		write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
 	} else if (hh->prim == (PH_CONTROL_IND)) {
-		unsigned int	*tone = (unsigned int *)(buf + MISDN_HEADER_LEN);
-
-		if ((len == (4 + MISDN_HEADER_LEN)) && ((*tone & ~DTMF_TONE_MASK) == DTMF_TONE_VAL)) {
-			fprintf(stdout,"GOT TT %c\n", DTMF_TONE_MASK & *tone);
+		if ((len == MISDN_HEADER_LEN) && ((hh->id & ~DTMF_TONE_MASK) == DTMF_TONE_VAL)) {
+			fprintf(stdout,"GOT TT %c\n", DTMF_TONE_MASK & hh->id);
 		} else
-			fprintf(stdout,"unknown PH_CONTROL len %d/val %x\n", len, *tone);
+			fprintf(stdout,"unknown PH_CONTROL len %d/val %x\n", len, hh->id);
 	} else {
 		if (VerifyOn)
 			fprintf(stdout,"got unexpected B frame prim(%x) id(%x) len(%d)\n",
