@@ -5,7 +5,7 @@
 **---------------------------------------------------------------------------**
 ** Copyright: Andreas Eversberg  (GPL)                                       **
 **                                                                           **
-** user space utility to bridge two mISDN ports via layer 1                  **
+** user space utility to list mISDN devices                                  **
 **                                                                           **
 \*****************************************************************************/ 
 
