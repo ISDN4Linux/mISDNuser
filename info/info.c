@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
 		if (ret < 0)
 		{
 			fprintf(stderr, "Cannot get device information for port %d. (ioctl IMGETDEVINFO failed ret=%d)\n", i, ret);
-			break;
+			goto next_dev;
 		}
 
 		/* output the port info */
@@ -142,6 +142,7 @@ int main(int argc, char *argv[])
 
 		printf("--------\n");
 
+	next_dev:
 		i++;
 	}
 	printf("\n");
