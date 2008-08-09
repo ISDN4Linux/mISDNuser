@@ -36,7 +36,7 @@ cleanl2: cleanl2.o
 cleanl2.o: cleanl2.c ../include/mISDNif.h ../include/compat_af_isdn.h
 
 clean:
-	rm -f *.o *.lo *~ DEADJOE
+	rm -f *.o *.lo *~ $(PROGS) DEADJOE
 
 distclean: clean
 	rm -f $(PROGS)
