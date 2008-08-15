@@ -134,7 +134,11 @@ unsigned long long get_tick_count(void)
 	return ((unsigned long long)((unsigned)tp.tv_sec)*TICKS_PER_SEC+((unsigned)tp.tv_usec));
 }
 
-
+/*
+ * opens NT-mode layer1, send PH_ACTIVATE_REQ amd wait for PH_ACTIVATE_IND
+ * returns 0 if PH_ACTIVATE_IND received within timeout interval
+ *
+ */
 int do_setup(devinfo_t *di)
 {
 	int 			cnt, ret = 0;
@@ -180,7 +184,6 @@ int do_setup(devinfo_t *di)
 		fprintf(stdout, "        nrbchan:        %d\n", devinfo.nrbchan);
 		fprintf(stdout, "        name:           %s\n", devinfo.name);
 	}
-
 	close(sk);
 
 	mISDN.layer1 = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_NT_S0);
@@ -188,28 +191,32 @@ int do_setup(devinfo_t *di)
 		fprintf(stderr, "could not open socket 'ISDN_P_NT_S0': %s\n", strerror(errno));
 		return 5;
 	}
-
+	
+	di->nds = di->layer1 + 1;
+	ret = fcntl(di->layer1, F_SETFL, O_NONBLOCK);
+	if (ret < 0) {
+		fprintf(stdout, "fcntl error %s\n", strerror(errno));
+		return 6;
+	}
+	
 	di->l1addr.family = AF_ISDN;
 	di->l1addr.dev = di->cardnr - 1;
 	di->l1addr.channel = 0;
-	di->l1addr.sapi = 0;
-	di->l1addr.tei = 127;
 	ret = bind(di->layer1, (struct sockaddr *) &di->l1addr, sizeof(di->l1addr));
 
 	if (ret < 0) {
 		fprintf(stdout, "could not bind l1 socket %s\n", strerror(errno));
 		return 7;
 	}
-	
+
 	hh = (struct mISDNhead *)buffer;
-	
 	hh->prim = PH_ACTIVATE_REQ;
 	hh->id   = MISDN_ID_ANY;
 	ret = sendto(di->layer1, buffer, MISDN_HEADER_LEN, 0, NULL, 0);
 
 	while (1) {
 		tout.tv_usec = 0;
-		tout.tv_sec = 2;
+		tout.tv_sec = 5;
 		FD_ZERO(&rds);
 		FD_SET(di->layer1, &rds);
 
@@ -217,7 +224,7 @@ int do_setup(devinfo_t *di)
 		if (VerifyOn>3)
 			fprintf(stdout,"select ret=%d\n", ret);
 		if (ret < 0) {
-			fprintf(stdout, "select error  %s\n", strerror(errno));
+			fprintf(stdout, "select error %s\n", strerror(errno));
 			return 9;
 		}
 		if (ret == 0) {
@@ -225,13 +232,29 @@ int do_setup(devinfo_t *di)
 			return 10;
 		}
 
-		fprintf(stdout, "buh\n");
 		if (FD_ISSET(di->layer1, &rds)) {
-			fprintf(stdout, "DATA\n");
+			alen = sizeof(di->l1addr);
+			ret = recvfrom(di->layer1, buffer, 300, 0, (struct sockaddr *) &di->l1addr, &alen);
+			if (ret < 0) {
+				fprintf(stdout, "recvfrom error %s\n", strerror(errno));
+				return 11;
+			}
+			if (VerifyOn>3) {
+				fprintf(stdout, "alen =%d, dev(%d) channel(%d)\n",
+					alen, di->l1addr.dev, di->l1addr.channel);
+			}
+			if (hh->prim == PH_ACTIVATE_IND) {
+				if (VerifyOn>2)
+					fprintf(stdout, "got PH_ACTIVATE_IND\n");
+				return 0;
+			} else {
+				if (VerifyOn>2)
+					fprintf(stdout, "got unhandled prim 0x%x\n", hh->prim);
+			}
 		}
 	}
 
-	return 0;
+	return 666;
 }
 
 
