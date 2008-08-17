@@ -54,9 +54,6 @@
  *                            ISDN TA in TE mode
  *
  *
- *
- * TODO:
- *   - activate and service B channels if requested by --b1 or --b2
  */
 
 
@@ -103,14 +100,13 @@ void usage(char *pname)
 #define CHAN_B1		0
 #define CHAN_B2		1
 #define CHAN_D  	2
-#define CHAN_E		3
-#define MAX_CHAN	4
+#define MAX_CHAN	3
 
 #define TX_BURST_HEADER_SZ 5
 
 
 static char * CHAN_NAMES[MAX_CHAN] = {
-	"B1", "B2", "D ", "E "
+	"B1", "B2", "D "
 };
 
 /*
@@ -122,14 +118,12 @@ static int CHAN_DFLT_PKT_SZ[MAX_CHAN] = {
 	1800,	// default B1 pkt sz
 	1800,	// default B2 pkt sz
 	128,	// default D pkt sz
-	0	// default E pkt sz irrelevant
 };
 
 static int CHAN_MAX_PKT_SZ[MAX_CHAN] = {
 	2048,	// max B1 pkt sz
 	2048,	// max B2 pkt sz
 	260,	// max D pkt sz
-	0	// max E pkt sz irrelevant
 };
 
 typedef struct {
@@ -153,8 +147,8 @@ typedef struct {
 typedef struct _devinfo {
 	int			device;
 	int			cardnr;
-	int			layer1; // layer1 ID
-	struct sockaddr_mISDN	l1addr;
+	int			layerid[4]; // layer1 ID
+	struct sockaddr_mISDN	laddr[4];
 	int			nds;
 
 	channel_data_t		ch[4]; // data channel info for D,B2,B2,(E)
@@ -169,13 +163,20 @@ static int te_mode=0;
 
 static devinfo_t mISDN;
 
+
+
 void sig_handler(int sig)
 {
+	int i;
+
 	fprintf(stdout, "exiting...\n");
 	fflush(stdout);
 	fflush(stderr);
-	if (mISDN.layer1 > 0)
-		close(mISDN.layer1);
+	for (i=0; i<MAX_CHAN; i++)
+		if (mISDN.layerid[i] > 0) {
+			fprintf (stdout, "closing socket '%s'\n", CHAN_NAMES[i]);
+			close(mISDN.layerid[i]);
+		}
 	exit(0);
 }
 
@@ -207,6 +208,94 @@ int printhexdata(FILE *f, int len, u_char *p)
 	return(0);
 }
 
+
+int setup_bchannel(devinfo_t *di, unsigned char bch) {
+	int ret;
+
+	di->layerid[bch] = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_B_HDLC);
+	if (di->layerid[bch] < 0) {
+		fprintf(stdout, "could not open bchannel socket %s\n", strerror(errno));
+		return 2;
+	}
+
+	if (di->layerid[bch] > di->nds - 1)
+		di->nds = di->layerid[bch] + 1;
+
+	ret = fcntl(di->layerid[bch], F_SETFL, O_NONBLOCK);
+	if (ret < 0) {
+		fprintf(stdout, "fcntl error %s\n", strerror(errno));
+		return 3;
+	}
+
+	di->laddr[bch].family = AF_ISDN;
+	di->laddr[bch].dev = di->cardnr - 1;
+	di->laddr[bch].channel = bch + 1;
+
+	ret = bind(di->layerid[bch], (struct sockaddr *) &di->laddr[bch], sizeof(di->laddr[bch]));
+
+	if (ret < 0) {
+		fprintf(stdout, "could not bind bchannel socket %s\n", strerror(errno));
+		return 4;
+	}
+
+	return ret;
+}
+
+int activate_bchan(devinfo_t *di, unsigned char bch) {
+	unsigned char 		buf[2048];
+	struct  mISDNhead	*hh = (struct  mISDNhead *)buf;
+	struct timeval		tout;
+	fd_set			rds;
+	int ret, rval;
+
+	hh->prim = PH_ACTIVATE_REQ;
+	hh->id   = MISDN_ID_ANY;
+	ret = sendto(di->layerid[bch], buf, MISDN_HEADER_LEN, 0, NULL, 0);
+	
+	if (ret < 0) {
+		fprintf(stdout, "could not send ACTIVATE_REQ %s\n", strerror(errno));
+		return 0;
+	}
+	
+	if (debug>3)
+		fprintf(stdout,"ACTIVATE_REQ sendto ret=%d\n", ret);
+
+	tout.tv_usec = 0;
+	tout.tv_sec = 10;
+	FD_ZERO(&rds);
+	FD_SET(di->layerid[bch], &rds);
+
+	ret = select(di->nds, &rds, NULL, NULL, &tout);
+	if (debug>3)
+		fprintf(stdout,"select ret=%d\n", ret);
+	if (ret < 0) {
+		fprintf(stdout, "select error  %s\n", strerror(errno));
+		return 0;
+	}
+	if (ret == 0) {
+		fprintf(stdout, "select timeeout\n");
+		return 0;
+	}
+	
+	rval = PH_ACTIVATE_IND;
+	if (FD_ISSET(di->layerid[bch], &rds)) {
+		ret = recv(di->layerid[bch], buf, 2048, 0);
+		if (ret < 0) {
+			fprintf(stdout, "recv error  %s\n", strerror(errno));
+			return 0;
+		}
+		if (hh->prim == rval) {
+			di->ch[bch].activated = 1;
+		} else {
+			fprintf(stdout, "recv not  %x but %x\n", rval, hh->prim);
+			return 0;
+		}
+	} else {
+		fprintf(stdout, "bchan fd not in set\n");
+		return 0;
+	}
+	return ret;
+}
 
 /*
  * opens NT-mode layer1, send PH_ACTIVATE_REQ and wait for PH_ACTIVATE_IND
@@ -260,27 +349,27 @@ int do_setup(devinfo_t *di)
 	close(sk);
 
 	if (te_mode)
-		mISDN.layer1 = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_TE_S0);
+		mISDN.layerid[CHAN_D] = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_TE_S0);
 	else
-		mISDN.layer1 = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_NT_S0);
-	if (mISDN.layer1 < 1) {
+		mISDN.layerid[CHAN_D] = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_NT_S0);
+	if (mISDN.layerid[CHAN_D] < 1) {
 		fprintf(stderr, "could not open socket '%s': %s\n",
 			strerror(errno),
 			(te_mode)?"ISDN_P_TE_S0":"ISDN_P_NT_S0");
 		return 5;
 	}
 	
-	di->nds = di->layer1 + 1;
-	ret = fcntl(di->layer1, F_SETFL, O_NONBLOCK);
+	di->nds = di->layerid[CHAN_D] + 1;
+	ret = fcntl(di->layerid[CHAN_D], F_SETFL, O_NONBLOCK);
 	if (ret < 0) {
 		fprintf(stdout, "fcntl error %s\n", strerror(errno));
 		return 6;
 	}
 	
-	di->l1addr.family = AF_ISDN;
-	di->l1addr.dev = di->cardnr - 1;
-	di->l1addr.channel = 0;
-	ret = bind(di->layer1, (struct sockaddr *) &di->l1addr, sizeof(di->l1addr));
+	di->laddr[CHAN_D].family = AF_ISDN;
+	di->laddr[CHAN_D].dev = di->cardnr - 1;
+	di->laddr[CHAN_D].channel = 0;
+	ret = bind(di->layerid[CHAN_D], (struct sockaddr *) &di->laddr[CHAN_D], sizeof(di->laddr[CHAN_D]));
 
 	if (ret < 0) {
 		fprintf(stdout, "could not bind l1 socket %s\n", strerror(errno));
@@ -291,13 +380,13 @@ int do_setup(devinfo_t *di)
 	hh->prim = PH_ACTIVATE_REQ;
 	hh->id   = MISDN_ID_ANY;
 	fprintf(stdout, "--> PH_ACTIVATE_REQ\n");
-	ret = sendto(di->layer1, buffer, MISDN_HEADER_LEN, 0, NULL, 0);
+	ret = sendto(di->layerid[CHAN_D], buffer, MISDN_HEADER_LEN, 0, NULL, 0);
 
 	while (1) {
 		tout.tv_usec = 0;
 		tout.tv_sec = 1;
 		FD_ZERO(&rds);
-		FD_SET(di->layer1, &rds);
+		FD_SET(di->layerid[CHAN_D], &rds);
 
 		ret = select(di->nds, &rds, NULL, NULL, &tout);
 		if (debug>3)
@@ -311,10 +400,10 @@ int do_setup(devinfo_t *di)
 			return 10;
 		}
 
-		if (FD_ISSET(di->layer1, &rds)) {
-			alen = sizeof(di->l1addr);
-			ret = recvfrom(di->layer1, buffer, 300, 0,
-				       (struct sockaddr *) &di->l1addr, &alen);
+		if (FD_ISSET(di->layerid[CHAN_D], &rds)) {
+			alen = sizeof(di->laddr[CHAN_D]);
+			ret = recvfrom(di->layerid[CHAN_D], buffer, 300, 0,
+				       (struct sockaddr *) &di->laddr[CHAN_D], &alen);
 			if (ret < 0) {
 				fprintf(stdout, "recvfrom error %s\n",
 					strerror(errno));
@@ -322,13 +411,20 @@ int do_setup(devinfo_t *di)
 			}
 			if (debug>3) {
 				fprintf(stdout, "alen =%d, dev(%d) channel(%d)\n",
-					alen, di->l1addr.dev, di->l1addr.channel);
+					alen, di->laddr[CHAN_D].dev, di->laddr[CHAN_D].channel);
 			}
 			if (hh->prim == PH_ACTIVATE_IND) {
 				fprintf(stdout, "<-- PH_ACTIVATE_IND\n");
 				di->ch[CHAN_D].activated = 1;
 				
-				// TODO: acivate b channels if requested by --b1 or --b2
+				if ((di->ch[CHAN_B1].tx_ack) && (!setup_bchannel(di, CHAN_B1))) {
+					activate_bchan(di, CHAN_B1);
+				}
+
+				if ((di->ch[CHAN_B2].tx_ack) && (!setup_bchannel(di, CHAN_B2))) {
+					activate_bchan(di, CHAN_B2);
+				}
+
 				return 0;
 			} else {
 				if (debug)
@@ -365,10 +461,13 @@ int main_data_loop(devinfo_t *di)
 	printf ("\nwaiting for data (use CTRL-C to cancel)...\n");
 	while (1)
 	{
-		/* write data */
 		for (ch_idx=0; ch_idx<MAX_CHAN; ch_idx++)
 		{
-			if ((di->ch[ch_idx].tx_ack) && (di->ch[ch_idx].activated))
+			if (!di->ch[ch_idx].activated)
+				continue;
+
+			/* write data */
+			if (di->ch[ch_idx].tx_ack)
 			{
 	        		// start timer tick at first TX packet
 				if (!di->ch[ch_idx].t_start) {
@@ -402,99 +501,102 @@ int main_data_loop(devinfo_t *di)
 				l = p - msg;
 				hhtx->prim = PH_DATA_REQ;
 				hhtx->id = MISDN_ID_ANY;
-				ret = sendto(di->layer1, tx_buf, l + MISDN_HEADER_LEN,
-					     0, (struct sockaddr *)&di->l1addr,
-					     sizeof(di->l1addr));
+				ret = sendto(di->layerid[ch_idx], tx_buf, l + MISDN_HEADER_LEN,
+					     0, (struct sockaddr *)&di->laddr[ch_idx],
+					     sizeof(di->laddr[ch_idx]));
 
 				di->ch[ch_idx].tx_ack--;
 			}
-		}
 
-		/* read data */
-		// TODO: also read B1 and B2 if required, for now only D Channel is handled
-		FD_ZERO(&rds);
-		FD_SET(di->layer1, &rds);
+			/* read data */
+			FD_ZERO(&rds);
+			FD_SET(di->layerid[ch_idx], &rds);
 
-		ret = select(di->nds, &rds, NULL, NULL, &tout);
-		if (ret < 0)
-			fprintf(stdout, "select error %s\n", strerror(errno));
-
-		if ((ret > 0) && (FD_ISSET(di->layer1, &rds))) {
-			alen = sizeof(di->l1addr);
-			ret = recvfrom(di->layer1, rx_buf, MISDN_BUF_SZ, 0,
-				       (struct sockaddr *) &di->l1addr, &alen);
+			ret = select(di->nds, &rds, NULL, NULL, &tout);
 			if (ret < 0)
-				fprintf(stdout, "recvfrom error %s\n",
-					strerror(errno));
-			if (debug>3)
-				fprintf(stdout, "alen =%d, dev(%d) channel(%d)\n",
-					alen, di->l1addr.dev, di->l1addr.channel);
+				fprintf(stdout, "select error %s\n", strerror(errno));
 
-			if (hhrx->prim == PH_DATA_IND) {
-				if (debug) 
-					fprintf(stdout, "<-- PH_DATA_IND\n");
-				if (debug > 2)
-					printhexdata(stdout, ret-MISDN_HEADER_LEN, rx_buf + MISDN_HEADER_LEN);
+			if ((ret > 0) && (FD_ISSET(di->layerid[ch_idx], &rds))) {
+				alen = sizeof(di->laddr[ch_idx]);
+				ret = recvfrom(di->layerid[ch_idx], rx_buf, MISDN_BUF_SZ, 0,
+					       (struct sockaddr *) &di->laddr[ch_idx], &alen);
+				if (ret < 0)
+					fprintf(stdout, "recvfrom error %s\n",
+						strerror(errno));
+				if (debug>3)
+					fprintf(stdout, "alen =%d, dev(%d) channel(%d)\n",
+						alen, di->laddr[ch_idx].dev, di->laddr[ch_idx].channel);
 
-				ch_idx = CHAN_D;
+				if (hhrx->prim == PH_DATA_IND) {
+					if (debug)
+						fprintf(stdout, "<-- PH_DATA_IND\n");
+					if (debug > 2)
+						printhexdata(stdout, ret-MISDN_HEADER_LEN,
+							rx_buf + MISDN_HEADER_LEN);
 
-				di->ch[ch_idx].tx_ack++;
-				di->ch[ch_idx].rx.total += ret + 2; // line rate means 2 bytes crc overhead here
-				di->ch[ch_idx].rx.pkt_cnt++;
+					di->ch[ch_idx].tx_ack++;
+					di->ch[ch_idx].rx.total += ret + 2; // line rate means 2 bytes crc overhead here
+					di->ch[ch_idx].rx.pkt_cnt++;
 
-			        // validate RX data
-				rx_error = 0;
-				if ((ret-MISDN_HEADER_LEN) == di->ch[ch_idx].tx_size) {
-					// check first byte to be ch_idx
-					if (rx_buf[MISDN_HEADER_LEN + 0] != ch_idx) {
-						if (debug > 1)
-							printf ("RX DATA ERROR: channel index %s\n", CHAN_NAMES[ch_idx]);
-						rx_error++;
-			        		// return;
-					}
-
-					// check sequence number
-					rx_seq_num = (rx_buf[MISDN_HEADER_LEN + 1] << 24) +
-					    (rx_buf[MISDN_HEADER_LEN + 2] << 16) +
-					    (rx_buf[MISDN_HEADER_LEN + 3] << 8) +
-					    rx_buf[MISDN_HEADER_LEN + 4];
-
-					if (rx_seq_num == di->ch[ch_idx].seq_num)
-			        		// expect next seq no at next rx
-						di->ch[ch_idx].seq_num++;
-					else {
-						if (debug > 1)
-							printf ("RX DATA ERROR: sequence no %s\n", CHAN_NAMES[ch_idx]);
-       						// either return crit error, or resync req no
-						di->ch[ch_idx].seq_num = rx_seq_num+1;
-						rx_error++;
-					}
-
-					// check data
-					for (i=0; i<(di->ch[ch_idx].tx_size - TX_BURST_HEADER_SZ); i++) {
-						if (rx_buf[MISDN_HEADER_LEN + TX_BURST_HEADER_SZ + i] != (i & 0xFF)) {
+					// validate RX data
+					rx_error = 0;
+					if ((ret-MISDN_HEADER_LEN) == di->ch[ch_idx].tx_size) {
+						// check first byte to be ch_idx
+						if (rx_buf[MISDN_HEADER_LEN + 0] != ch_idx) {
 							if (debug > 1)
-								printf ("RX DATA ERROR: packet data error %s\n", CHAN_NAMES[ch_idx]);
+								printf ("RX DATA ERROR: channel index %s\n",
+									CHAN_NAMES[ch_idx]);
+							rx_error++;
+			        		// return;
+						}
+
+						// check sequence number
+						rx_seq_num = (rx_buf[MISDN_HEADER_LEN + 1] << 24) +
+								(rx_buf[MISDN_HEADER_LEN + 2] << 16) +
+								(rx_buf[MISDN_HEADER_LEN + 3] << 8) +
+								rx_buf[MISDN_HEADER_LEN + 4];
+
+						if (rx_seq_num == di->ch[ch_idx].seq_num)
+			        			// expect next seq no at next rx
+							di->ch[ch_idx].seq_num++;
+						else {
+							if (debug > 1)
+								printf ("RX DATA ERROR: sequence no %s\n",
+									CHAN_NAMES[ch_idx]);
+       							// either return crit error, or resync req no
+							di->ch[ch_idx].seq_num = rx_seq_num+1;
 							rx_error++;
 						}
+
+						// check data
+						for (i=0; i<(di->ch[ch_idx].tx_size - TX_BURST_HEADER_SZ); i++) {
+							if (rx_buf[MISDN_HEADER_LEN + TX_BURST_HEADER_SZ + i] != (i & 0xFF)) {
+								if (debug > 1)
+									printf ("RX DATA ERROR: packet data error %s\n",
+										CHAN_NAMES[ch_idx]);
+								rx_error++;
+							}
+						}
+
+					} else {
+						if (debug > 1)
+							printf ("RX DATA ERROR: packet size %s (%i,%i,%i)\n",
+								CHAN_NAMES[ch_idx],
+								ret, di->ch[ch_idx].tx_size,
+								MISDN_HEADER_LEN);
+						rx_error++;
 					}
 
+					if (rx_error)
+						di->ch[ch_idx].rx.err_pkt++;
 				} else {
-					if (debug > 1)
-						printf ("RX DATA ERROR: packet size %s (%i,%i,%i)\n",
-							CHAN_NAMES[ch_idx],
-							ret, di->ch[ch_idx].tx_size,
-							MISDN_HEADER_LEN);
-					rx_error++;
+					if (debug>1)
+						fprintf(stdout, "<-- unhandled prim 0x%x\n",
+							hhrx->prim);
 				}
-
-				if (rx_error)
-					di->ch[ch_idx].rx.err_pkt++;
-			} else {
-				if (debug>1)
-					fprintf(stdout, "<-- unhandled prim 0x%x\n", hhrx->prim);
 			}
 		}
+
 		
 		/* relax cpu usage */
 		usleep(usleep_val);
@@ -508,10 +610,13 @@ int main_data_loop(devinfo_t *di)
 
 			for (ch_idx=0; ch_idx<MAX_CHAN; ch_idx++)
 			{
-				printf ("%s rate/s: %lu, rate-avg: %4.3f, rx total: %lu kb since %llu secs, pkt(rx/tx): %lu/%lu, rx-err:%lu\n",
+				printf ("%s rate/s: %lu, rate-avg: %4.3f,"
+					" rx total: %lu kb since %llu secs,"
+					" pkt(rx/tx): %lu/%lu, rx-err:%lu\n",
 					CHAN_NAMES[ch_idx],
 					(di->ch[ch_idx].rx.total - di->ch[ch_idx].rx.delta),
-					(double)((double)((unsigned long long)di->ch[ch_idx].rx.total * TICKS_PER_SEC) / (double)(t2 - di->ch[ch_idx].t_start)),
+					(double)((double)((unsigned long long)di->ch[ch_idx].rx.total * TICKS_PER_SEC)
+					    / (double)(t2 - di->ch[ch_idx].t_start)),
 					(di->ch[ch_idx].rx.total),
 					di->ch[ch_idx].t_start?((t2 - di->ch[ch_idx].t_start) / TICKS_PER_SEC):0,
 					di->ch[ch_idx].rx.pkt_cnt,
@@ -595,7 +700,7 @@ int main(int argc, char *argv[])
 			if (mISDN.ch[ch_idx].tx_size > CHAN_MAX_PKT_SZ[ch_idx])
 				mISDN.ch[ch_idx].tx_size = CHAN_MAX_PKT_SZ[ch_idx];
 
-			di->ch[ch_idx].tx_ack = 1;
+			mISDN.ch[ch_idx].tx_ack = 1;
 
 			fprintf (stdout, "chan %s stream enabled with packet sz %d bytes\n",
 				 CHAN_NAMES[ch_idx], di->ch[ch_idx].tx_size);
@@ -625,9 +730,7 @@ int main(int argc, char *argv[])
 		
 	}
 
-	close(mISDN.layer1);
+	sig_handler(9); // abuse as cleanup
 
-	fflush(stdout);
-	fflush(stderr);
 	return(0);
 }
