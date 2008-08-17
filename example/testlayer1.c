@@ -16,6 +16,45 @@
  * along with 'testlayer1', If not, see <http://www.gnu.org/licenses/>.
  *
  *
+ * HOWTO:
+ * ------
+ *
+ * testlayer1 expects every frame it sends down to layer1 is immediatly looped
+ * back. An easy way to do this is using a cross-plug with terminiation:
+ *
+ *    3 RX+ 2a ---+--------+          /           / /
+ *    4 TX+ 1a --/         |          ---------- / /
+ *                     [100 Ohm]     | 87654321 | /
+ *    5 TX- 1b ----+       |         |__      __|/
+ *    6 RX- 2b -----\------+            |____|
+ *
+ * well, you could also make layer1 be opened as TE (using '--te') and connect
+ * the TE with an NT running a layer1 testloop. Using TE mode without
+ * requesting any data (by calling './testlayer1 --te')
+ * is a simple S0 bus activatation test.
+ * BE CAREFULL: if you request testing data pipes, please make sure you did
+ * not connect your ISDN TA with your Telco's NT ;)
+ * BY DEFAULT testlayer1 opens your ISDN TA as NT !
+ *
+ *
+ *
+ * Examples:
+ * --------
+ *
+ *    testlayer1 --d -v     : using NT mode, verbose output,
+ *                            stress test D Channel data with default
+ *                            packet size
+ *
+ *    testlayer1 --d=20 -v  : using NT mode, verbose output,
+ *                            stress test D Channel data with 20 bytes
+ *                            packet size
+ *
+ *    testlayer1 -v         : only check if S0 bus can be activated as NT
+ *    testlayer1 -v --te    : only check if S0 bus activates using your
+ *                            ISDN TA in TE mode
+ *
+ *
+ *
  * TODO:
  *   - activate and service B channels if requested by --b1 or --b2
  */
@@ -53,6 +92,7 @@ void usage(char *pname)
 	printf("  --d                enable D channel stream with <n> packet sz\n");
 	printf("  --b1, --b1=<n>     enable B channel stream with <n> packet sz\n");
 	printf("  --b2, --b2=<n>     enable B channel stream with <n> packet sz\n");
+	printf("  --te               use TA in TE mode (default is NT)\n");
 	printf("  -v, --verbose=<n>  set debug verbose level\n");
 	printf("  --help             Usage ; printout this information\n");
 	printf("\n");
@@ -219,10 +259,14 @@ int do_setup(devinfo_t *di)
 	}
 	close(sk);
 
-	mISDN.layer1 = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_NT_S0);
+	if (te_mode)
+		mISDN.layer1 = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_TE_S0);
+	else
+		mISDN.layer1 = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_NT_S0);
 	if (mISDN.layer1 < 1) {
-		fprintf(stderr, "could not open socket 'ISDN_P_NT_S0': %s\n",
-			strerror(errno));
+		fprintf(stderr, "could not open socket '%s': %s\n",
+			strerror(errno),
+			(te_mode)?"ISDN_P_TE_S0":"ISDN_P_NT_S0");
 		return 5;
 	}
 	
