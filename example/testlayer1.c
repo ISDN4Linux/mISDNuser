@@ -90,6 +90,7 @@ void usage(char *pname)
 	printf("  --b1, --b1=<n>     enable B channel stream with <n> packet sz\n");
 	printf("  --b2, --b2=<n>     enable B channel stream with <n> packet sz\n");
 	printf("  --te               use TA in TE mode (default is NT)\n");
+	printf("  --sleep=<n>        tweak usleep() duration in mail data loop\n");
 	printf("  -v, --verbose=<n>  set debug verbose level\n");
 	printf("  --help             Usage ; printout this information\n");
 	printf("\n");
@@ -253,12 +254,12 @@ int activate_bchan(devinfo_t *di, unsigned char bch) {
 	hh->prim = PH_ACTIVATE_REQ;
 	hh->id   = MISDN_ID_ANY;
 	ret = sendto(di->layerid[bch], buf, MISDN_HEADER_LEN, 0, NULL, 0);
-	
+
 	if (ret < 0) {
 		fprintf(stdout, "could not send ACTIVATE_REQ %s\n", strerror(errno));
 		return 0;
 	}
-	
+
 	if (debug>3)
 		fprintf(stdout,"ACTIVATE_REQ sendto ret=%d\n", ret);
 
@@ -278,7 +279,7 @@ int activate_bchan(devinfo_t *di, unsigned char bch) {
 		fprintf(stdout, "select timeeout\n");
 		return 0;
 	}
-	
+
 	rval = PH_ACTIVATE_IND;
 	if (FD_ISSET(di->layerid[bch], &rds)) {
 		ret = recv(di->layerid[bch], buf, 2048, 0);
@@ -360,14 +361,14 @@ int do_setup(devinfo_t *di)
 			(te_mode)?"ISDN_P_TE_S0":"ISDN_P_NT_S0");
 		return 5;
 	}
-	
+
 	di->nds = di->layerid[CHAN_D] + 1;
 	ret = fcntl(di->layerid[CHAN_D], F_SETFL, O_NONBLOCK);
 	if (ret < 0) {
 		fprintf(stdout, "fcntl error %s\n", strerror(errno));
 		return 6;
 	}
-	
+
 	di->laddr[CHAN_D].family = AF_ISDN;
 	di->laddr[CHAN_D].dev = di->cardnr - 1;
 	di->laddr[CHAN_D].channel = 0;
@@ -418,7 +419,7 @@ int do_setup(devinfo_t *di)
 			if (hh->prim == PH_ACTIVATE_IND) {
 				fprintf(stdout, "<-- PH_ACTIVATE_IND\n");
 				di->ch[CHAN_D].activated = 1;
-				
+
 				if ((di->ch[CHAN_B1].tx_ack) && (!setup_bchannel(di, CHAN_B1))) {
 					activate_bchan(di, CHAN_B1);
 				}
@@ -599,7 +600,6 @@ int main_data_loop(devinfo_t *di)
 			}
 		}
 
-		
 		/* relax cpu usage */
 		usleep(usleep_val);
 
@@ -677,7 +677,7 @@ int main(int argc, char *argv[])
 				 &option_index);
 		if (c == -1)
 			break;
-		
+
 		switch (c) {
 			case 'v':
 				debug=1;
@@ -687,6 +687,10 @@ int main(int argc, char *argv[])
 			case 'c':
 				if (optarg)
 					mISDN.cardnr = atoi(optarg);
+				break;
+			case 's':
+				if (optarg)
+					usleep_val = atoi(optarg);
 				break;
 			case 'x':
 				mISDN.channel_mask |= 4;
@@ -747,7 +751,6 @@ int main(int argc, char *argv[])
 		 main_data_loop(&mISDN);
 	} else {
 		fprintf (stdout, "no channels request, try [--d, --b1, --b2]\n");
-		
 	}
 
 	sig_handler(9); // abuse as cleanup
