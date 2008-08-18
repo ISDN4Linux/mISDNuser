@@ -54,6 +54,19 @@
  *                            ISDN TA in TE mode
  *
  *
+ *
+ * TODO:
+ *   - cmd line option to tweak hdlc payload pattern
+ *       --payload=0     : package playload always 0x00
+ *       --payload=1     : package playload incremental (default)
+ *       --payload=0xFF  : package playload always 0x00
+ *
+ *   - ability to run bchannels in transparent mode
+ *       - tx data always incremental
+ *       - rx can check data rate and if rx data is incremental.
+ *         <n> adjacent recurring bytes would mean fifo tx ran empty
+ *         for <n> ms
+ *       
  */
 
 
@@ -90,6 +103,7 @@ void usage(char *pname)
 	printf("  --b1, --b1=<n>     enable B channel stream with <n> packet sz\n");
 	printf("  --b2, --b2=<n>     enable B channel stream with <n> packet sz\n");
 	printf("  --te               use TA in TE mode (default is NT)\n");
+	printf("  --stop=<n>         stop testlayer1 after <n> seconds\n");
 	printf("  --sleep=<n>        tweak usleep() duration in mail data loop\n");
 	printf("  -v, --verbose=<n>  set debug verbose level\n");
 	printf("  --help             Usage ; printout this information\n");
@@ -118,7 +132,7 @@ static char * CHAN_NAMES[MAX_CHAN] = {
 static int CHAN_DFLT_PKT_SZ[MAX_CHAN] = {
 	1800,	// default B1 pkt sz
 	1800,	// default B2 pkt sz
-	128,	// default D pkt sz
+	64,	// default D pkt sz
 };
 
 static int CHAN_MAX_PKT_SZ[MAX_CHAN] = {
@@ -145,6 +159,7 @@ typedef struct {
 	unsigned long seq_num;
 	unsigned char idle_cnt; // cnt seconds if channel is acivated by idle
 	unsigned char res_cnt; // cnt channel ressurections
+	unsigned char hdlc;
 } channel_data_t;
 
 typedef struct _devinfo {
@@ -163,6 +178,7 @@ typedef struct _devinfo {
 static int debug=0;
 static int usleep_val=200;
 static int te_mode=0;
+static int stop=0; // stop after x seconds
 
 static devinfo_t mISDN;
 
@@ -455,13 +471,14 @@ int main_data_loop(devinfo_t *di)
 	unsigned long rx_seq_num;
 	unsigned char rx_error;
 	unsigned long rx_delta;
+	unsigned int running_since = 0;
 
 	t1 = get_tick_count();
 
 	tout.tv_usec = 0;
 	tout.tv_sec = 1;
 
-	printf ("\nwaiting for data (use CTRL-C to cancel)...\n");
+	printf ("\nwaiting for data (use CTRL-C to cancel) stop(%i)...\n", stop);
 	while (1)
 	{
 		for (ch_idx=0; ch_idx<MAX_CHAN; ch_idx++)
@@ -481,21 +498,21 @@ int main_data_loop(devinfo_t *di)
 				p = msg = tx_buf + MISDN_HEADER_LEN;
 
 				/*
-				* TX Frame
-				*   - 1 byte ch_idx (CHAN_D=0, ...)
-				*   - 4 bytes big endian pckt counter
-				*   - n bytes data
-				*/
+				 * TX Frame
+				 *   - 1 byte ch_idx (CHAN_D=0, ...)
+				 *   - 4 bytes big endian pckt counter
+				 *   - n bytes data
+				 */
 				*p++ = ch_idx;
 				for (i=0; i<4; i++)
 					*p++ = ((di->ch[ch_idx].tx.pkt_cnt >> (8*(3-i))) & 0xFF);
 				di->ch[ch_idx].tx.pkt_cnt++;
 
-	        		// random data, here: incremental
+				// random data, here: incremental
 				for (i=0; i < (di->ch[ch_idx].tx_size - TX_BURST_HEADER_SZ); i++)
 					*p++ = i;
 
-				if (debug > 2) {
+				if (debug > 4) {
 					printf("%s-TX size(%d) : ",
 					       CHAN_NAMES[ch_idx], i);
 					printhexdata(stdout, i, tx_buf + MISDN_HEADER_LEN);
@@ -531,14 +548,19 @@ int main_data_loop(devinfo_t *di)
 						alen, di->laddr[ch_idx].dev, di->laddr[ch_idx].channel);
 
 				if (hhrx->prim == PH_DATA_IND) {
-					if (debug)
+					if (debug > 3)
 						fprintf(stdout, "<-- PH_DATA_IND\n");
-					if (debug > 2)
+					if (debug > 4)
 						printhexdata(stdout, ret-MISDN_HEADER_LEN,
 							rx_buf + MISDN_HEADER_LEN);
 
 					di->ch[ch_idx].tx_ack++;
-					di->ch[ch_idx].rx.total += ret + 2; // line rate means 2 bytes crc overhead here
+
+					/* line rate means 2 bytes crc
+					 * and 2 bytes HDLC flags overhead each packet
+					 */
+					if (di->ch[ch_idx].hdlc)
+						di->ch[ch_idx].rx.total += ret + 4;
 					di->ch[ch_idx].rx.pkt_cnt++;
 
 					// validate RX data
@@ -550,7 +572,6 @@ int main_data_loop(devinfo_t *di)
 								printf ("RX DATA ERROR: channel index %s\n",
 									CHAN_NAMES[ch_idx]);
 							rx_error++;
-			        		// return;
 						}
 
 						// check sequence number
@@ -566,7 +587,7 @@ int main_data_loop(devinfo_t *di)
 							if (debug > 1)
 								printf ("RX DATA ERROR: sequence no %s\n",
 									CHAN_NAMES[ch_idx]);
-       							// either return crit error, or resync req no
+							// either return crit error, or resync req no
 							di->ch[ch_idx].seq_num = rx_seq_num+1;
 							rx_error++;
 						}
@@ -582,18 +603,19 @@ int main_data_loop(devinfo_t *di)
 						}
 
 					} else {
-						if (debug > 1)
-							printf ("RX DATA ERROR: packet size %s (%i,%i,%i)\n",
+						if (debug > 1) {
+							printf ("RX DATA ERROR: packet size %s (%i,%i)\n",
 								CHAN_NAMES[ch_idx],
-								ret, di->ch[ch_idx].tx_size,
-								MISDN_HEADER_LEN);
+								ret, di->ch[ch_idx].tx_size);
+							printhexdata(stdout, ret-MISDN_HEADER_LEN, rx_buf + MISDN_HEADER_LEN);
+						}
 						rx_error++;
 					}
 
 					if (rx_error)
 						di->ch[ch_idx].rx.err_pkt++;
 				} else {
-					if (debug>1)
+					if (debug>4)
 						fprintf(stdout, "<-- unhandled prim 0x%x\n",
 							hhrx->prim);
 				}
@@ -609,6 +631,7 @@ int main_data_loop(devinfo_t *di)
 		{
         		// printf ("%llu - %llu = %llu\n", t2, t1, t2-t1);
 			t1 = get_tick_count();
+			running_since++;
 
 			for (ch_idx=0; ch_idx<MAX_CHAN; ch_idx++)
 			{
@@ -636,7 +659,10 @@ int main_data_loop(devinfo_t *di)
 						// resurrect data pipe
 						di->ch[ch_idx].seq_num++;
 						di->ch[ch_idx].res_cnt++;
-						di->ch[ch_idx].tx_ack++;
+						if (di->ch[ch_idx].hdlc)
+							di->ch[ch_idx].tx_ack += 2;
+						else
+							di->ch[ch_idx].tx_ack++;
 						di->ch[ch_idx].idle_cnt = 0;
 					}
 				} else
@@ -645,6 +671,9 @@ int main_data_loop(devinfo_t *di)
 				di->ch[ch_idx].rx.delta = di->ch[ch_idx].rx.total;
 			}
 			printf ("\n");
+
+			if ((stop) && (running_since >= stop))
+				return 0;
 		}
 	}
 }
@@ -659,6 +688,7 @@ int main(int argc, char *argv[])
 		{"verbose",	optional_argument,	0,		'v'},
 		{"card",     	optional_argument,	0,		'c'},
 		{"sleep",     	optional_argument,	0,		's'},
+  		{"stop",     	required_argument,	0,		't'},
 		{"te",     	no_argument,		&te_mode,	1},
 		{"d",     	optional_argument,	0,		'x'},
 		{"b1",     	optional_argument,	0,		'y'},
@@ -692,6 +722,10 @@ int main(int argc, char *argv[])
 				if (optarg)
 					usleep_val = atoi(optarg);
 				break;
+			case 't':
+				if (optarg)
+					stop = atoi(optarg);
+				break;
 			case 'x':
 				mISDN.channel_mask |= 4;
 				if (optarg)
@@ -710,6 +744,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
+
 	fprintf(stdout,"\n\ntestlayer1 $Revision: 2.? $, card(%i) debug(%i)\n",
 		mISDN.cardnr, debug);
 
@@ -724,7 +759,8 @@ int main(int argc, char *argv[])
 			if (mISDN.ch[ch_idx].tx_size > CHAN_MAX_PKT_SZ[ch_idx])
 				mISDN.ch[ch_idx].tx_size = CHAN_MAX_PKT_SZ[ch_idx];
 
-			mISDN.ch[ch_idx].tx_ack = 1;
+			mISDN.ch[ch_idx].hdlc = 1;
+			mISDN.ch[ch_idx].tx_ack = 2;
 
 			fprintf (stdout, "chan %s stream enabled with packet sz %d bytes\n",
 				 CHAN_NAMES[ch_idx], di->ch[ch_idx].tx_size);
