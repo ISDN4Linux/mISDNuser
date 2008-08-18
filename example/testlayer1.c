@@ -454,7 +454,7 @@ int main_data_loop(devinfo_t *di)
 	fd_set rds;
 	unsigned long rx_seq_num;
 	unsigned char rx_error;
-
+	unsigned long rx_delta;
 
 	t1 = get_tick_count();
 
@@ -612,11 +612,11 @@ int main_data_loop(devinfo_t *di)
 
 			for (ch_idx=0; ch_idx<MAX_CHAN; ch_idx++)
 			{
+				rx_delta = (di->ch[ch_idx].rx.total - di->ch[ch_idx].rx.delta);
 				printf ("%s rate/s: %lu, rate-avg: %4.3f,"
 					" rx total: %lu kb since %llu secs,"
 					" pkt(rx/tx): %lu/%lu, rx-err:%lu,%i\n",
-					CHAN_NAMES[ch_idx],
-					(di->ch[ch_idx].rx.total - di->ch[ch_idx].rx.delta),
+					CHAN_NAMES[ch_idx], rx_delta,
 					(double)((double)((unsigned long long)di->ch[ch_idx].rx.total * TICKS_PER_SEC)
 					    / (double)(t2 - di->ch[ch_idx].t_start)),
 					(di->ch[ch_idx].rx.total),
@@ -625,26 +625,26 @@ int main_data_loop(devinfo_t *di)
 					di->ch[ch_idx].tx.pkt_cnt,
 					di->ch[ch_idx].rx.err_pkt,
 					di->ch[ch_idx].res_cnt);
+
+				/*
+				 * care for idle but 'active' channels, what happens
+				 * e.g. on CRC errors down in layer1
+				 */
+				if ((di->ch[ch_idx].activated) && (!rx_delta)) {
+					di->ch[ch_idx].idle_cnt++;
+					if (di->ch[ch_idx].idle_cnt > 2) {
+						// resurrect data pipe
+						di->ch[ch_idx].seq_num++;
+						di->ch[ch_idx].res_cnt++;
+						di->ch[ch_idx].tx_ack++;
+						di->ch[ch_idx].idle_cnt = 0;
+					}
+				} else
+					di->ch[ch_idx].idle_cnt = 0;
+
 				di->ch[ch_idx].rx.delta = di->ch[ch_idx].rx.total;
 			}
 			printf ("\n");
-
-
-			/*
-			 * care for idle but 'active' channels, what happens
-			 * e.g. on CRC errors down in layer1
-			 */
-			if ((di->ch[ch_idx].activated) && (!di->ch[ch_idx].rx.total)) {
-				di->ch[ch_idx].idle_cnt++;
-				if (di->ch[ch_idx].idle_cnt > 2) {
-					// resurrect data pipe
-					di->ch[ch_idx].seq_num++;
-					di->ch[ch_idx].res_cnt++;
-					di->ch[ch_idx].idle_cnt = 0;
-				}
-			} else {
-				di->ch[ch_idx].idle_cnt = 0;
-			}
 		}
 	}
 }
