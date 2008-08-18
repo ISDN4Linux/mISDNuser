@@ -142,6 +142,8 @@ typedef struct {
 	unsigned long long t_start; // time of day first TX
 	data_stats_t rx, tx;    // contains data statistics
 	unsigned long seq_num;
+	unsigned char idle_cnt; // cnt seconds if channel is acivated by idle
+	unsigned char res_cnt; // cnt channel ressurections
 } channel_data_t;
 
 typedef struct _devinfo {
@@ -612,7 +614,7 @@ int main_data_loop(devinfo_t *di)
 			{
 				printf ("%s rate/s: %lu, rate-avg: %4.3f,"
 					" rx total: %lu kb since %llu secs,"
-					" pkt(rx/tx): %lu/%lu, rx-err:%lu\n",
+					" pkt(rx/tx): %lu/%lu, rx-err:%lu,%i\n",
 					CHAN_NAMES[ch_idx],
 					(di->ch[ch_idx].rx.total - di->ch[ch_idx].rx.delta),
 					(double)((double)((unsigned long long)di->ch[ch_idx].rx.total * TICKS_PER_SEC)
@@ -621,10 +623,28 @@ int main_data_loop(devinfo_t *di)
 					di->ch[ch_idx].t_start?((t2 - di->ch[ch_idx].t_start) / TICKS_PER_SEC):0,
 					di->ch[ch_idx].rx.pkt_cnt,
 					di->ch[ch_idx].tx.pkt_cnt,
-					di->ch[ch_idx].rx.err_pkt);
+					di->ch[ch_idx].rx.err_pkt,
+					di->ch[ch_idx].res_cnt);
 				di->ch[ch_idx].rx.delta = di->ch[ch_idx].rx.total;
 			}
 			printf ("\n");
+
+
+			/*
+			 * care for idle but 'active' channels, what happens
+			 * e.g. on CRC errors down in layer1
+			 */
+			if ((di->ch[ch_idx].activated) && (!di->ch[ch_idx].rx.total)) {
+				di->ch[ch_idx].idle_cnt++;
+				if (di->ch[ch_idx].idle_cnt > 2) {
+					// resurrect data pipe
+					di->ch[ch_idx].seq_num++;
+					di->ch[ch_idx].res_cnt++;
+					di->ch[ch_idx].idle_cnt = 0;
+				}
+			} else {
+				di->ch[ch_idx].idle_cnt = 0;
+			}
 		}
 	}
 }
