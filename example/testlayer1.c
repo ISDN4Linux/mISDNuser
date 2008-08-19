@@ -53,20 +53,6 @@
  *    testlayer1 -v --te    : only check if S0 bus activates using your
  *                            ISDN TA in TE mode
  *
- *
- *
- * TODO:
- *   - cmd line option to tweak hdlc payload pattern
- *       --payload=0     : package playload always 0x00
- *       --payload=1     : package playload incremental (default)
- *       --payload=0xFF  : package playload always 0x00
- *
- *   - ability to run bchannels in transparent mode
- *       - tx data always incremental
- *       - rx can check data rate and if rx data is incremental.
- *         <n> adjacent recurring bytes would mean fifo tx ran empty
- *         for <n> ms
- *       
  */
 
 
@@ -103,6 +89,11 @@ void usage(char *pname)
 	printf("  --b1, --b1=<n>     enable B channel stream with <n> packet sz\n");
 	printf("  --b2, --b2=<n>     enable B channel stream with <n> packet sz\n");
 	printf("  --te               use TA in TE mode (default is NT)\n");
+	printf("  --playload=<x>     hdlc package payload types:\n");
+	printf("                            0: always 0x00\n");
+	printf("                            1: incremental playload (default)\n");	
+	printf("                         0xFF: always 0xFF\n");
+	printf("  --btrans           use bchannels in transparant mode\n");
 	printf("  --stop=<n>         stop testlayer1 after <n> seconds\n");
 	printf("  --sleep=<n>        tweak usleep() duration in mail data loop\n");
 	printf("  -v, --verbose=<n>  set debug verbose level\n");
@@ -153,6 +144,7 @@ typedef struct {
 	int	tx_size;
 	int	rx_size;
 	int	tx_ack;
+	int	transp_rx;
 	int	activated;
 	unsigned long long t_start; // time of day first TX
 	data_stats_t rx, tx;    // contains data statistics
@@ -175,13 +167,18 @@ typedef struct _devinfo {
 
 
 
+// cmd line opts
 static int debug=0;
 static int usleep_val=200;
 static int te_mode=0;
 static int stop=0; // stop after x seconds
+static unsigned char payload=1;
+static int btrans=0;
 
+// globals
 static devinfo_t mISDN;
-
+static unsigned char trans_tx_val[MAX_CHAN]={0,0,0};
+static unsigned char trans_rx_val[MAX_CHAN]={0,0,0};
 
 
 void sig_handler(int sig)
@@ -231,7 +228,11 @@ int printhexdata(FILE *f, int len, u_char *p)
 int setup_bchannel(devinfo_t *di, unsigned char bch) {
 	int ret;
 
-	di->layerid[bch] = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_B_HDLC);
+	if (di->ch[bch].hdlc)
+		di->layerid[bch] = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_B_HDLC);
+	else
+		di->layerid[bch] = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_B_RAW); // transparent
+
 	if (di->layerid[bch] < 0) {
 		fprintf(stdout, "could not open bchannel socket %s\n", strerror(errno));
 		return 2;
@@ -296,17 +297,19 @@ int activate_bchan(devinfo_t *di, unsigned char bch) {
 		return 0;
 	}
 
-	rval = PH_ACTIVATE_IND;
 	if (FD_ISSET(di->layerid[bch], &rds)) {
 		ret = recv(di->layerid[bch], buf, 2048, 0);
 		if (ret < 0) {
 			fprintf(stdout, "recv error  %s\n", strerror(errno));
 			return 0;
 		}
-		if (hh->prim == rval) {
+		if (hh->prim == PH_ACTIVATE_IND) {
+			fprintf(stdout, "<-- B%i -  PH_ACTIVATE_IND\n", bch+1);
 			di->ch[bch].activated = 1;
 		} else {
-			fprintf(stdout, "recv not  %x but %x\n", rval, hh->prim);
+			if (debug)
+				fprintf(stdout, "<-- B%i -  unhandled prim 0x%x\n",
+					bch+1, hh->prim);
 			return 0;
 		}
 	} else {
@@ -398,7 +401,7 @@ int do_setup(devinfo_t *di)
 	hh = (struct mISDNhead *)buffer;
 	hh->prim = PH_ACTIVATE_REQ;
 	hh->id   = MISDN_ID_ANY;
-	fprintf(stdout, "--> PH_ACTIVATE_REQ\n");
+	fprintf(stdout, "--> D  -  PH_ACTIVATE_REQ\n");
 	ret = sendto(di->layerid[CHAN_D], buffer, MISDN_HEADER_LEN, 0, NULL, 0);
 
 	while (1) {
@@ -433,7 +436,7 @@ int do_setup(devinfo_t *di)
 					alen, di->laddr[CHAN_D].dev, di->laddr[CHAN_D].channel);
 			}
 			if (hh->prim == PH_ACTIVATE_IND) {
-				fprintf(stdout, "<-- PH_ACTIVATE_IND\n");
+				fprintf(stdout, "<-- D  -  PH_ACTIVATE_IND\n");
 				di->ch[CHAN_D].activated = 1;
 
 				if ((di->ch[CHAN_B1].tx_ack) && (!setup_bchannel(di, CHAN_B1))) {
@@ -447,12 +450,145 @@ int do_setup(devinfo_t *di)
 				return 0;
 			} else {
 				if (debug)
-					fprintf(stdout, "<-- unhandled prim 0x%x\n", hh->prim);
+					fprintf(stdout, "<-- D  -  unhandled prim 0x%x\n", hh->prim);
 			}
 		}
 	}
 
 	return 666;
+}
+
+int check_rx_data_hdlc(devinfo_t *di, int ch_idx, int ret, unsigned char *rx_buf) {
+	int rx_error = 0;
+	unsigned long rx_seq_num;
+	int i;
+
+	if ((ret-MISDN_HEADER_LEN) == di->ch[ch_idx].tx_size) {
+
+		// check first byte to be ch_idx
+		if (rx_buf[MISDN_HEADER_LEN + 0] != ch_idx) {
+			if (debug > 1)
+				printf ("RX DATA ERROR: channel index %s\n",
+					CHAN_NAMES[ch_idx]);
+			rx_error++;
+		}
+
+		// check sequence number
+		rx_seq_num = (rx_buf[MISDN_HEADER_LEN + 1] << 24) +
+			(rx_buf[MISDN_HEADER_LEN + 2] << 16) +
+			(rx_buf[MISDN_HEADER_LEN + 3] << 8) +
+			rx_buf[MISDN_HEADER_LEN + 4];
+
+		if (rx_seq_num == di->ch[ch_idx].seq_num)
+			// expect next seq no at next rx
+			di->ch[ch_idx].seq_num++;
+		else {
+			if (debug > 1)
+				printf ("RX DATA ERROR: sequence no %s\n",
+					CHAN_NAMES[ch_idx]);
+								// either return crit error, or resync req no
+			di->ch[ch_idx].seq_num = rx_seq_num+1;
+			rx_error++;
+		}
+
+		// check data
+		switch (payload) {
+			case 0:
+				for (i=0; i<(di->ch[ch_idx].tx_size - TX_BURST_HEADER_SZ); i++)
+					if (rx_buf[MISDN_HEADER_LEN + TX_BURST_HEADER_SZ + i]) {
+						printf ("RX DATA ERROR: packet data error %s\n",
+							CHAN_NAMES[ch_idx]);
+						rx_error++;
+						break;
+					}
+					break;
+			case 0xFF:
+				for (i=0; i<(di->ch[ch_idx].tx_size - TX_BURST_HEADER_SZ); i++)
+					if (rx_buf[MISDN_HEADER_LEN + TX_BURST_HEADER_SZ + i] != 0xFF) {
+						printf ("RX DATA ERROR: packet data error %s\n",
+							CHAN_NAMES[ch_idx]);
+						rx_error++;
+						break;
+					}
+					break;
+			case 1:
+			default:
+				for (i=0; i<(di->ch[ch_idx].tx_size - TX_BURST_HEADER_SZ); i++) {
+					if (rx_buf[MISDN_HEADER_LEN + TX_BURST_HEADER_SZ + i] != (i & 0xFF)) {
+						if (debug > 1)
+							printf ("RX DATA ERROR: packet data error %s\n",
+								CHAN_NAMES[ch_idx]);
+						rx_error++;
+					}
+				}
+				break;
+		}
+	} else {
+		if (debug > 1) {
+			printf ("RX DATA ERROR: packet size %s (%i,%i)\n",
+				CHAN_NAMES[ch_idx], ret, di->ch[ch_idx].tx_size);
+			printhexdata(stdout, ret-MISDN_HEADER_LEN, rx_buf + MISDN_HEADER_LEN);
+		}
+		rx_error++;
+	}
+
+	return rx_error;
+}
+
+int check_rx_data_trans(devinfo_t *di, int ch_idx, int ret, unsigned char *rx_buf) {
+	int i;
+	int rx_err=0;
+
+	if  (((trans_rx_val[ch_idx] + 1) & 0xFF) != (rx_buf[MISDN_HEADER_LEN] & 0xFF))
+		rx_err++;
+
+	for (i=MISDN_HEADER_LEN; i<ret-1; i++)
+		if (((rx_buf[i]+1) & 0xFF) != (rx_buf[i+1] & 0xFF))
+			rx_err++;
+
+	trans_rx_val[ch_idx] = rx_buf[i];
+	// printf ("%i ", rx_err);
+	// printhexdata(stdout, ret-MISDN_HEADER_LEN, rx_buf + MISDN_HEADER_LEN);
+	
+	return rx_err;
+}
+
+int build_tx_data(devinfo_t *di, int ch_idx, unsigned char *p) {
+	unsigned char *tmp = p;
+	int i;
+
+	if (di->ch[ch_idx].hdlc) {
+		// 5 bytes package header
+		*p++ = ch_idx;
+		for (i=0; i<4; i++)
+			*p++ = ((di->ch[ch_idx].tx.pkt_cnt >> (8*(3-i))) & 0xFF);
+		di->ch[ch_idx].tx.pkt_cnt;
+
+		// data
+		switch (payload) {
+			case 0:
+				for (i=0; i < (di->ch[ch_idx].tx_size - TX_BURST_HEADER_SZ); i++)
+					*p++ = 0;
+				break;
+			case 0xff:
+				for (i=0; i < (di->ch[ch_idx].tx_size - TX_BURST_HEADER_SZ); i++)
+					*p++ = 0xFF;
+				break;
+
+			case 1:
+			default:
+				for (i=0; i < (di->ch[ch_idx].tx_size - TX_BURST_HEADER_SZ); i++)
+					*p++ = i;
+		}
+	} else {
+		// incremental data in transparent mode
+		for (i=0; i < di->ch[ch_idx].tx_size; i++)
+			*p++ = trans_tx_val[ch_idx]++;
+	}
+
+	di->ch[ch_idx].tx.pkt_cnt++;
+
+	return(p - tmp);
 }
 
 
@@ -463,12 +599,10 @@ int main_data_loop(devinfo_t *di)
 	unsigned char tx_buf[MISDN_BUF_SZ];
 	struct  mISDNhead *hhtx = (struct  mISDNhead *)tx_buf;
 	struct  mISDNhead *hhrx = (struct  mISDNhead *)rx_buf;
-	unsigned char *p, *msg;
-	int ret, i, l, ch_idx;
+	int ret, l, ch_idx;
 	struct timeval tout;
 	socklen_t alen;
 	fd_set rds;
-	unsigned long rx_seq_num;
 	unsigned char rx_error;
 	unsigned long rx_delta;
 	unsigned int running_since = 0;
@@ -495,30 +629,12 @@ int main_data_loop(devinfo_t *di)
 					di->ch[ch_idx].seq_num = di->ch[ch_idx].tx.pkt_cnt;
 				}
 
-				p = msg = tx_buf + MISDN_HEADER_LEN;
-
-				/*
-				 * TX Frame
-				 *   - 1 byte ch_idx (CHAN_D=0, ...)
-				 *   - 4 bytes big endian pckt counter
-				 *   - n bytes data
-				 */
-				*p++ = ch_idx;
-				for (i=0; i<4; i++)
-					*p++ = ((di->ch[ch_idx].tx.pkt_cnt >> (8*(3-i))) & 0xFF);
-				di->ch[ch_idx].tx.pkt_cnt++;
-
-				// random data, here: incremental
-				for (i=0; i < (di->ch[ch_idx].tx_size - TX_BURST_HEADER_SZ); i++)
-					*p++ = i;
-
+				l = build_tx_data(di, ch_idx, tx_buf + MISDN_HEADER_LEN);
 				if (debug > 4) {
-					printf("%s-TX size(%d) : ",
-					       CHAN_NAMES[ch_idx], i);
-					printhexdata(stdout, i, tx_buf + MISDN_HEADER_LEN);
+					printf("%s-TX size(%d) : ", CHAN_NAMES[ch_idx], l);
+					printhexdata(stdout, l, tx_buf + MISDN_HEADER_LEN);
 				}
 
-				l = p - msg;
 				hhtx->prim = PH_DATA_REQ;
 				hhtx->id = MISDN_ID_ANY;
 				ret = sendto(di->layerid[ch_idx], tx_buf, l + MISDN_HEADER_LEN,
@@ -544,80 +660,47 @@ int main_data_loop(devinfo_t *di)
 					fprintf(stdout, "recvfrom error %s\n",
 						strerror(errno));
 				if (debug>3)
-					fprintf(stdout, "alen =%d, dev(%d) channel(%d)\n",
+					fprintf(stdout, "alen(%d) dev(%d) channel(%d)\n",
 						alen, di->laddr[ch_idx].dev, di->laddr[ch_idx].channel);
 
 				if (hhrx->prim == PH_DATA_IND) {
+					if (debug > 2)
+						fprintf(stdout, "<-- %s - PH_DATA_IND\n",
+						       CHAN_NAMES[ch_idx]);
 					if (debug > 3)
-						fprintf(stdout, "<-- PH_DATA_IND\n");
-					if (debug > 4)
 						printhexdata(stdout, ret-MISDN_HEADER_LEN,
 							rx_buf + MISDN_HEADER_LEN);
 
-					di->ch[ch_idx].tx_ack++;
+					di->ch[ch_idx].rx.pkt_cnt++;
+					if (di->ch[ch_idx].hdlc)
+						di->ch[ch_idx].tx_ack++;
+					else {
+						di->ch[ch_idx].transp_rx += ret;
+						if (di->ch[ch_idx].transp_rx >= di->ch[ch_idx].tx_size) {
+							di->ch[ch_idx].transp_rx = 0;
+							di->ch[ch_idx].tx_ack++;
+						}
+					}
 
 					/* line rate means 2 bytes crc
 					 * and 2 bytes HDLC flags overhead each packet
 					 */
 					if (di->ch[ch_idx].hdlc)
-						di->ch[ch_idx].rx.total += ret + 4;
-					di->ch[ch_idx].rx.pkt_cnt++;
+						di->ch[ch_idx].rx.total += 4;
+					di->ch[ch_idx].rx.total += ret-MISDN_HEADER_LEN;
 
 					// validate RX data
-					rx_error = 0;
-					if ((ret-MISDN_HEADER_LEN) == di->ch[ch_idx].tx_size) {
-						// check first byte to be ch_idx
-						if (rx_buf[MISDN_HEADER_LEN + 0] != ch_idx) {
-							if (debug > 1)
-								printf ("RX DATA ERROR: channel index %s\n",
-									CHAN_NAMES[ch_idx]);
-							rx_error++;
-						}
-
-						// check sequence number
-						rx_seq_num = (rx_buf[MISDN_HEADER_LEN + 1] << 24) +
-								(rx_buf[MISDN_HEADER_LEN + 2] << 16) +
-								(rx_buf[MISDN_HEADER_LEN + 3] << 8) +
-								rx_buf[MISDN_HEADER_LEN + 4];
-
-						if (rx_seq_num == di->ch[ch_idx].seq_num)
-			        			// expect next seq no at next rx
-							di->ch[ch_idx].seq_num++;
-						else {
-							if (debug > 1)
-								printf ("RX DATA ERROR: sequence no %s\n",
-									CHAN_NAMES[ch_idx]);
-							// either return crit error, or resync req no
-							di->ch[ch_idx].seq_num = rx_seq_num+1;
-							rx_error++;
-						}
-
-						// check data
-						for (i=0; i<(di->ch[ch_idx].tx_size - TX_BURST_HEADER_SZ); i++) {
-							if (rx_buf[MISDN_HEADER_LEN + TX_BURST_HEADER_SZ + i] != (i & 0xFF)) {
-								if (debug > 1)
-									printf ("RX DATA ERROR: packet data error %s\n",
-										CHAN_NAMES[ch_idx]);
-								rx_error++;
-							}
-						}
-
-					} else {
-						if (debug > 1) {
-							printf ("RX DATA ERROR: packet size %s (%i,%i)\n",
-								CHAN_NAMES[ch_idx],
-								ret, di->ch[ch_idx].tx_size);
-							printhexdata(stdout, ret-MISDN_HEADER_LEN, rx_buf + MISDN_HEADER_LEN);
-						}
-						rx_error++;
-					}
+					if (di->ch[ch_idx].hdlc)
+						rx_error = check_rx_data_hdlc(di, ch_idx, ret, rx_buf);
+					else
+						rx_error = check_rx_data_trans(di, ch_idx, ret, rx_buf);
 
 					if (rx_error)
 						di->ch[ch_idx].rx.err_pkt++;
 				} else {
-					if (debug>4)
-						fprintf(stdout, "<-- unhandled prim 0x%x\n",
-							hhrx->prim);
+					if (debug>2)
+						fprintf(stdout, "<-- %s - unhandled prim 0x%x\n",
+							CHAN_NAMES[ch_idx], hhrx->prim);
 				}
 			}
 		}
@@ -663,6 +746,7 @@ int main_data_loop(devinfo_t *di)
 							di->ch[ch_idx].tx_ack += 2;
 						else
 							di->ch[ch_idx].tx_ack++;
+
 						di->ch[ch_idx].idle_cnt = 0;
 					}
 				} else
@@ -688,7 +772,9 @@ int main(int argc, char *argv[])
 		{"verbose",	optional_argument,	0,		'v'},
 		{"card",     	optional_argument,	0,		'c'},
 		{"sleep",     	optional_argument,	0,		's'},
-  		{"stop",     	required_argument,	0,		't'},
+		{"payload",    	required_argument,	0,		'p'},
+  		{"btrans",    	no_argument,		&btrans,	1},
+		{"stop",     	required_argument,	0,		't'},
 		{"te",     	no_argument,		&te_mode,	1},
 		{"d",     	optional_argument,	0,		'x'},
 		{"b1",     	optional_argument,	0,		'y'},
@@ -722,6 +808,10 @@ int main(int argc, char *argv[])
 				if (optarg)
 					usleep_val = atoi(optarg);
 				break;
+			case 'p':
+				if (optarg)
+					payload = atoi(optarg);
+				break;
 			case 't':
 				if (optarg)
 					stop = atoi(optarg);
@@ -744,9 +834,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
-
-	fprintf(stdout,"\n\ntestlayer1 $Revision: 2.? $, card(%i) debug(%i)\n",
-		mISDN.cardnr, debug);
+	fprintf(stdout,"\n\ntestlayer1 - card(%i) debug(%i) playload(%i) btrans(%i)\n",
+		mISDN.cardnr, debug, payload, btrans);
 
 	// init Data burst values
 	for (ch_idx=0; ch_idx<MAX_CHAN; ch_idx++)
@@ -759,8 +848,10 @@ int main(int argc, char *argv[])
 			if (mISDN.ch[ch_idx].tx_size > CHAN_MAX_PKT_SZ[ch_idx])
 				mISDN.ch[ch_idx].tx_size = CHAN_MAX_PKT_SZ[ch_idx];
 
-			mISDN.ch[ch_idx].hdlc = 1;
+			mISDN.ch[ch_idx].hdlc = (!(((ch_idx == CHAN_B1) || (ch_idx == CHAN_B2)) && btrans));
 			mISDN.ch[ch_idx].tx_ack = 2;
+			if (mISDN.ch[ch_idx].hdlc)
+				mISDN.ch[ch_idx].tx_ack++;
 
 			fprintf (stdout, "chan %s stream enabled with packet sz %d bytes\n",
 				 CHAN_NAMES[ch_idx], di->ch[ch_idx].tx_size);
