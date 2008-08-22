@@ -78,11 +78,9 @@
 #include <compat_af_isdn.h>
 
 
-void usage(char *pname)
+void usage(void)
 {
-	printf("Call with %s [options]\n", pname);
-	printf("\n");
-	printf("\n     Valid options are:\n");
+	printf("\nvalid options are:\n");
 	printf("\n");
 	printf("  --card=<n>         use card number n (default 1)\n");
 	printf("  --d                enable D channel stream with <n> packet sz\n");
@@ -266,7 +264,7 @@ int activate_bchan(devinfo_t *di, unsigned char bch) {
 	struct  mISDNhead	*hh = (struct  mISDNhead *)buf;
 	struct timeval		tout;
 	fd_set			rds;
-	int ret, rval;
+	int			ret;
 
 	hh->prim = PH_ACTIVATE_REQ;
 	hh->id   = MISDN_ID_ANY;
@@ -562,7 +560,6 @@ int build_tx_data(devinfo_t *di, int ch_idx, unsigned char *p) {
 		*p++ = ch_idx;
 		for (i=0; i<4; i++)
 			*p++ = ((di->ch[ch_idx].tx.pkt_cnt >> (8*(3-i))) & 0xFF);
-		di->ch[ch_idx].tx.pkt_cnt;
 
 		// data
 		switch (payload) {
@@ -712,8 +709,7 @@ int main_data_loop(devinfo_t *di)
 		t2 = get_tick_count();
 		if ((t2-t1) > (TICKS_PER_SEC / 1))
 		{
-        		// printf ("%llu - %llu = %llu\n", t2, t1, t2-t1);
-			t1 = get_tick_count();
+			t1 = t2;
 			running_since++;
 
 			for (ch_idx=0; ch_idx<MAX_CHAN; ch_idx++)
@@ -831,6 +827,9 @@ int main(int argc, char *argv[])
 				if (optarg)
 					mISDN.ch[CHAN_B2].tx_size = atoi(optarg);
 				break;
+			case 'h':
+				usage();
+				return 0;
 		}
 	}
 
