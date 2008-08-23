@@ -32,18 +32,18 @@ int main()
 	}
 	ret = ioctl(sk, IMGETCOUNT, &cnt);
 	if (ret) {
-		fprintf(stdout, "ioctl error %s\n", strerror(errno));
+		fprintf(stdout, "error getting interface count: %s\n", strerror(errno));
 		close(sk);
 		return 3;
 	}
 
-	printf("Found %d devices\n",cnt);
+	printf("Found %d device%s\n",cnt,(cnt==1)?"":"s");
 
 	while(cnt && i <= MAX_DEVICE_ID) {
 		devinfo.id = i;
 		ret = ioctl(sk, IMGETDEVINFO, &devinfo);
 		if (ret < 0) {
-			fprintf(stdout, "ioctl error %s\n", strerror(errno));
+			fprintf(stdout, "error getting info for device %d: %s\n", i, strerror(errno));
 		} else {
 			fprintf(stdout, "        id:             %d\n", devinfo.id);
 			fprintf(stdout, "        Dprotocols:     %08x\n", devinfo.Dprotocols);

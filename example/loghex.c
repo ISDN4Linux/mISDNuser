@@ -110,7 +110,7 @@ int argc;
 char *argv[];
 {
 	int	aidx=1, idx, i;
-	int	cardnr = 1;
+	int	cardnr = 0;
 	int	log_socket;
 	struct sockaddr_mISDN  log_addr;
 	int	buflen = 512;
@@ -174,8 +174,8 @@ char *argv[];
 		aidx++;
 	} 
 
-	if (cardnr < 1) {
-		fprintf(stderr,"card nr %d wrong it should be 1 ... nr of installed cards\n", cardnr);
+	if (cardnr < 0) {
+		fprintf(stderr,"card nr may not be negative\n");
 		exit(1);
 	}
 
@@ -204,12 +204,9 @@ char *argv[];
 		printf("ioctl error %s\n", strerror(errno));
 		exit(1);
 	} else
-		printf("%d controller found\n", cnt);
+		printf("%d controller%s found\n", cnt, (cnt==1)?"":"s");
 
-	if (cardnr > cnt) {
-		fprintf(stderr,"card nr %d wrong it should be 1 ... nr of installed cards (%d)\n", cardnr, cnt);
-	}
-	di.id = cardnr - 1;
+	di.id = cardnr;
 	result = ioctl(log_socket, IMGETDEVINFO, &di);
 	if (result < 0) {
 		printf("ioctl error %s\n", strerror(errno));
@@ -237,7 +234,7 @@ char *argv[];
 	}
 
 	log_addr.family = AF_ISDN;
-	log_addr.dev = cardnr - 1;
+	log_addr.dev = cardnr;
 	log_addr.channel = 0;
 
 	result = bind(log_socket, (struct sockaddr *) &log_addr,

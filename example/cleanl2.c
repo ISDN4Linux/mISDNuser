@@ -74,7 +74,7 @@ char *argv[];
 	} 
 
 	if (cardnr < 0) {
-		fprintf(stderr,"card nr %d wrong it should be 1 ... nr of installed cards\n", cardnr);
+		fprintf(stderr,"card nr cannot be negative\n");
 		exit(1);
 	}
 	init_af_isdn();
@@ -87,12 +87,9 @@ char *argv[];
 		printf("ioctl error %s\n", strerror(errno));
 		exit(1);
 	} else
-		printf("%d controller found\n", cnt);
+		printf("%d controller%s found\n", cnt, (cnt==1)?"":"s");
 
-	if (cardnr > cnt) {
-		fprintf(stderr,"card nr %d wrong it should be 1 ... nr of installed cards (%d)\n", cardnr, cnt);
-	}
-	di.id = cardnr - 1;
+	di.id = cardnr;
 	result = ioctl(sock, IMGETDEVINFO, &di);
 	if (result < 0) {
 		printf("ioctl error %s\n", strerror(errno));

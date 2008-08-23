@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
 	ret = ioctl(sock, IMGETCOUNT, &ii);
 	if (ret < 0)
 	{
-		fprintf(stderr, "Cannot get number of mISDN devices:%s\n", strerror(errno));
+		fprintf(stderr, "Cannot get number of mISDN devices: %s\n", strerror(errno));
 		goto done;
 	}
 	if (ii == 0) {
@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
 		}
 	} else {
 		if (! argv[1][0] || strlen(argv[1]) >= MISDN_MAX_IDLEN) {
-			fprintf(stderr,"Old device name: must be at most %d bytes long.\n",MISDN_MAX_IDLEN-1);
+			fprintf(stderr,"Old device name: may be at most %d bytes long.\n",MISDN_MAX_IDLEN-1);
 			exit(2);
 		}
 
@@ -83,7 +83,7 @@ int main(int argc, char *argv[])
 			ret = ioctl(sock, IMGETDEVINFO, &devinfo);
 			if (ret < 0)
 			{
-				fprintf(stderr, "Cannot get device information for port %d. (ioctl IMGETDEVINFO failed ret=%d)\n", i, ret);
+				fprintf(stderr, "error getting info for device %d: %s\n", i,strerror(errno));
 				goto next_dev;
 			}
 			if (!strcmp (argv[1], devinfo.name))
@@ -101,7 +101,7 @@ found_dev:
 	ret = ioctl(sock, IMSETDEVNAME, &devname);
 	if (ret < 0)
 	{
-		fprintf(stderr, "Cannot set device name for port %d: %s.\n", i, strerror(errno));
+		fprintf(stderr, "Cannot set device name for port %d: %s\n", i, strerror(errno));
 		exit(1);
 	}
 

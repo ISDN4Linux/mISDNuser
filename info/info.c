@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
 		ret = ioctl(sock, IMGETDEVINFO, &devinfo);
 		if (ret < 0)
 		{
-			fprintf(stderr, "Cannot get device information for port %d. (ioctl IMGETDEVINFO failed ret=%d)\n", i, ret);
+			fprintf(stderr, "error getting info for device %d: %s\n", i,strerror(errno));
 			goto next_dev;
 		}
 

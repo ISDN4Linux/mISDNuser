@@ -1201,7 +1201,7 @@ char *argv[];
 	int aidx=1,para=1, idx;
 	char sw;
 	devinfo_t mISDN;
-	int err, cnt;
+	int err;
 
 	fprintf(stderr,"TestmISDN 1.0\n");
 	strcpy(FileName, "test_file");
