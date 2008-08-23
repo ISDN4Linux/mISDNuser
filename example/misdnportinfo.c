@@ -20,7 +20,7 @@
 
 int main()
 {
-	int 			cnt, ret = 0, i;
+	int 			cnt, ret = 0, i = 0;
 	int			sk;
 	struct mISDN_devinfo	devinfo;
 
@@ -39,20 +39,21 @@ int main()
 
 	printf("Found %d devices\n",cnt);
 
-	for (i=0; i<cnt; i++) {
-
+	while(cnt && i <= MAX_DEVICE_ID) {
 		devinfo.id = i;
 		ret = ioctl(sk, IMGETDEVINFO, &devinfo);
 		if (ret < 0) {
 			fprintf(stdout, "ioctl error %s\n", strerror(errno));
-		} else  {  
+		} else {
 			fprintf(stdout, "        id:             %d\n", devinfo.id);
 			fprintf(stdout, "        Dprotocols:     %08x\n", devinfo.Dprotocols);
 			fprintf(stdout, "        Bprotocols:     %08x\n", devinfo.Bprotocols);
 			fprintf(stdout, "        protocol:       %d\n", devinfo.protocol);
 			fprintf(stdout, "        nrbchan:        %d\n", devinfo.nrbchan);
 			fprintf(stdout, "        name:           %s\n", devinfo.name);
+			cnt--;
 		}
+		i++;
 	}
 
 	close(sk);

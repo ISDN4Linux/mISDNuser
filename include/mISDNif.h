@@ -261,6 +261,8 @@ struct mISDNversion {
 	unsigned short	release;
 };
 
+#define MAX_DEVICE_ID 63
+
 struct mISDN_devinfo {
 	u_int			id;
 	u_int			Dprotocols;
@@ -285,7 +287,7 @@ struct mISDN_devrename {
 #define IMGETDEVINFO	_IOR('I', 68, int)
 #define IMCTRLREQ	_IOR('I', 69, int)
 #define IMCLEAR_L2	_IOR('I', 70, int)
-#define IMSETDEVNAME	_IOR('I', 68, struct mISDN_devrename)
+#define IMSETDEVNAME	_IOR('I', 71, struct mISDN_devrename)
 
 static inline int
 test_channelmap(u_int nr, u_char *map)

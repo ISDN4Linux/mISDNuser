@@ -73,7 +73,7 @@ char *argv[];
 		aidx++;
 	} 
 
-	if (cardnr < 1) {
+	if (cardnr < 0) {
 		fprintf(stderr,"card nr %d wrong it should be 1 ... nr of installed cards\n", cardnr);
 		exit(1);
 	}

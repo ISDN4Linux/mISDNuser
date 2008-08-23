@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* get number of stacks */
-	i = 1;
+	i = 0;
 	ret = ioctl(sock, IMGETCOUNT, &ii);
 	if (ret < 0)
 	{
@@ -54,12 +54,12 @@ int main(int argc, char *argv[])
 	}
 
 	/* loop the number of cards and get their info */
-	while(i <= ii)
+	while(ii && i <= MAX_DEVICE_ID)
 	{
 		nt = te = bri = pri = pots = 0;
 		useable = 0;
 
-		devinfo.id = i - 1;
+		devinfo.id = i;
 		ret = ioctl(sock, IMGETDEVINFO, &devinfo);
 		if (ret < 0)
 		{
@@ -141,6 +141,7 @@ int main(int argc, char *argv[])
 			printf(" * Port NOT useable for LCR\n");
 
 		printf("--------\n");
+		ii--;
 
 	next_dev:
 		i++;

@@ -56,17 +56,18 @@ int main(int argc, char *argv[])
 	ret = ioctl(sock, IMGETCOUNT, &ii);
 	if (ret < 0)
 	{
-		fprintf(stderr, "Cannot get number of mISDN devices. (ioctl IMGETCOUNT failed ret=%d)\n", ret);
+		fprintf(stderr, "Cannot get number of mISDN devices:%s\n", strerror(errno));
+		goto done;
+	}
+	if (ii == 0) {
+		fprintf(stderr, "No mISDN devices found.\n");
 		goto done;
 	}
 
 	if(isdigit(argv[1][0])) {
 		i = atoi(argv[1]);
-		if (i <= 0) {
-			fprintf(stderr,"Interface number must be > zero.\n");
-			exit(1);
-		} else if (i > ii) {
-			fprintf(stderr,"Interface %d does not exist. %d interfaces are known.\n",i,ii);
+		if (i < 0) {
+			fprintf(stderr,"Interface number must be >= zero.\n");
 			exit(1);
 		}
 	} else {
@@ -75,10 +76,10 @@ int main(int argc, char *argv[])
 			exit(2);
 		}
 
-		i = 1;
-		while(i <= ii)
+		i = 0;
+		while(ii && i <= MAX_DEVICE_ID)
 		{
-			devinfo.id = i - 1;
+			devinfo.id = i;
 			ret = ioctl(sock, IMGETDEVINFO, &devinfo);
 			if (ret < 0)
 			{
@@ -86,24 +87,23 @@ int main(int argc, char *argv[])
 				goto next_dev;
 			}
 			if (!strcmp (argv[1], devinfo.name))
-				break;
+				goto found_dev;
+			--ii;
 		next_dev:
 			i++;
 		}
-		if (i > ii) {
-			fprintf(stderr,"Interface not found.\n");
-			exit(1);
-		}
+		fprintf(stderr,"Interface not found.\n");
+		goto done;
 	}
+found_dev:
 	devname.id = i;
-	strncpy(devname.name,argv[1],MISDN_MAX_IDLEN);
-	ret = ioctl(sock, IMSETDEVNAME, &devinfo);
+	strncpy(devname.name,argv[2],MISDN_MAX_IDLEN);
+	ret = ioctl(sock, IMSETDEVNAME, &devname);
 	if (ret < 0)
 	{
 		fprintf(stderr, "Cannot set device name for port %d: %s.\n", i, strerror(errno));
 		exit(1);
 	}
-
 
 done:
 	close(sock);
