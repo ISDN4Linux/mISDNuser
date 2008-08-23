@@ -81,7 +81,9 @@ typedef struct _devinfo {
 #define MAX_DATA_BUF		1024
 
 static int VerifyOn=0;
+#ifdef NOTYET
 static char tt_char[] = "0123456789ABCD*#";
+#endif
 
 #define PLAY_SIZE 64
 
@@ -1015,7 +1017,7 @@ char *argv[];
 	int aidx=1,para=1, idx;
 	char sw;
 	devinfo_t mISDN;
-	int err, cnt;
+	int err;
 
 	fprintf(stderr,"TestmISDN 1.0\n");
 	strcpy(FileName, "test_file");

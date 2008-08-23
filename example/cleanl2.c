@@ -36,7 +36,7 @@ main(argc, argv)
 int argc;
 char *argv[];
 {
-	int aidx=1,para=1, idx;
+	int aidx=1;
 	int cardnr = 1;
 	int sock;
 	struct sockaddr_mISDN  addr;
