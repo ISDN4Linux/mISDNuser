@@ -275,8 +275,7 @@ int activate_bchan(devinfo_t *di, unsigned char bch) {
 		return 0;
 	}
 
-	if (debug>3)
-		fprintf(stdout,"ACTIVATE_REQ sendto ret=%d\n", ret);
+        fprintf(stdout, "--> B%i -  PH_ACTIVATE_REQ\n", bch+1);
 
 	tout.tv_usec = 0;
 	tout.tv_sec = 10;
@@ -433,17 +432,18 @@ int do_setup(devinfo_t *di)
 				fprintf(stdout, "alen =%d, dev(%d) channel(%d)\n",
 					alen, di->laddr[CHAN_D].dev, di->laddr[CHAN_D].channel);
 			}
-			if (hh->prim == PH_ACTIVATE_IND) {
-				fprintf(stdout, "<-- D  -  PH_ACTIVATE_IND\n");
+			if ((hh->prim == PH_ACTIVATE_IND) || (hh->prim == PH_ACTIVATE_CNF)) {
+				if (hh->prim == PH_ACTIVATE_IND)
+					fprintf(stdout, "<-- D  -  PH_ACTIVATE_IND\n");
+				else
+					fprintf(stdout, "<-- D  -  PH_ACTIVATE_CNF\n");
 				di->ch[CHAN_D].activated = 1;
 
-				if ((di->ch[CHAN_B1].tx_ack) && (!setup_bchannel(di, CHAN_B1))) {
+				if ((di->ch[CHAN_B1].tx_ack) && (!setup_bchannel(di, CHAN_B1)))
 					activate_bchan(di, CHAN_B1);
-				}
 
-				if ((di->ch[CHAN_B2].tx_ack) && (!setup_bchannel(di, CHAN_B2))) {
+				if ((di->ch[CHAN_B2].tx_ack) && (!setup_bchannel(di, CHAN_B2)))
 					activate_bchan(di, CHAN_B2);
-				}
 
 				return 0;
 			} else {
@@ -609,7 +609,7 @@ int main_data_loop(devinfo_t *di)
 	tout.tv_usec = 0;
 	tout.tv_sec = 1;
 
-	printf ("\nwaiting for data (use CTRL-C to cancel) stop(%i)...\n", stop);
+	printf ("\nwaiting for data (use CTRL-C to cancel) stop(%i) sleep(%i)...\n", stop, usleep_val, sleep);
 	while (1)
 	{
 		for (ch_idx=0; ch_idx<MAX_CHAN; ch_idx++)
