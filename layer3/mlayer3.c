@@ -28,12 +28,15 @@
 #include "helper.h"
 #include "layer3.h"
 #include "debug.h"
+#define AF_COMPATIBILITY_FUNC
+#include <compat_af_isdn.h>
 
 static	int	__init_done = 0;
 
 void
 init_layer3(int nr)
 {
+	init_af_isdn();
 	init_mbuffer(nr);
 	mISDNl3New();
 	__init_done = 1;
@@ -63,7 +66,7 @@ struct mlayer3	*
 open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_t *f, void *p)
 {
 	struct _layer3		*l3;
-	int			fd, cnt, ret;
+	int			fd, ret;
 	struct mISDNversion	ver;
 	struct mISDN_devinfo	devinfo;
 	int			clean = 1;
@@ -93,20 +96,6 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	}
 	/* handle version backward compatibility specific  stuff here */
 	
-	/* nothing yet */
-
-	ret = ioctl(fd, IMGETCOUNT, &cnt);
-	if (ret < 0) {
-		fprintf(stderr,"could not send IOCTL IMGETCOUNT %s\n", strerror(errno));
-		close(fd);
-		return NULL;
-	}
-	if (cnt < dev) {
-		fprintf(stderr,"device %d do not exist\n", dev);
-		close(fd);
-		return NULL;
-	}
-
 	l3 = calloc(1, sizeof(struct _layer3));
 	if (!l3)
 		return NULL;

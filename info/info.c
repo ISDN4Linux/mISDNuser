@@ -5,7 +5,7 @@
 **---------------------------------------------------------------------------**
 ** Copyright: Andreas Eversberg  (GPL)                                       **
 **                                                                           **
-** user space utility to bridge two mISDN ports via layer 1                  **
+** user space utility to list mISDN devices                                  **
 **                                                                           **
 \*****************************************************************************/ 
 
@@ -18,6 +18,8 @@
 #include <mlayer3.h>
 #include <mbuffer.h>
 #include <errno.h>
+#define AF_COMPATIBILITY_FUNC
+#include <compat_af_isdn.h>
 
 int main(int argc, char *argv[])
 {
@@ -27,6 +29,7 @@ int main(int argc, char *argv[])
 	struct mISDN_devinfo devinfo;
 	int sock;
 
+	init_af_isdn();
 	/* open mISDN */
 	sock = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (sock < 0)
@@ -36,7 +39,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* get number of stacks */
-	i = 1;
+	i = 0;
 	ret = ioctl(sock, IMGETCOUNT, &ii);
 	if (ret < 0)
 	{
@@ -51,17 +54,17 @@ int main(int argc, char *argv[])
 	}
 
 	/* loop the number of cards and get their info */
-	while(i <= ii)
+	while(ii && i <= MAX_DEVICE_ID)
 	{
 		nt = te = bri = pri = pots = 0;
 		useable = 0;
 
-		devinfo.id = i - 1;
+		devinfo.id = i;
 		ret = ioctl(sock, IMGETDEVINFO, &devinfo);
 		if (ret < 0)
 		{
-			fprintf(stderr, "Cannot get device information for port %d. (ioctl IMGETDEVINFO failed ret=%d)\n", i, ret);
-			break;
+			fprintf(stderr, "error getting info for device %d: %s\n", i,strerror(errno));
+			goto next_dev;
 		}
 
 		/* output the port info */
@@ -138,7 +141,9 @@ int main(int argc, char *argv[])
 			printf(" * Port NOT useable for LCR\n");
 
 		printf("--------\n");
+		ii--;
 
+	next_dev:
 		i++;
 	}
 	printf("\n");

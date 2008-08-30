@@ -15,6 +15,9 @@
 #include <mISDNif.h>
 #include <q931.h>
 
+#define AF_COMPATIBILITY_FUNC
+#include <compat_af_isdn.h>
+
 void usage(pname) 
 char *pname;
 {
@@ -27,7 +30,7 @@ char *pname;
 	fprintf(stderr,"\n     Valid options are:\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr,"  -?              Usage ; printout this information\n");
-	fprintf(stderr,"  -c<n>           use card number n (default 1)\n"); 
+	fprintf(stderr,"  -c<n>           use card number n (default 0)\n"); 
 	fprintf(stderr,"  -F<n>           use function n (default 0)\n"); 
 	fprintf(stderr,"                    0 send and recive voice\n"); 
 	fprintf(stderr,"                    1 send touchtones\n"); 
@@ -78,7 +81,9 @@ typedef struct _devinfo {
 #define MAX_DATA_BUF		1024
 
 static int VerifyOn=0;
+#ifdef NOTYET
 static char tt_char[] = "0123456789ABCD*#";
+#endif
 
 #define PLAY_SIZE 64
 
@@ -180,7 +185,7 @@ int setup_bchannel(devinfo_t *di) {
 	}
 
 	addr.family = AF_ISDN;
-	addr.dev = di->cardnr - 1;
+	addr.dev = di->cardnr;
 	addr.channel = di->used_bchannel;
 	
 	ret = bind(di->bchan, (struct sockaddr *) &addr, sizeof(addr));
@@ -438,12 +443,10 @@ int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 		/* received data, save it */
 		write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
 	} else if (hh->prim == (PH_CONTROL_IND)) {
-		unsigned int	*tone = (unsigned int *)(buf + MISDN_HEADER_LEN);
-
-		if ((len == (4 + MISDN_HEADER_LEN)) && ((*tone & ~DTMF_TONE_MASK) == DTMF_TONE_VAL)) {
-			fprintf(stdout,"GOT TT %c\n", DTMF_TONE_MASK & *tone);
+		if ((len == MISDN_HEADER_LEN) && ((hh->id & ~DTMF_TONE_MASK) == DTMF_TONE_VAL)) {
+			fprintf(stdout,"GOT TT %c\n", DTMF_TONE_MASK & hh->id);
 		} else
-			fprintf(stdout,"unknown PH_CONTROL len %d/val %x\n", len, *tone);
+			fprintf(stdout,"unknown PH_CONTROL len %d/val %x\n", len, hh->id);
 	} else {
 		if (VerifyOn)
 			fprintf(stdout,"got unexpected B frame prim(%x) id(%x) len(%d)\n",
@@ -874,23 +877,18 @@ int do_setup(devinfo_t *di) {
 	}
 	ret = ioctl(sk, IMGETCOUNT, &cnt);
 	if (ret) {
-		fprintf(stdout, "ioctl error %s\n", strerror(errno));
+		fprintf(stdout, "error getting interface count: %s\n", strerror(errno));
 		close(sk);
 		return 3;
 	}
 
 	if (VerifyOn>1)
-		fprintf(stdout,"%d devices found\n", cnt);
-	if (cnt < di->cardnr) {
-		fprintf(stdout,"cannot config card nr %d only %d cards\n",
-			di->cardnr, cnt);
-		return 4;
-	}
+		fprintf(stdout,"%d device%s found\n", cnt, (cnt==1)?"":"s");
 
-	devinfo.id = di->cardnr - 1;
+	devinfo.id = di->cardnr;
 	ret = ioctl(sk, IMGETDEVINFO, &devinfo);
 	if (ret < 0) {
-		fprintf(stdout, "ioctl error %s\n", strerror(errno));
+		fprintf(stdout, "error getting info for device %d: %s\n", di->cardnr, strerror(errno));
 	} else if (VerifyOn>1) {  
 		fprintf(stdout, "        id:             %d\n", devinfo.id);
 		fprintf(stdout, "        Dprotocols:     %08x\n", devinfo.Dprotocols);
@@ -917,7 +915,7 @@ int do_setup(devinfo_t *di) {
 	}
 
 	di->l2addr.family = AF_ISDN;
-	di->l2addr.dev = di->cardnr - 1;
+	di->l2addr.dev = di->cardnr;
 	di->l2addr.channel = 0;
 	di->l2addr.sapi = 0;
 	di->l2addr.tei = 127;
@@ -1019,12 +1017,12 @@ char *argv[];
 	int aidx=1,para=1, idx;
 	char sw;
 	devinfo_t mISDN;
-	int err, cnt;
+	int err;
 
 	fprintf(stderr,"TestmISDN 1.0\n");
 	strcpy(FileName, "test_file");
 	memset(&mISDN, 0, sizeof(mISDN));
-	mISDN.cardnr = 1;
+	mISDN.cardnr = 0;
 	mISDN.func = 0;
 	mISDN.phonenr[0] = 0;
 	if (argc<1) {
@@ -1090,6 +1088,7 @@ char *argv[];
                                    aidx++;
 		} while (aidx<argc);
 	}
+	init_af_isdn();
 	err = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (err < 0) {
 		printf("TestmISDN cannot open mISDN due to %s\n",

@@ -16,6 +16,7 @@
 #include <mISDNif.h>
 #include <q931.h>
 #include <mlayer3.h>
+#include <compat_af_isdn.h>
 
 void usage(pname) 
 char *pname;
@@ -86,7 +87,9 @@ typedef struct _devinfo {
 #define MAX_DATA_BUF		1024
 
 static int VerifyOn=0;
+#ifdef NOTYET
 static char tt_char[] = "0123456789ABCD*#";
+#endif
 
 #define PLAY_SIZE 64
 
@@ -1126,7 +1129,6 @@ int do_setup(devinfo_t *di) {
 	}
 	if (VerifyOn > 8)
 		fprintf(stdout, "init_layer3(4)\n");
-	init_layer3(4);
 	if (VerifyOn > 8)
 		fprintf(stdout, "done\n");
 	if (di->flag & FLG_NT_MODE) {
@@ -1201,7 +1203,7 @@ char *argv[];
 	int aidx=1,para=1, idx;
 	char sw;
 	devinfo_t mISDN;
-	int err, cnt;
+	int err;
 
 	fprintf(stderr,"TestmISDN 1.0\n");
 	strcpy(FileName, "test_file");
@@ -1288,6 +1290,9 @@ char *argv[];
                                    aidx++;
 		} while (aidx<argc);
 	}
+
+	init_layer3(4);
+
 	err = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (err < 0) {
 		printf("TestmISDN cannot open mISDN due to %s\n",

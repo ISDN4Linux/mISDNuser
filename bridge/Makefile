@@ -31,7 +31,7 @@ BRIDGEOBJ = bridge.o
 isdnbridge: $(BRIDGEOBJ)
 	$(CC) $(BRIDGEOBJ) $(LFLAGS) -o $@
 
-bridge.o: bridge.c
+bridge.o: bridge.c ../include/mlayer3.h ../include/compat_af_isdn.h
 
 clean:
 	rm -f *.o DEADJOE

@@ -1,11 +1,11 @@
-/* $Id: mISDNif.h,v 2.0 2007/06/06 15:39:31 kkeil Exp $
+/*
  *
  * Author	Karsten Keil <kkeil@novell.com>
  *
- * Copyright 2007  by Karsten Keil <kkeil@novell.com>
+ * Copyright 2008  by Karsten Keil <kkeil@novell.com>
  *
  * This code is free software; you can redistribute it and/or modify
- * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE 
+ * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
  * version 2.1 as published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful,
@@ -36,17 +36,8 @@
  *              - should be incremented on every checkin
  */
 #define	MISDN_MAJOR_VERSION	1
-#define	MISDN_MINOR_VERSION	0
-#define MISDN_RELEASE		17
-
-#define MISDN_REVISION		"$Revision: 2.0 $"
-#define MISDN_DATE		"$Date: 2007/09/18 17:39:31 $"
-
-
-#define MISDN_MSG_STATS
-
-/* collect some statistics about the message queues */
-//#define MISDN_MSG_STATS
+#define	MISDN_MINOR_VERSION	1
+#define MISDN_RELEASE		20
 
 /* primitives for information exchange
  * generell format
@@ -54,7 +45,7 @@
  * <8  bit command>
  *    BIT 8 = 1 LAYER private
  *    BIT 7 = 1 answer
- *    BIT 6 = 1 DATA 
+ *    BIT 6 = 1 DATA
  * <8  bit target layer mask>
  *
  * Layer = 00 is reserved for general commands
@@ -196,7 +187,7 @@
 #define L1_SIGNAL_SLIP_RX	0x0020
 #define L1_SIGNAL_SLIP_TX	0x0021
 
-/* 
+/*
  * protocol ids
  * D channel 1-31
  * B channel 33 - 63
@@ -209,7 +200,7 @@
 #define ISDN_P_TE_E1		0x03
 #define ISDN_P_NT_E1  		0x04
 #define ISDN_P_LAPD_TE		0x10
-#define	ISDN_P_LAPD_NT		0x11	
+#define	ISDN_P_LAPD_NT		0x11
 
 #define ISDN_P_B_MASK		0x1f
 #define ISDN_P_B_START		0x20
@@ -251,13 +242,8 @@ struct mISDNhead {
 #define TEI_SAPI		63
 #define CTRL_SAPI		0
 
-#define MISDN_CHMAP_SIZE	4
-
-/* socket */
-#ifndef	AF_ISDN
-#define AF_ISDN		27
-#define PF_ISDN		AF_ISDN
-#endif
+#define MISDN_MAX_CHANNEL	127
+#define MISDN_CHMAP_SIZE	((MISDN_MAX_CHANNEL + 1) >> 3)
 
 #define SOL_MISDN	0
 
@@ -269,6 +255,29 @@ struct sockaddr_mISDN {
 	unsigned char	tei;
 };
 
+struct mISDNversion {
+	unsigned char	major;
+	unsigned char	minor;
+	unsigned short	release;
+};
+
+#define MAX_DEVICE_ID 63
+
+struct mISDN_devinfo {
+	u_int			id;
+	u_int			Dprotocols;
+	u_int			Bprotocols;
+	u_int			protocol;
+	u_char			channelmap[MISDN_CHMAP_SIZE];
+	u_int			nrbchan;
+	char			name[MISDN_MAX_IDLEN];
+};
+
+struct mISDN_devrename {
+	u_int			id;
+	char			name[MISDN_MAX_IDLEN];
+};
+
 /* timer device ioctl */
 #define IMADDTIMER	_IOR('I', 64, int)
 #define IMDELTIMER	_IOR('I', 65, int)
@@ -278,22 +287,28 @@ struct sockaddr_mISDN {
 #define IMGETDEVINFO	_IOR('I', 68, int)
 #define IMCTRLREQ	_IOR('I', 69, int)
 #define IMCLEAR_L2	_IOR('I', 70, int)
+#define IMSETDEVNAME	_IOR('I', 71, struct mISDN_devrename)
 
-struct mISDNversion {
-	unsigned char	major;
-	unsigned char	minor;
-	unsigned short	release;
-};
+static inline int
+test_channelmap(u_int nr, u_char *map)
+{
+	if (nr <= MISDN_MAX_CHANNEL)
+		return map[nr >> 3] & (1 << (nr & 7));
+	else
+		return 0;
+}
 
-struct mISDN_devinfo {
-	u_int			id;
-	u_int			Dprotocols;
-	u_int			Bprotocols;
-	u_int			protocol;
-	u_long			channelmap[MISDN_CHMAP_SIZE];
-	u_int			nrbchan;
-	char			name[MISDN_MAX_IDLEN];
-};
+static inline void
+set_channelmap(u_int nr, u_char *map)
+{
+	map[nr >> 3] |= (1 << (nr & 7));
+}
+
+static inline void
+clear_channelmap(u_int nr, u_char *map)
+{
+	map[nr >> 3] &= ~(1 << (nr & 7));
+}
 
 /* CONTROL_CHANNEL parameters */
 #define MISDN_CTRL_GETOP		0x0000

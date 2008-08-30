@@ -14,6 +14,10 @@
 #include <sys/ioctl.h>
 #include <mISDNif.h>
 
+#define AF_COMPATIBILITY_FUNC
+#include <compat_af_isdn.h>
+
+
 void usage(pname) 
 char *pname;
 {
@@ -32,7 +36,7 @@ main(argc, argv)
 int argc;
 char *argv[];
 {
-	int aidx=1,para=1, idx;
+	int aidx=1;
 	int cardnr = 1;
 	int sock;
 	struct sockaddr_mISDN  addr;
@@ -69,10 +73,11 @@ char *argv[];
 		aidx++;
 	} 
 
-	if (cardnr < 1) {
-		fprintf(stderr,"card nr %d wrong it should be 1 ... nr of installed cards\n", cardnr);
+	if (cardnr < 0) {
+		fprintf(stderr,"card nr cannot be negative\n");
 		exit(1);
 	}
+	init_af_isdn();
 	if ((sock = socket(PF_ISDN, SOCK_RAW, 0)) < 0) {
 		printf("could not open socket %s\n", strerror(errno));
 		exit(1);
@@ -82,12 +87,9 @@ char *argv[];
 		printf("ioctl error %s\n", strerror(errno));
 		exit(1);
 	} else
-		printf("%d controller found\n", cnt);
+		printf("%d controller%s found\n", cnt, (cnt==1)?"":"s");
 
-	if (cardnr > cnt) {
-		fprintf(stderr,"card nr %d wrong it should be 1 ... nr of installed cards (%d)\n", cardnr, cnt);
-	}
-	di.id = cardnr - 1;
+	di.id = cardnr;
 	result = ioctl(sock, IMGETDEVINFO, &di);
 	if (result < 0) {
 		printf("ioctl error %s\n", strerror(errno));

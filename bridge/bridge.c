@@ -22,6 +22,8 @@
 #include <mlayer3.h>
 #include <mbuffer.h>
 #include <errno.h>
+#define AF_COMPATIBILITY_FUNC
+#include <compat_af_isdn.h>
 
 int portcount = 0; /* counts all open ports for finding pair */
 int mISDNsocket = -1;
@@ -449,12 +451,12 @@ struct mISDNport *mISDN_port_open(int port, int nt_mode, int hdlc)
 		fprintf(stderr, "Found no card. Please be sure to load card drivers.\n");
 		return(NULL);
 	}
-	if (port>cnt || port<1)
+	if (port<0)
 	{
-		fprintf(stderr, "Port (%d) given is out of existing port range (%d-%d)\n", port, 1, cnt);
+		fprintf(stderr, "Port number cannot be negative\n");
 		return(NULL);
 	}
-	devinfo.id = port - 1;
+	devinfo.id = port;
 	ret = ioctl(mISDNsocket, IMGETDEVINFO, &devinfo);
 	if (ret < 0)
 	{
@@ -702,6 +704,7 @@ int main(int argc, char *argv[])
 		goto usage;
 
 	/* try to open raw socket to check kernel */
+	init_af_isdn();
 	mISDNsocket = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (mISDNsocket < 0)
 	{
