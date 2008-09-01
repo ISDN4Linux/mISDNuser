@@ -3,7 +3,7 @@ EXTRA_CFLAGS :=
 EXTRA_INCLUDE :=
 EXTRA_LIB :=
 
-PROGRAMS = isdninfo isdnrename
+PROGRAMS = misdninfo misdnrename
 
 all: $(PROGRAMS)
 
@@ -26,10 +26,10 @@ CFLAGS	:= $(CFLAGS) $(DEBUG) $(EXTRA_INCLUDE) \
 INFOOBJ = info.o
 NAMEOBJ = rename.o
 
-isdninfo: $(INFOOBJ)
+misdninfo: $(INFOOBJ)
 	$(CC) $(INFOOBJ) $(LFLAGS) -o $@
 
-isdnrename: $(NAMEOBJ)
+misdnrename: $(NAMEOBJ)
 	$(CC) $(NAMEOBJ) $(LFLAGS) -o $@
 
 info.o: info.c ../include/mlayer3.h ../include/compat_af_isdn.h
