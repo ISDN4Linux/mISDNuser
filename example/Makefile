@@ -1,6 +1,5 @@
 LIBINCL	:= $(INCLUDEDIR)/mISDNlib.h
-PROGS	:= testcon loghex testlayer3 cleanl2 misdnportinfo testlayer1
-# PROGS   := testcon testnet loadfirm logger
+PROGS	:= testcon testlayer3 misdnportinfo testlayer1
 
 all: $(PROGS)
 
@@ -29,14 +28,6 @@ testlayer3.o: testlayer3.c ../include/q931.h ../include/mlayer3.h ../include/mIS
 
 testlayer1: testlayer1.o
 testlayer1.o: testlayer1.c ../include/mISDNif.h  ../include/compat_af_isdn.h
-
-loghex: loghex.o
-
-loghex.o: loghex.c ../include/mISDNif.h  ../include/compat_af_isdn.h
-
-cleanl2: cleanl2.o
-
-cleanl2.o: cleanl2.c ../include/mISDNif.h ../include/compat_af_isdn.h
 
 clean:
 	rm -f *.o *.lo *~ $(PROGS) DEADJOE
