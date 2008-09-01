@@ -1,7 +1,7 @@
 
-MAJOR=1
-MINOR=1
-SUBMINOR=1
+MAJOR=2
+MINOR=0
+SUBMINOR=18
 
 PWD=$(shell pwd)
 #
@@ -65,21 +65,18 @@ distclean: clean
 MAINDIR := $(shell basename $(PWD))
 ARCHIVDIR = /usr/src/packages/SOURCES
 ARCHIVOPT := -v
-# VERSION := $(shell date +"%Y%m%d")
-VERSION := 20030423
+
+VERSION:=$(MAJOR).$(MINOR).$(SUBMINOR)
 
 ARCHIVNAME := $(ARCHIVDIR)/$(MAINDIR)-$(VERSION).tar.bz2
 
-archiv: distclean
+archiv: distclean VERSION
 	cd ../; tar c $(ARCHIVOPT) -f - $(MAINDIR) | bzip2 > $(ARCHIVNAME)
 
 basearchiv: ARCHIVOPT += --exclude i4lnet --exclude voip --exclude tenovis
 basearchiv: ARCHIVNAME := $(ARCHIVDIR)/$(MAINDIR)_base-$(VERSION).tar.bz2
 basearchiv: archiv
 
-
-VERSION:
-	echo $(MAJOR)_$(MINOR)_$(SUBMINOR) > VERSION
 
 snapshot: clean
 	DIR=mISDNuser-$$(date +"20%y_%m_%d") ; \

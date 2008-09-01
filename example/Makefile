@@ -11,10 +11,16 @@ testlayer3 :	LDFLAGS += -L $(LIBDIR) $(LIBPTHREAD) $(LIBMISDN)
 
 CC := gcc -g $(CFLAGS)
 
-install:
-	for i in $(PROGS) ; do \
+ifdef INSTALL_EXAMPLES
+	DO_INSTALL= for i in $(PROGS) ; do \
 		install -m 755 $$i $(INSTALL_PREFIX)/usr/bin ;\
 	done
+else
+	DO_INSTALL=true
+endif
+
+install:
+	$(DO_INSTALL)
 
 misdnportinfo: misdnportinfo.o
 
