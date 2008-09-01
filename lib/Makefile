@@ -5,9 +5,10 @@ RANLIB = ranlib
 all: libmisdn.a libmisdn_pic.a libmisdn.so
 
 install:
-	install -m 644 libmisdn.a $(INSTALL_PREFIX)/usr/lib
-	install -m 644 libmisdn_pic.a $(INSTALL_PREFIX)/usr/lib
-	install -m 644 libmisdn.so $(INSTALL_PREFIX)/usr/lib
+	install -d $(INSTALL_PREFIX)$(INSTALL_LIBDIR)
+	install -m 644 libmisdn.a $(INSTALL_PREFIX)$(INSTALL_LIBDIR)
+	install -m 644 libmisdn_pic.a $(INSTALL_PREFIX)$(INSTALL_LIBDIR)
+	install -m 644 libmisdn.so $(INSTALL_PREFIX)$(INSTALL_LIBDIR)
 
 MISDN_OBJ = debug.o mbuffer.o q931.o fsm.o mtimer.o mlayer3.o layer3.o dss1user.o dss1net.o
 

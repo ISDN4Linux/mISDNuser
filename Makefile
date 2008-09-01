@@ -11,6 +11,9 @@ PWD=$(shell pwd)
 INSTALL_PREFIX := /
 export INSTALL_PREFIX
 
+INSTALL_LIBDIR := /usr/lib/
+export INSTALL_LIBDIR
+
 mISDN_DIR := $(PWD)
 export mISDN_DIR
 
@@ -43,7 +46,7 @@ all:
 install_path:
 	mkdir -p $(INSTALL_PREFIX)/usr/bin/
 	mkdir -p $(INSTALL_PREFIX)/usr/include/mISDNuser/
-	mkdir -p $(INSTALL_PREFIX)/$(LIBDIR)
+	mkdir -p $(INSTALL_PREFIX)$(INSTALL_LIBDIR)
 
 
 install: install_path all
