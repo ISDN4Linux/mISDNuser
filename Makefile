@@ -33,7 +33,7 @@ endif
 
 export CFLAGS
 
-SUBDIRS := layer3 bridge info example
+SUBDIRS := layer3 bridge tools example
 
 
 all:
