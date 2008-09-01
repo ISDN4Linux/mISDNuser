@@ -9,6 +9,8 @@ LIBMISDN := -lmisdn
 
 testlayer3 :	LDFLAGS += -L $(LIBDIR) $(LIBPTHREAD) $(LIBMISDN)
 
+CFLAGS += $(EXTRA_CFLAGS)
+
 CC := gcc -g $(CFLAGS)
 
 ifdef INSTALL_EXAMPLES

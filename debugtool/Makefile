@@ -1,6 +1,6 @@
 CC = gcc
 
-CFLAGS += -Wall
+CFLAGS += -Wall $(EXTRA_CFLAGS)
 
 all: mISDNdebugtool
 
