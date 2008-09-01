@@ -3,7 +3,7 @@ PROGS	:= testcon testlayer3 misdnportinfo testlayer1
 
 all: $(PROGS)
 
-mISDNLIB := ../layer3/libmisdn.so
+mISDNLIB := ../lib/libmisdn.so
 LIBPTHREAD := -lpthread
 LIBMISDN := -lmisdn
 

@@ -17,7 +17,7 @@ export mISDN_DIR
 INCLUDEDIR := $(mISDN_DIR)/include
 export INCLUDEDIR
 
-LIBDIR := $(mISDN_DIR)/layer3
+LIBDIR := $(mISDN_DIR)/lib
 export LIBDIR
 
 CFLAGS:= -g -Wall -I $(INCLUDEDIR)
@@ -33,7 +33,7 @@ endif
 
 export CFLAGS
 
-SUBDIRS := layer3 bridge tools example
+SUBDIRS := lib bridge tools example
 
 
 all:

@@ -1,12 +1,8 @@
-# ifndef SF_DIR
-# SF_DIR = /home/kkeil/speak_freely-7.2
-# endif
-
 EXTRA_CFLAGS :=
 EXTRA_INCLUDE :=
 EXTRA_LIB :=
 
-PROGRAMMS = isdnbridge
+PROGRAMMS = misdn_bridge
 
 all: $(PROGRAMMS)
 
@@ -28,7 +24,7 @@ CFLAGS	:= $(CFLAGS) $(DEBUG) $(EXTRA_INCLUDE) \
 
 BRIDGEOBJ = bridge.o
 
-isdnbridge: $(BRIDGEOBJ)
+misdn_bridge: $(BRIDGEOBJ)
 	$(CC) $(BRIDGEOBJ) $(LFLAGS) -o $@
 
 bridge.o: bridge.c ../include/mlayer3.h ../include/compat_af_isdn.h
