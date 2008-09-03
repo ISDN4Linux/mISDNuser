@@ -40,7 +40,7 @@
 #define AF_COMPATIBILITY_FUNC
 #include <compat_af_isdn.h>
 
-static void usage(pname) 
+static void usage(pname)
 char *pname;
 {
 	fprintf(stderr,"Call with %s [options]\n",pname);
@@ -57,7 +57,7 @@ char *pname;
 static void write_esc (FILE *file, unsigned char *buf, int len)
 {
     int i, byte;
-    
+
     for (i = 0; i < len; ++i) {
 		byte = buf[i];
 		if (byte == 0xff || byte == 0xfe) {
@@ -153,7 +153,7 @@ char *argv[];
 	struct mISDNhead 	*hh;
 	struct mISDNversion	ver;
 	FILE	*wfile = NULL;
- 
+
 	*wfilename = 0;
 	while (aidx < argc) {
 		if (argv[aidx] && argv[aidx][0]=='-') {
@@ -197,7 +197,7 @@ char *argv[];
 			exit(1);
 		}
 		aidx++;
-	} 
+	}
 
 	if (cardnr < 0) {
 		fprintf(stderr,"card nr may not be negative\n");
@@ -210,7 +210,7 @@ char *argv[];
 		printf("could not open socket %s\n", strerror(errno));
 		exit(1);
 	}
-	
+
 	result = ioctl(log_socket, IMGETVERSION, &ver);
 	if (result < 0) {
 		printf("ioctl error %s\n", strerror(errno));
@@ -218,12 +218,12 @@ char *argv[];
 	}
 	printf("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
 	printf("mISDN user   version %d.%02d.%d found\n", MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
-	
+
 	if (ver.major != MISDN_MAJOR_VERSION) {
 		printf("VERSION incompatible please update\n");
 		exit(1);
 	}
-	
+
 	result = ioctl(log_socket, IMGETCOUNT, &cnt);
 	if (result < 0) {
 		printf("ioctl error %s\n", strerror(errno));
@@ -243,7 +243,7 @@ char *argv[];
 		printf("	channelmap:	");
 		for (i = MISDN_CHMAP_SIZE - 1; i >= 0; i--)
 			printf("%02x", di.channelmap[i]);
-		printf("\n");			
+		printf("\n");
 		printf("	nrbchan:	%d\n", di.nrbchan);
 		printf("	name:		%s\n", di.name);
 	}
@@ -286,7 +286,7 @@ char *argv[];
 		if (wfile) {
 			fprintf(wfile, "EyeSDN");
 			fflush(wfile);
-		} else 
+		} else
 			printf("cannot open wireshark dump file(%s)\n", wfilename);
 	}
 
@@ -319,7 +319,7 @@ char *argv[];
 				cts.tv.tv_usec = 0;
 			}
 			if (wfile && (result > MISDN_HEADER_LEN))
-				write_wfile(wfile, buffer, result, &cts.tv, di.protocol);	
+				write_wfile(wfile, buffer, result, &cts.tv, di.protocol);
 			printf(" received %3d bytes prim = %04x id=%08x",
 				result, hh->prim, hh->id);
 			if (result > MISDN_HEADER_LEN)
