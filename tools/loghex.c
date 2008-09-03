@@ -78,12 +78,14 @@ static void write_wfile(FILE *f, unsigned char *buf, int len, struct timeval *tv
 	struct mISDNhead	*hh = (struct mISDNhead *)buf;
 	u_char			head[12], origin;
 
-	if ((hh->prim != PH_DATA_REQ) && (hh->prim != PH_DATA_IND))
+	if ((hh->prim != PH_DATA_REQ) && (hh->prim != PH_DATA_IND) &&
+		    (hh->prim != PH_DATA_E_IND))
 		return;
 	if (protocol == ISDN_P_NT_S0 || protocol == ISDN_P_NT_E1)
 		origin = hh->prim == PH_DATA_REQ ? 0 : 1;
 	else
-		origin = hh->prim == PH_DATA_REQ ? 1 : 0;
+		origin = ((hh->prim == PH_DATA_REQ) ||
+				(hh->prim == PH_DATA_E_IND)) ? 1 : 0;
 
 	len -= MISDN_HEADER_LEN;
 
@@ -258,23 +260,28 @@ char *argv[];
 
 	log_addr.family = AF_ISDN;
 	log_addr.dev = cardnr;
-	log_addr.channel = 0;
-
-	result = bind(log_socket, (struct sockaddr *) &log_addr,
-		 sizeof(log_addr));
-	printf("log bind return %d\n", result);
-
-	if (result < 0) {
-		printf("log bind error %s\n", strerror(errno));
-	}
 	
+	
+	result = -1;
+	
+	/* try to bind on D/E channel first, fallback to D channel on error */
+	log_addr.channel = 1;
+	while ((result < 0) && (log_addr.channel >= 0)) {
+		result = bind(log_socket, (struct sockaddr *) &log_addr,
+			sizeof(log_addr));
+		printf("log bind ch(%i) return %d\n", log_addr.channel, result);
+		if (result < 0) {
+			printf("log bind error %s\n", strerror(errno));
+			log_addr.channel--;
+		}
+	}
+
 	opt = 1;
 	result = setsockopt(log_socket, SOL_MISDN, MISDN_TIME_STAMP, &opt, sizeof(opt));
-	
 	if (result < 0) {
 		printf("log  setsockopt error %s\n", strerror(errno));
 	}
-	
+
 	if (strlen(wfilename)) {
 		wfile = fopen(wfilename, "w");
 		if (wfile) {
