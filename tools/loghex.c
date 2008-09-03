@@ -134,7 +134,7 @@ main(argc, argv)
 int argc;
 char *argv[];
 {
-	int	aidx=1, idx, i;
+	int	aidx=1, idx, i, channel;
 	int	cardnr = 0;
 	int	log_socket;
 	struct sockaddr_mISDN  log_addr;
@@ -260,19 +260,18 @@ char *argv[];
 
 	log_addr.family = AF_ISDN;
 	log_addr.dev = cardnr;
-	
-	
-	result = -1;
-	
+
 	/* try to bind on D/E channel first, fallback to D channel on error */
-	log_addr.channel = 1;
-	while ((result < 0) && (log_addr.channel >= 0)) {
+	result = -1;
+	channel = 1;
+	while ((result < 0) && (channel >= 0)) {
+		log_addr.channel = (unsigned char)channel;
 		result = bind(log_socket, (struct sockaddr *) &log_addr,
 			sizeof(log_addr));
 		printf("log bind ch(%i) return %d\n", log_addr.channel, result);
 		if (result < 0) {
 			printf("log bind error %s\n", strerror(errno));
-			log_addr.channel--;
+			channel--;
 		}
 	}
 
