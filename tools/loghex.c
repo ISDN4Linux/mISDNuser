@@ -40,6 +40,8 @@
 #define AF_COMPATIBILITY_FUNC
 #include <compat_af_isdn.h>
 
+static int dch_echo=0;
+
 static void usage(pname)
 char *pname;
 {
@@ -77,6 +79,10 @@ static void write_wfile(FILE *f, unsigned char *buf, int len, struct timeval *tv
 {
 	struct mISDNhead	*hh = (struct mISDNhead *)buf;
 	u_char			head[12], origin;
+
+	/* skip PH_DATA_REQ if PH_DATA_E_IND are expected */
+	if (dch_echo && (hh->prim == PH_DATA_REQ))
+		return;
 
 	if ((hh->prim != PH_DATA_REQ) && (hh->prim != PH_DATA_IND) &&
 		    (hh->prim != PH_DATA_E_IND))
@@ -274,6 +280,7 @@ char *argv[];
 			channel--;
 		}
 	}
+	dch_echo = (log_addr.channel == 1);
 
 	opt = 1;
 	result = setsockopt(log_socket, SOL_MISDN, MISDN_TIME_STAMP, &opt, sizeof(opt));
