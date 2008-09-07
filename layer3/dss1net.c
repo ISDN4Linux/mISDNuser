@@ -1159,7 +1159,6 @@ l3dss1_t308(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	}
 }
 
-#warning hier lesen
 #if 0
 static void
 l3dss1_t312(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
