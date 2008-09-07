@@ -5,14 +5,13 @@ RANLIB = ranlib
 all: libmisdn.a libmisdn_pic.a libmisdn.so
 
 install:
-	install -m 644 libmisdn.a $(INSTALL_PREFIX)/usr/lib
-	install -m 644 libmisdn_pic.a $(INSTALL_PREFIX)/usr/lib
-	install -m 644 libmisdn.so $(INSTALL_PREFIX)/usr/lib
+	install -d $(INSTALL_PREFIX)$(INSTALL_LIBDIR)
+	install -m 644 libmisdn.a $(INSTALL_PREFIX)$(INSTALL_LIBDIR)
+	install -m 644 libmisdn_pic.a $(INSTALL_PREFIX)$(INSTALL_LIBDIR)
+	install -m 644 libmisdn.so $(INSTALL_PREFIX)$(INSTALL_LIBDIR)
 
 MISDN_OBJ = debug.o mbuffer.o q931.o fsm.o mtimer.o mlayer3.o layer3.o dss1user.o dss1net.o
 
-# net_if.o isdn_debug.o isdn_msg.o fsm.o net_l2.o tei.o net_l3.o \
-#		manager.o tone.o bchannel.o g711.o
 
 MISDN_PICOBJ = $(ISDNNET_OBJ:%.o=%.lo)
 
@@ -20,6 +19,7 @@ ifeq ($(shell uname -m),x86_64)
 CFLAGS         += -fPIC
 endif
 
+CFLAGS += $(EXTRA_CFLAGS) 
 
 libmisdn_pic.a: $(MISDN_PICOBJ)
 	$(AR) cru $@ $^

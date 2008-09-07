@@ -1,7 +1,7 @@
 
 MAJOR=1
 MINOR=1
-SUBMINOR=1
+SUBMINOR=20
 
 PWD=$(shell pwd)
 #
@@ -11,13 +11,16 @@ PWD=$(shell pwd)
 INSTALL_PREFIX := /
 export INSTALL_PREFIX
 
+INSTALL_LIBDIR := /usr/lib/
+export INSTALL_LIBDIR
+
 mISDN_DIR := $(PWD)
 export mISDN_DIR
 
 INCLUDEDIR := $(mISDN_DIR)/include
 export INCLUDEDIR
 
-LIBDIR := $(mISDN_DIR)/layer3
+LIBDIR := $(mISDN_DIR)/lib
 export LIBDIR
 
 CFLAGS:= -g -Wall -I $(INCLUDEDIR)
@@ -33,7 +36,7 @@ endif
 
 export CFLAGS
 
-SUBDIRS := layer3 bridge info example
+SUBDIRS := lib bridge tools example
 
 
 all:
@@ -43,7 +46,7 @@ all:
 install_path:
 	mkdir -p $(INSTALL_PREFIX)/usr/bin/
 	mkdir -p $(INSTALL_PREFIX)/usr/include/mISDNuser/
-	mkdir -p $(INSTALL_PREFIX)/$(LIBDIR)
+	mkdir -p $(INSTALL_PREFIX)$(INSTALL_LIBDIR)
 
 
 install: install_path all
@@ -65,21 +68,18 @@ distclean: clean
 MAINDIR := $(shell basename $(PWD))
 ARCHIVDIR = /usr/src/packages/SOURCES
 ARCHIVOPT := -v
-# VERSION := $(shell date +"%Y%m%d")
-VERSION := 20030423
+
+VERSION:=$(MAJOR).$(MINOR).$(SUBMINOR)
 
 ARCHIVNAME := $(ARCHIVDIR)/$(MAINDIR)-$(VERSION).tar.bz2
 
-archiv: distclean
+archiv: distclean VERSION
 	cd ../; tar c $(ARCHIVOPT) -f - $(MAINDIR) | bzip2 > $(ARCHIVNAME)
 
 basearchiv: ARCHIVOPT += --exclude i4lnet --exclude voip --exclude tenovis
 basearchiv: ARCHIVNAME := $(ARCHIVDIR)/$(MAINDIR)_base-$(VERSION).tar.bz2
 basearchiv: archiv
 
-
-VERSION:
-	echo $(MAJOR)_$(MINOR)_$(SUBMINOR) > VERSION
 
 snapshot: clean
 	DIR=mISDNuser-$$(date +"20%y_%m_%d") ; \

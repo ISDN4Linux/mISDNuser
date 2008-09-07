@@ -1,3 +1,26 @@
+/*
+ *
+ * Copyright 2008 Karsten Keil <kkeil@suse.de>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the Free
+ * Software Foundation; either version 2 of the License, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc., 59
+ * Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ *
+ * The full GNU General Public License is included in this distribution in the
+ * file called LICENSE.
+ *
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -17,7 +40,9 @@
 #define AF_COMPATIBILITY_FUNC
 #include <compat_af_isdn.h>
 
-static void usage(pname) 
+static int dch_echo=0;
+
+static void usage(pname)
 char *pname;
 {
 	fprintf(stderr,"Call with %s [options]\n",pname);
@@ -34,7 +59,7 @@ char *pname;
 static void write_esc (FILE *file, unsigned char *buf, int len)
 {
     int i, byte;
-    
+
     for (i = 0; i < len; ++i) {
 		byte = buf[i];
 		if (byte == 0xff || byte == 0xfe) {
@@ -55,12 +80,18 @@ static void write_wfile(FILE *f, unsigned char *buf, int len, struct timeval *tv
 	struct mISDNhead	*hh = (struct mISDNhead *)buf;
 	u_char			head[12], origin;
 
-	if ((hh->prim != PH_DATA_REQ) && (hh->prim != PH_DATA_IND))
+	/* skip PH_DATA_REQ if PH_DATA_E_IND are expected */
+	if (dch_echo && (hh->prim == PH_DATA_REQ))
+		return;
+
+	if ((hh->prim != PH_DATA_REQ) && (hh->prim != PH_DATA_IND) &&
+		    (hh->prim != PH_DATA_E_IND))
 		return;
 	if (protocol == ISDN_P_NT_S0 || protocol == ISDN_P_NT_E1)
 		origin = hh->prim == PH_DATA_REQ ? 0 : 1;
 	else
-		origin = hh->prim == PH_DATA_REQ ? 1 : 0;
+		origin = ((hh->prim == PH_DATA_REQ) ||
+				(hh->prim == PH_DATA_E_IND)) ? 1 : 0;
 
 	len -= MISDN_HEADER_LEN;
 
@@ -109,8 +140,8 @@ main(argc, argv)
 int argc;
 char *argv[];
 {
-	int	aidx=1, idx, i;
-	int	cardnr = 0;
+	int	aidx=1, idx, i, channel;
+	int	cardnr = 1;
 	int	log_socket;
 	struct sockaddr_mISDN  log_addr;
 	int	buflen = 512;
@@ -128,7 +159,7 @@ char *argv[];
 	struct mISDNhead 	*hh;
 	struct mISDNversion	ver;
 	FILE	*wfile = NULL;
- 
+
 	*wfilename = 0;
 	while (aidx < argc) {
 		if (argv[aidx] && argv[aidx][0]=='-') {
@@ -172,10 +203,10 @@ char *argv[];
 			exit(1);
 		}
 		aidx++;
-	} 
+	}
 
-	if (cardnr < 0) {
-		fprintf(stderr,"card nr may not be negative\n");
+	if (cardnr < 1) {
+		fprintf(stderr,"card nr may not be 0 or less\n");
 		exit(1);
 	}
 
@@ -185,7 +216,7 @@ char *argv[];
 		printf("could not open socket %s\n", strerror(errno));
 		exit(1);
 	}
-	
+
 	result = ioctl(log_socket, IMGETVERSION, &ver);
 	if (result < 0) {
 		printf("ioctl error %s\n", strerror(errno));
@@ -193,12 +224,12 @@ char *argv[];
 	}
 	printf("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
 	printf("mISDN user   version %d.%02d.%d found\n", MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
-	
+
 	if (ver.major != MISDN_MAJOR_VERSION) {
 		printf("VERSION incompatible please update\n");
 		exit(1);
 	}
-	
+
 	result = ioctl(log_socket, IMGETCOUNT, &cnt);
 	if (result < 0) {
 		printf("ioctl error %s\n", strerror(errno));
@@ -206,7 +237,7 @@ char *argv[];
 	} else
 		printf("%d controller%s found\n", cnt, (cnt==1)?"":"s");
 
-	di.id = cardnr;
+	di.id = cardnr - 1;
 	result = ioctl(log_socket, IMGETDEVINFO, &di);
 	if (result < 0) {
 		printf("ioctl error %s\n", strerror(errno));
@@ -218,7 +249,7 @@ char *argv[];
 		printf("	channelmap:	");
 		for (i = MISDN_CHMAP_SIZE - 1; i >= 0; i--)
 			printf("%02x", di.channelmap[i]);
-		printf("\n");			
+		printf("\n");
 		printf("	nrbchan:	%d\n", di.nrbchan);
 		printf("	name:		%s\n", di.name);
 	}
@@ -234,30 +265,35 @@ char *argv[];
 	}
 
 	log_addr.family = AF_ISDN;
-	log_addr.dev = cardnr;
-	log_addr.channel = 0;
+	log_addr.dev = cardnr - 1;
 
-	result = bind(log_socket, (struct sockaddr *) &log_addr,
-		 sizeof(log_addr));
-	printf("log bind return %d\n", result);
-
-	if (result < 0) {
-		printf("log bind error %s\n", strerror(errno));
+	/* try to bind on D/E channel first, fallback to D channel on error */
+	result = -1;
+	channel = 1;
+	while ((result < 0) && (channel >= 0)) {
+		log_addr.channel = (unsigned char)channel;
+		result = bind(log_socket, (struct sockaddr *) &log_addr,
+			sizeof(log_addr));
+		printf("log bind ch(%i) return %d\n", log_addr.channel, result);
+		if (result < 0) {
+			printf("log bind error %s\n", strerror(errno));
+			channel--;
+		}
 	}
-	
+	dch_echo = (log_addr.channel == 1);
+
 	opt = 1;
 	result = setsockopt(log_socket, SOL_MISDN, MISDN_TIME_STAMP, &opt, sizeof(opt));
-	
 	if (result < 0) {
 		printf("log  setsockopt error %s\n", strerror(errno));
 	}
-	
+
 	if (strlen(wfilename)) {
 		wfile = fopen(wfilename, "w");
 		if (wfile) {
 			fprintf(wfile, "EyeSDN");
 			fflush(wfile);
-		} else 
+		} else
 			printf("cannot open wireshark dump file(%s)\n", wfilename);
 	}
 
@@ -290,7 +326,7 @@ char *argv[];
 				cts.tv.tv_usec = 0;
 			}
 			if (wfile && (result > MISDN_HEADER_LEN))
-				write_wfile(wfile, buffer, result, &cts.tv, di.protocol);	
+				write_wfile(wfile, buffer, result, &cts.tv, di.protocol);
 			printf(" received %3d bytes prim = %04x id=%08x",
 				result, hh->prim, hh->id);
 			if (result > MISDN_HEADER_LEN)
