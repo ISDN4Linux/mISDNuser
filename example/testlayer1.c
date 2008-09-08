@@ -669,15 +669,6 @@ int main_data_loop(devinfo_t *di)
 							rx_buf + MISDN_HEADER_LEN);
 
 					di->ch[ch_idx].rx.pkt_cnt++;
-					if (di->ch[ch_idx].hdlc)
-						di->ch[ch_idx].tx_ack++;
-					else {
-						di->ch[ch_idx].transp_rx += ret;
-						if (di->ch[ch_idx].transp_rx >= di->ch[ch_idx].tx_size) {
-							di->ch[ch_idx].transp_rx = 0;
-							di->ch[ch_idx].tx_ack++;
-						}
-					}
 
 					/* line rate means 2 bytes crc
 					 * and 2 bytes HDLC flags overhead each packet
@@ -694,6 +685,8 @@ int main_data_loop(devinfo_t *di)
 
 					if (rx_error)
 						di->ch[ch_idx].rx.err_pkt++;
+				} else if (hhrx->prim == PH_DATA_CNF) {
+					di->ch[ch_idx].tx_ack++;
 				} else {
 					if (debug>2)
 						fprintf(stdout, "<-- %s - unhandled prim 0x%x\n",
@@ -738,11 +731,7 @@ int main_data_loop(devinfo_t *di)
 						// resurrect data pipe
 						di->ch[ch_idx].seq_num++;
 						di->ch[ch_idx].res_cnt++;
-						if (di->ch[ch_idx].hdlc)
-							di->ch[ch_idx].tx_ack += 2;
-						else
-							di->ch[ch_idx].tx_ack++;
-
+						di->ch[ch_idx].tx_ack = 1;
 						di->ch[ch_idx].idle_cnt = 0;
 					}
 				} else
@@ -848,9 +837,7 @@ int main(int argc, char *argv[])
 				mISDN.ch[ch_idx].tx_size = CHAN_MAX_PKT_SZ[ch_idx];
 
 			mISDN.ch[ch_idx].hdlc = (!(((ch_idx == CHAN_B1) || (ch_idx == CHAN_B2)) && btrans));
-			mISDN.ch[ch_idx].tx_ack = 2;
-			if (mISDN.ch[ch_idx].hdlc)
-				mISDN.ch[ch_idx].tx_ack++;
+			mISDN.ch[ch_idx].tx_ack = 1;
 
 			fprintf (stdout, "chan %s stream enabled with packet sz %d bytes\n",
 				 CHAN_NAMES[ch_idx], di->ch[ch_idx].tx_size);
