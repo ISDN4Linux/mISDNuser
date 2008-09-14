@@ -36,7 +36,7 @@ endif
 
 export CFLAGS
 
-SUBDIRS := lib bridge tools example
+SUBDIRS := lib bridge tools example l1oip
 
 
 all:
