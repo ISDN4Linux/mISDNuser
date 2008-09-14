@@ -398,8 +398,8 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 		FsmEvent(fi, EV_RELEASE_REQ, NULL);
 	} else {
 		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
-		l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, l2i->l2addr.tei, NULL);
 	}
+	l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, l2i->l2addr.tei, NULL);
 }
 
 static void
@@ -421,8 +421,8 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 		FsmEvent(fi, EV_RELEASE_REQ, NULL);
 	} else {
 		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
-		l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, l2i->l2addr.tei, NULL);
 	}
+	l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, l2i->l2addr.tei, NULL);
 }
 
 static void

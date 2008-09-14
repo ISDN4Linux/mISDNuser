@@ -451,7 +451,7 @@ struct mISDNport *mISDN_port_open(int port, int nt_mode, int hdlc)
 		fprintf(stderr, "Found no card. Please be sure to load card drivers.\n");
 		return(NULL);
 	}
-	if (port<0)
+	if (port < 0)
 	{
 		fprintf(stderr, "Port number cannot be negative\n");
 		return(NULL);
@@ -460,7 +460,7 @@ struct mISDNport *mISDN_port_open(int port, int nt_mode, int hdlc)
 	ret = ioctl(mISDNsocket, IMGETDEVINFO, &devinfo);
 	if (ret < 0)
 	{
-		fprintf(stderr, "Cannot get device information for port %d. (ioctl IMGETDEVINFO failed ret=%d)\n", i, ret);
+		fprintf(stderr, "Cannot get device information for port %d. (ioctl IMGETDEVINFO failed ret=%d)\n", port, ret);
 		return(NULL);
 	}
 	/* output the port info */
@@ -505,7 +505,7 @@ struct mISDNport *mISDN_port_open(int port, int nt_mode, int hdlc)
 	}
 	if (pots && !bri && !pri)
 	{
-		fprintf(stderr, "Port %d supports POTS, LCR does not!\n", port);
+		fprintf(stderr, "Port %d supports POTS, we can't!\n", port);
 		return(NULL);
 	}
 	if (!bri && !pri)
