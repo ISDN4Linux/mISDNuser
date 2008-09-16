@@ -203,7 +203,7 @@ int setup_bchannel(devinfo_t *di) {
 	}
 
 	addr.family = AF_ISDN;
-	addr.dev = di->cardnr - 1;
+	addr.dev = di->cardnr;
 	addr.channel = di->used_bchannel;
 
 	ret = bind(di->bchan, (struct sockaddr *) &addr, sizeof(addr));
@@ -1162,8 +1162,8 @@ int do_setup(devinfo_t *di) {
 	prop = 0;
 	if (VerifyOn > 8)
 		fprintf(stdout, "open_layer3(%d, %x, %x, %p, %p)\n",
-			di->cardnr - 1, protocol, prop , do_dchannel, di);
-	di->layer3 = open_layer3(di->cardnr - 1, protocol, prop , do_dchannel, di);
+			di->cardnr, protocol, prop , do_dchannel, di);
+	di->layer3 = open_layer3(di->cardnr, protocol, prop , do_dchannel, di);
 	if (VerifyOn > 8)
 		fprintf(stdout, "done\n");
 	if (!di->layer3) {
@@ -1231,7 +1231,7 @@ char *argv[];
 	fprintf(stderr,"TestmISDN 1.0\n");
 	strcpy(FileName, "test_file");
 	memset(&mISDN, 0, sizeof(mISDN));
-	mISDN.cardnr = 1;
+	mISDN.cardnr = 0;
 	strcpy(mISDN.msn, "123");
 	if (argc<1) {
 		fprintf(stderr,"Error: Not enough arguments please check\n");
