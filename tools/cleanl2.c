@@ -60,7 +60,7 @@ int argc;
 char *argv[];
 {
 	int aidx=1;
-	int cardnr = 1;
+	int cardnr = 0;
 	int sock;
 	struct sockaddr_mISDN  addr;
 	int result;
@@ -144,7 +144,7 @@ char *argv[];
 	}
 
 	addr.family = AF_ISDN;
-	addr.dev = cardnr - 1;
+	addr.dev = cardnr;
 	addr.channel = 0;
 	addr.sapi = 0;
 	addr.tei = 127;

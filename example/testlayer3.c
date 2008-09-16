@@ -53,7 +53,7 @@ char *pname;
 	fprintf(stderr,"\n     Valid options are:\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr,"  -?              Usage ; printout this information\n");
-	fprintf(stderr,"  -c<n>           use card number n (default 1)\n"); 
+	fprintf(stderr,"  -c<n>           use card number n (default 0)\n"); 
 	fprintf(stderr,"  -F<n>           use function n (default 0)\n"); 
 	fprintf(stderr,"                    0 send and recive voice\n"); 
 	fprintf(stderr,"                    1 send touchtones\n"); 

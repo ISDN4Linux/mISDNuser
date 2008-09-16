@@ -82,7 +82,7 @@ void usage(void)
 {
 	printf("\nvalid options are:\n");
 	printf("\n");
-	printf("  --card=<n>         use card number n (default 1)\n");
+	printf("  --card=<n>         use card number n (default 0)\n");
 	printf("  --d                enable D channel stream with <n> packet sz\n");
 	printf("  --b1, --b1=<n>     enable B channel stream with <n> packet sz\n");
 	printf("  --b2, --b2=<n>     enable B channel stream with <n> packet sz\n");
@@ -246,7 +246,7 @@ int setup_bchannel(devinfo_t *di, unsigned char bch) {
 	}
 
 	di->laddr[bch].family = AF_ISDN;
-	di->laddr[bch].dev = di->cardnr - 1;
+	di->laddr[bch].dev = di->cardnr;
 	di->laddr[bch].channel = bch + 1;
 
 	ret = bind(di->layerid[bch], (struct sockaddr *) &di->laddr[bch], sizeof(di->laddr[bch]));
@@ -347,13 +347,13 @@ int do_setup(devinfo_t *di)
 
 	if (debug>1)
 		fprintf(stdout, "%d devices found\n", cnt);
-	if (cnt < di->cardnr) {
+	if (cnt < di->cardnr+1) {
 		fprintf(stderr, "cannot config card nr %d only %d cards\n",
 			di->cardnr, cnt);
 		return 4;
 	}
 
-	devinfo.id = di->cardnr - 1;
+	devinfo.id = di->cardnr;
 	ret = ioctl(sk, IMGETDEVINFO, &devinfo);
 	if (ret < 0) {
 		fprintf(stdout, "ioctl error %s\n", strerror(errno));
@@ -386,7 +386,7 @@ int do_setup(devinfo_t *di)
 	}
 
 	di->laddr[CHAN_D].family = AF_ISDN;
-	di->laddr[CHAN_D].dev = di->cardnr - 1;
+	di->laddr[CHAN_D].dev = di->cardnr;
 	di->laddr[CHAN_D].channel = 0;
 	ret = bind(di->layerid[CHAN_D], (struct sockaddr *) &di->laddr[CHAN_D], sizeof(di->laddr[CHAN_D]));
 
@@ -769,7 +769,7 @@ int main(int argc, char *argv[])
 
 	di = &mISDN;
 	memset(&mISDN, 0, sizeof(mISDN));
-	mISDN.cardnr = 1;
+	mISDN.cardnr = 0;
 
 	for (;;) {
 		int option_index = 0;
