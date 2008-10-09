@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
 {
 	int ret;
 	int i, ii;
-	int useable, nt, te, pri, bri, pots;
+	int useable, nt, te, pri, bri, pots, s0;
 	struct mISDN_devinfo devinfo;
 	int sock;
 
@@ -51,12 +51,13 @@ int main(int argc, char *argv[])
 	{
 		printf("Found no card. Please be sure to load card drivers.\n");
 		goto done;
-	}
+	} else 
+		printf("Found %i port%s\n", ii, (ii>1)?"s":"");
 
 	/* loop the number of cards and get their info */
 	while(ii && i <= MAX_DEVICE_ID)
 	{
-		nt = te = bri = pri = pots = 0;
+		nt = te = bri = pri = pots = s0 = 0;
 		useable = 0;
 
 		devinfo.id = i;
@@ -68,16 +69,18 @@ int main(int argc, char *argv[])
 		}
 
 		/* output the port info */
-		printf("Port %2d name='%s': ", i, devinfo.name);
+		printf("  Port %2d: '%s': ", i, devinfo.name);
 		if (devinfo.Dprotocols & (1 << ISDN_P_TE_S0))
 		{
 			bri = 1;
 			te = 1;
+			s0 = 1;
 		}
 		if (devinfo.Dprotocols & (1 << ISDN_P_NT_S0))
 		{
 			bri = 1;
 			nt = 1;
+			s0 = 1;
 		}
 		if (devinfo.Dprotocols & (1 << ISDN_P_TE_E1))
 		{
@@ -87,6 +90,16 @@ int main(int argc, char *argv[])
 		if (devinfo.Dprotocols & (1 << ISDN_P_NT_E1))
 		{
 			pri = 1;
+			nt = 1;
+		}
+		if (devinfo.Dprotocols & (1 << ISDN_P_TE_UP0))
+		{
+			bri = 1;
+			te = 1;
+		}
+		if (devinfo.Dprotocols & (1 << ISDN_P_NT_UP0))
+		{
+			bri = 1;
 			nt = 1;
 		}
 #ifdef ISDN_P_FXS
@@ -107,23 +120,26 @@ int main(int argc, char *argv[])
 			useable = 1;
 
 		if (te && nt && bri)
-			printf("TE/NT-mode BRI S/T (for phone lines & phones)");
+			printf("\tTE/NT-mode BRI %s (for phone lines & phones)",
+				(s0) ? "S/T" : "UP0");
 		if (te && !nt && bri)
-			printf("TE-mode    BRI S/T (for phone lines)");
+			printf("\tTE-mode    BRI %s (for phone lines)",
+				(s0) ? "S/T" : "UP0");
 		if (nt && !te && bri)
-			printf("NT-mode    BRI S/T (for phones)");
+			printf("\tNT-mode    BRI %s (for phones)",
+				(s0) ? "S/T" : "UP0");
 		if (te && nt && pri)
-			printf("TE/NT-mode PRI E1  (for phone lines & E1 devices)");
+			printf("\tTE/NT-mode PRI E1  (for phone lines & E1 devices)");
 		if (te && !nt && pri)
-			printf("TE-mode    PRI E1  (for phone lines)");
+			printf("\tTE-mode    PRI E1  (for phone lines)");
 		if (nt && !te && pri)
-			printf("NT-mode    PRI E1  (for E1 devices)");
+			printf("\tNT-mode    PRI E1  (for E1 devices)");
 		if (te && nt && pots)
-			printf("FXS/FXO    POTS    (for analog lines & phones)");
+			printf("\tFXS/FXO    POTS    (for analog lines & phones)");
 		if (te && !nt && pots)
-			printf("FXS        POTS    (for analog lines)");
+			printf("\tFXS        POTS    (for analog lines)");
 		if (nt && !te && pots)
-			printf("FXO        POTS    (for analog phones)");
+			printf("\tFXO        POTS    (for analog phones)");
 		if (pots)
 		{
 			useable = 0;
@@ -133,14 +149,13 @@ int main(int argc, char *argv[])
 		{
 			printf("unsupported interface protocol bits 0x%016x", devinfo.Dprotocols);
 		}
-		printf("\n");
-
-		printf("  - %d B-channels\n", devinfo.nrbchan);
+		printf("\n\t\t\t\t%d B-channels\n", devinfo.nrbchan);
 
 		if (!useable)
 			printf(" * Port NOT useable for LCR\n");
 
-		printf("--------\n");
+		if (ii > 1)
+			printf("  --------\n");
 		ii--;
 
 	next_dev:
