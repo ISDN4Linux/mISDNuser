@@ -527,10 +527,27 @@ void mainWindow::renewDeviceWidgets(void) {
 	}
 }
 
+void mainWindow::showMISDNversion(void) {
+	struct mISDNversion v;
+	v = misdn.getVersion();
+		debugOut(logText, tr("mISDN kernel driver v%1.%2.%4\n")
+			.arg(v.major)
+			.arg(v.minor)
+			.arg(v.release));
+}
+
 void mainWindow::updateDeviceList(void) {
 	int i, j;
 	QList <struct mISDN_devinfo> tmpDevList;
 	int newdev = 0, oldnumdevs = misdn.getLastNumDevs();
+
+	if (!misdn.isCoreConnected()) {
+		misdn.connectCore();
+		if (!misdn.isCoreConnected())
+			return;
+		else
+			showMISDNversion();
+	}
 
 	i = misdn.getNumDevices();
 	if (i < 0) {
@@ -600,7 +617,7 @@ void mainWindow::binaryOut(QTextEdit * textEdit, QByteArray & data, int offset) 
 void mainWindow::about() {
 	QMessageBox::information(this,
 		tr("About qmisdnwatch"),
-		tr("<b>qmisdnwatch</b> <b>v0.0.1</b><br>m.bachem@gmx.de<br>http://www.misdn.org/index.php/Qmisdnwatch"),
+		tr("<b>qmisdnwatch</b> <b>v0.0.2</b><br>m.bachem@gmx.de<br>http://www.misdn.org/index.php/Qmisdnwatch"),
 		QMessageBox::Ok);
 }
 
@@ -650,12 +667,10 @@ mainWindow::mainWindow( QMainWindow *parent,
 	setCentralWidget(centralwidget);
 	setWindowTitle(QString ("qmisdnwatch"));
 
-	struct mISDNversion v;
-	v = misdn.getVersion();
-	debugOut(logText, tr("mISDN kernel driver v%1.%2.%4\n")
-			.arg(v.major)
-			.arg(v.minor)
-			.arg(v.release));
+	if (misdn.isCoreConnected())
+		showMISDNversion();
+	else
+		debugOut(logText, "connecting mISDN core socket failed\n");
 
 	updateDeviceList();
 	deviceListTimer->start(1000);

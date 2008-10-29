@@ -22,23 +22,35 @@
 
 #include "misdn.h"
 
+#include <QApplication>
 #define AF_COMPATIBILITY_FUNC
 #define MISDN_OLD_AF_COMPATIBILITY
 #include <mISDNuser/compat_af_isdn.h>
 
 
+
 mISDN::mISDN(void) {
 	numdevices = -1;
-	init_af_isdn();
-	sock = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
-	if (sock >= 0)
-		queryVersion();
+	memset(&kver, 0, sizeof(struct mISDNversion));
+	connectCore();
 }
 
 mISDN::~mISDN(void) {
-	if (sock >= 0) {
+	if (isCoreConnected())
 		close(sock);
-	}
+}
+
+int mISDN::connectCore(void) {
+	init_af_isdn();
+	sock = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
+	qDebug("mISDN::connectCore %d", sock);
+	if (isCoreConnected())
+		queryVersion();
+	return sock;
+}
+
+bool mISDN::isCoreConnected(void) {
+	return(sock >= 0);
 }
 
 struct mISDNversion mISDN::getVersion(void) {
@@ -48,7 +60,7 @@ struct mISDNversion mISDN::getVersion(void) {
 void mISDN::queryVersion(void) {
 	struct mISDNversion v;
 	int ret;
-	if (sock >= 0) {
+	if (isCoreConnected()) {
 		ret = ioctl(sock, IMGETVERSION, &v);
 		if (ret >= 0)
 			memcpy(&kver, &v, sizeof(struct mISDNversion));
@@ -57,7 +69,7 @@ void mISDN::queryVersion(void) {
 
 int mISDN::getNumDevices(void) {
 	int cnt, ret = 0;
-	if (sock >= 0) {
+	if (isCoreConnected()) {
 		ret = ioctl(sock, IMGETCOUNT, &cnt);
 		if (!ret) {
 			numdevices = cnt;
@@ -69,7 +81,7 @@ int mISDN::getNumDevices(void) {
 
 int mISDN::getDeviceInfo(struct mISDN_devinfo *devinfo, int id) {
 	int ret;
-	if (sock >= 0) {
+	if (isCoreConnected()) {
 		devinfo->id = id;
 		try {
 			ret = ioctl(sock, IMGETDEVINFO, devinfo);
@@ -93,6 +105,9 @@ int mISDN::openl1Log(int id, int protocol, int * log_socket,
 		     struct sockaddr_mISDN * log_addr)
 {
 	int ret, channel;
+	if (!(isCoreConnected()))
+		return -2;
+
 	if ((*log_socket = socket(PF_ISDN, SOCK_DGRAM, protocol)) >= 0)
 	{
 		log_addr->family = AF_ISDN;
@@ -123,7 +138,7 @@ int mISDN::getLastNumDevs(void) {
 int mISDN::renameLayer1(unsigned int id, char * name) {
 	struct mISDN_devrename devrename;
 	int ret;
-	if (sock >= 0) {
+	if (isCoreConnected()) {
 		devrename.id = id;
 		strncpy(devrename.name, name, MISDN_MAX_IDLEN);
 		ret = ioctl(sock, IMSETDEVNAME, &devrename);
@@ -134,7 +149,7 @@ int mISDN::renameLayer1(unsigned int id, char * name) {
 
 int mISDN::cleanl2(unsigned int id) {
 	int ret;
-	if (sock >= 0) {
+	if (isCoreConnected()) {
 		struct mISDN_devinfo devinfo;
 		if (getDeviceInfo(&devinfo, id) >= 0) {
 			if (!devinfo.protocol)

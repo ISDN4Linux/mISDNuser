@@ -71,6 +71,8 @@ class mISDN {
 	public:
 		mISDN(void);
 		~mISDN(void);
+		int connectCore(void);
+		bool isCoreConnected(void);
 		int getNumDevices(void);
 		int getDeviceInfo(struct mISDN_devinfo *devinfo, int id);
 		int getLastNumDevs(void);
@@ -85,6 +87,7 @@ class mISDN {
 		int cleanl2(unsigned int id);
 
 	private:
+
 		void queryVersion(void);
 		int numdevices; // devicesNumber
 		int sock; // base socket handles

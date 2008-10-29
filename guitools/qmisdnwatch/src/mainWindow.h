@@ -70,6 +70,7 @@ class mainWindow : public QMainWindow {
 		QTextEdit * logText;
 		mISDN misdn;
 
+		void showMISDNversion(void);
 		void renewDeviceWidgets(void);
 		void removeVanishedDevices(void);
 		void createNewDeviceTab(struct mISDN_devinfo *devinfo);
