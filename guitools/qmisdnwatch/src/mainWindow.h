@@ -1,4 +1,4 @@
-/* $Id: mainWindow.h 7 2008-10-28 22:06:36Z daxtar $
+/* $Id: mainWindow.h 11 2008-10-31 18:35:50Z daxtar $
  * (c) 2008 Martin Bachem, m.bachem@gmx.de
  *
  * This file is part of qmisdnwatch
@@ -32,6 +32,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QThread>
+#include <QCloseEvent>
 #include <mISDNuser/mISDNif.h>
 #include "Ql1logThread.h"
 #include "extraWidgets.h"
@@ -42,15 +43,29 @@ struct isdnDeviceStuff {
 	unsigned int id;
 	QWidget * tab; /* tab in TabWidget */
 	int tabId; /* tabID in TabWidget */
-	QLabel * mainLabel;
+	QPixmap * bulletRed;
+	QPixmap * bulletGreen;
+	QPixmap * bulletGray;
+	QPixmap * bulletYellow;
+	QLabel * labelDchText;
+	QLabel * labelDchIcon;
+	QLabel * labelBchText;
+	QLabel * labelBchIcon[32]; /* TODO : malloc! */
 	QTreeWidgetItem * treeHead;
 	QTextEdit * log;
-	idButton * buttonRename;
-	idButton * buttonCleanL2;
 	idButton * buttonLogL1;
 	idButton * buttonSaveLog;
-	Ql1logThread * l1log;
+	idButton * buttonActionMenu;
+	QAction * actionRename;
+	Ql1logThread * l1Thread;
+	QMenu * actionPopup;
+	QAction * menuConnectL1;
+	QAction * menuDisconnectL1;
 	QByteArray eyeSDN;
+	bool captureL1;
+	bool activated;
+	bool activationPending;
+	int captureFrameCnt;
 };
 
 class mainWindow : public QMainWindow {
@@ -68,6 +83,12 @@ class mainWindow : public QMainWindow {
 		QTreeWidget * devtree;
 		QTimer * deviceListTimer;
 		QTextEdit * logText;
+		QAction * optionAutoConnectTE;
+		QAction * optionAutoConnectNT;
+		QAction * optionAutoConnectUnused;
+		QAction * optionAutoActivateTE;
+		QAction * optionAutoActivateNT;
+		QAction * optionPollInformation;
 		mISDN misdn;
 
 		void showMISDNversion(void);
@@ -76,20 +97,35 @@ class mainWindow : public QMainWindow {
 		void createNewDeviceTab(struct mISDN_devinfo *devinfo);
 		void debugOut(QTextEdit * textEdit, QString text);
 		void binaryOut(QTextEdit * textEdit, QByteArray & data, int offset);
+		void eyeSDNappend(QByteArray & target, QByteArray & data, int offset);
+
 		struct isdnDeviceStuff * getStuffbyId(unsigned int id);
 		struct mISDN_devinfo * getDevInfoById(unsigned int id);
-		void eyeSDNappend(QByteArray & target, QByteArray & data, int offset);
+		int getDevIdByTabId(int tabId);
 
 	private slots:
 		void updateDeviceList(void);
 		int renameDevice(unsigned int id);
 		int cleanL2(unsigned int id);
+		int actionCleanL2(void);
+		int actionRenameL1(void);
+		void actionConnectL1(void);
+		bool actionActivateReq(void);
+		bool sendActivateReq(unsigned int id);
+		bool actionInformationReq(void);
+		void actionDisconnectL1(void);
 		int switchL1Logging(unsigned int id);
 		int saveL1Log(unsigned int id);
+		int showActionMenu(unsigned int id);
 		void logRcvData(unsigned int id, QByteArray data, struct timeval tv);
-		int logFinished(unsigned int id);
+		void l1Connected(unsigned int id);
+		void l1Disonnected(unsigned int id);
 		void about();
 		void aboutQt();
+
+	protected:
+		void closeEvent( QCloseEvent* );
+
 };
 
 #endif

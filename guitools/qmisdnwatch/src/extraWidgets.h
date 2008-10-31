@@ -1,4 +1,4 @@
-/* $Id: extraWidgets.h 4 2008-10-28 00:04:24Z daxtar $
+/* $Id: extraWidgets.h 9 2008-10-30 20:44:26Z daxtar $
  * (c) 2008 Martin Bachem, m.bachem@gmx.de
  *
  * This file is part of qmisdnwatch
@@ -24,18 +24,37 @@
 #define _EXTRA_WIDGETS_H_
 
 #include <QPushButton>
+#include <QAction>
 
-/* QBushbutton  sending mISDN device ID at clicked() signal */
+/* QBushbutton sending mISDN device ID at clicked() signal */
 class idButton : public QPushButton {
 	Q_OBJECT
 	public:
-		idButton( const QString& text, unsigned int id, QWidget* parent = NULL );
+		idButton(const QString& text, QWidget* parent = NULL,
+			  unsigned int id=0);
 	private:
 		unsigned int devId;
 	public slots:
 		void click();
 	signals:
 		void clicked(unsigned int id);
+};
+
+
+/* QAction sending mISDN device ID at clicked() signal */
+class idAction : public QAction {
+	Q_OBJECT
+	public:
+		idAction(const QString & text, QObject * parent,
+			 unsigned int id);
+		idAction(const QIcon & icon, const QString & text,
+			 QObject * parent, unsigned int id);
+	private:
+		unsigned int devId;
+	public slots:
+		void trigger();
+	signals:
+		void triggered(unsigned int id);
 };
 
 #endif // _EXTRA_WIDGETS_H_

@@ -1,4 +1,4 @@
-/* $Id: misdn.cpp 4 2008-10-28 00:04:24Z daxtar $
+/* $Id: misdn.cpp 11 2008-10-31 18:35:50Z daxtar $
  * (c) 2008 Martin Bachem, m.bachem@gmx.de
  *
  * This file is part of qmisdnwatch
@@ -98,7 +98,7 @@ int mISDN::getDeviceInfo(struct mISDN_devinfo *devinfo, int id) {
 /*
  * returns
  *   <0 on error
- *   =0 socket open with no E-Channel logfing available
+ *   =0 socket open with no E-Channel logging available
  *   =1 socket open with E-Channel logging enabled
  */
 int mISDN::openl1Log(int id, int protocol, int * log_socket,

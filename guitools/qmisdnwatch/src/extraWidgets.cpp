@@ -1,4 +1,4 @@
-/* $Id: extraWidgets.cpp 4 2008-10-28 00:04:24Z daxtar $
+/* $Id: extraWidgets.cpp 9 2008-10-30 20:44:26Z daxtar $
  * (c) 2008 Martin Bachem, m.bachem@gmx.de
  *
  * This file is part of qmisdnwatch
@@ -25,11 +25,42 @@
 #include <QPushButton>
 #include "extraWidgets.h"
 
-idButton::idButton( const QString& text, unsigned int id, QWidget* parent )
+/*
+ * the Widgets below are childs of commmon Qt Widgets, but signal the mISDN
+ * device ID along with their main action trigger.
+ *
+ */
+
+
+/* idButton (QPushButton) */
+
+idButton::idButton( const QString& text, QWidget* parent,
+		    unsigned int id)
 		: QPushButton(text, parent), devId(id) {
 	connect(this, SIGNAL(clicked()), this, SLOT(click()));
 }
 
 void idButton::click() {
 	emit clicked(devId);
+}
+
+/******************************************************************************/
+
+
+/* idAction (QAction) */
+
+idAction::idAction(const QString & text, QObject * parent,
+		   unsigned int id)
+	: QAction(text, parent), devId(id) {
+	connect(this, SIGNAL(triggered()), this, SLOT(trigger()));
+}
+
+idAction::idAction(const QIcon & icon, const QString & text, QObject * parent,
+		   unsigned int id)
+	: QAction(icon, text, parent), devId(id) {
+	connect(this, SIGNAL(triggered()), this, SLOT(trigger()));
+}
+
+void idAction::trigger() {
+	emit triggered(devId);
 }

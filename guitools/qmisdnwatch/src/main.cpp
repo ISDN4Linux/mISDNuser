@@ -1,4 +1,4 @@
-/* $Id: main.cpp 4 2008-10-28 00:04:24Z daxtar $
+/* $Id: main.cpp 10 2008-10-31 12:58:01Z daxtar $
  * (c) 2008 Martin Bachem, m.bachem@gmx.de
  *
  * This file is part of qmisdnwatch
@@ -31,6 +31,10 @@ QDataStream &operator>>( QDataStream &in, timeval& ) { return in; }
 int main(int argc, char *argv[])  {
 	qRegisterMetaType<timeval>("timeval");
 	qRegisterMetaTypeStreamOperators<timeval>("timeval");
+
+	QCoreApplication::setOrganizationName("mISDN");
+	QCoreApplication::setOrganizationDomain("misdn.org");
+	QCoreApplication::setApplicationName("qmisdnwatch");
 
 	QApplication app(argc, argv);
 	mainWindow* window = new mainWindow;

@@ -1,4 +1,4 @@
-/* $Id: misdn.h 6 2008-10-28 19:50:12Z daxtar $
+/* $Id: misdn.h 11 2008-10-31 18:35:50Z daxtar $
  * (c) 2008 Martin Bachem, m.bachem@gmx.de
  *
  * This file is part of qmisdnwatch
@@ -87,7 +87,6 @@ class mISDN {
 		int cleanl2(unsigned int id);
 
 	private:
-
 		void queryVersion(void);
 		int numdevices; // devicesNumber
 		int sock; // base socket handles

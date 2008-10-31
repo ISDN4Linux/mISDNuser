@@ -1,4 +1,4 @@
-/* $Id: Ql1logThread.h 4 2008-10-28 00:04:24Z daxtar $
+/* $Id: Ql1logThread.h 10 2008-10-31 12:58:01Z daxtar $
  * (c) 2008 Martin Bachem, m.bachem@gmx.de
  *
  * This file is part of qmisdnwatch
@@ -33,14 +33,20 @@ class Ql1logThread : public QThread
 	Q_OBJECT
 	private:
 		int devId;
+		int socket;
+		struct sockaddr_mISDN addr;
 		mISDN & misdn;
 		int protocol;
-		int log_socket;
 		int dch_echo;
-		struct sockaddr_mISDN log_addr;
 
 	public:
 		Ql1logThread(int id, mISDN & m);
+		~Ql1logThread();
+		bool connectLayer1(struct mISDN_devinfo *devInfo);
+		void disconnectLayer1(void);
+		bool isConnected(void);
+		bool sendActivateReq(void);
+		bool sendInformationReq(void);
 		void setProtocol(int p);
 		int getProtocol(void);
 		int hasEcho(void);
@@ -53,7 +59,10 @@ class Ql1logThread : public QThread
 
 	signals:
 		void finished(unsigned int id);
+		void l1Connected(unsigned int id);
+		void l1Disonnected(unsigned int id);
 		void rcvData(unsigned int id, QByteArray data, struct timeval);
+		
 };
 
 

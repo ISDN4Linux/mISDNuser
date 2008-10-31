@@ -1,0 +1,8 @@
+<!DOCTYPE RCC><RCC version="1.0">
+	<qresource>
+		<file alias="gray.png">16x16-bullet-gray.png</file>
+		<file alias="green.png">16x16-bullet-green.png</file>
+		<file alias="red.png">16x16-bullet-red.png</file>
+		<file alias="yellow.png">16x16-bullet-yellow.png</file>
+	</qresource>
+</RCC>
