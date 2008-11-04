@@ -24,7 +24,7 @@
 int main(int argc, char *argv[])
 {
 	int ret;
-	int i, ii;
+	int i, ii, c, start_c;
 	int useable, nt, te, pri, bri, pots, s0;
 	struct mISDN_devinfo devinfo;
 	int sock;
@@ -149,7 +149,29 @@ int main(int argc, char *argv[])
 		{
 			printf("unsupported interface protocol bits 0x%016x", devinfo.Dprotocols);
 		}
-		printf("\n\t\t\t\t%d B-channels\n", devinfo.nrbchan);
+		printf("\n\t\t\t\t%d B-channels:", devinfo.nrbchan);
+		c = 0;
+		start_c = -1;
+		while(c <= MISDN_MAX_CHANNEL + 1)
+		{
+			if (c <= MISDN_MAX_CHANNEL && test_channelmap(c, devinfo.channelmap))
+			{
+				if (start_c < 0)
+					start_c = c;
+			} else
+			{
+				if (start_c >= 0)
+				{
+					if (c-1 == start_c)
+						printf(" %d", start_c);
+					else
+						printf(" %d-%d", start_c, c-1);
+					start_c = -1;
+				}
+			}
+			c++;
+		}
+		printf("\n");
 
 		if (!useable)
 			printf(" * Port NOT useable for LCR\n");
