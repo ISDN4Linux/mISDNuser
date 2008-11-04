@@ -248,7 +248,7 @@ assembleQ931(l3_process_t *pc, struct l3_msg *l3m)
 			while (0 <= (eidx = __get_next_extra(l3m, eidx, ie))) {
 				*msg_put(mb, 1) = l3m->extra[eidx].ie;
 				l = *l3m->extra[eidx].val + 1;
-				memcpy(msg_put(mb, l), v_ie[i], l);
+				memcpy(msg_put(mb, l), l3m->extra[eidx].val, l);
 			}
 		}
 	}
