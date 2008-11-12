@@ -28,6 +28,7 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -42,6 +43,7 @@ static int arg_daemon = 0;
 static int arg_verbose = 0;
 static int arg_udp_port = 50501;
 static int arg_dontenable = 0;
+static int arg_size = 0;
 static char *arg_ports = NULL;
 static char *arg_dfile = NULL;
 static char *arg_lfile = NULL;
@@ -53,26 +55,75 @@ static char usage[] =
 "  -p <mISDN-port>,..  mISDN ports to care for, default: care for all\n"
 "  -f <prefix>         enable dumpfile mode, use this prefix for filenames\n"
 "  -l <prefix>         enable logfile mode, use this prefix for filenames\n"
+"  -s <size in kB>     max number of kB consumed by dump and logfiles combined\n"
 "  -b <UDP-port>       UDP port to bind to, default: 50501\n"
 "  -d                  daemon mode\n"
 "  -n                  do not enable mISDN_debugtool kernel module\n"
 "  -v                  print packets to stdout\n"
 "  -h                  print this help text and exit\n";
 
+struct port {
+	int pnum;
+
+	char dfn[256];
+	FILE *df;
+	int d_unclean_bytes;
+	
+	char lfn[256];
+	FILE *lf;
+
+	struct port *next;
+};
+
+struct port *ports = NULL;
+
 static char *self;
 
 static int disable_kernel_debugtool = 0;
 
+static int max_bytes = 0;
+
+static void kernel_debugtool_disable (void);
+
+static void clean_exit (int code)
+{
+	struct port* p;
+	struct stat st;
+
+	for (p = ports; p; p = p->next) {
+		if (p->df) {
+			fflush(p->df);
+			fclose(p->df);
+			if (p->d_unclean_bytes) {
+				if (!stat(p->dfn, &st)) {
+//					printf("truncating file: %s from %ld to %ld bytes\n", p->dfn,
+//							st.st_size, st.st_size - p->d_unclean_bytes);
+					truncate(p->dfn, st.st_size - p->d_unclean_bytes);
+				} else
+					printf("failed to truncate file, so it may be unusable: %s\n", p->dfn);
+			}
+		}
+		if (p->lf) {
+			fflush(p->lf);
+			fclose(p->lf);
+		}
+	}
+
+	kernel_debugtool_disable();
+
+	exit(code);
+}
+
 static void fail (char *err)
 {
 	fprintf(stderr, "ERROR: %s\n", err);
-	exit(1);
+	clean_exit(1);
 }
 
 static void fail_perr (char *err)
 {
 	perror(err);
-	exit(1);
+	clean_exit(1);
 }
 
 /* file helper */
@@ -81,13 +132,27 @@ static void _init_file (FILE **file, char *fn)
 	*file = fopen(fn, "w");
 	if (!*file || ferror(*file)) {
 		fprintf(stderr, "ERROR: failed to open %s for writing!\n", fn);
-		exit(1);
+		clean_exit(1);
+	}
+}
+
+static void _consume_bytes (int bytes)
+{
+	if (!max_bytes)
+		// we have no limit
+		return;
+
+	max_bytes -= bytes;
+	if (max_bytes < 1) {
+		printf("Exiting (max size reached)...\n");
+		clean_exit(0);
 	}
 }
 
 static void init_dfile (FILE **file, char *fn)
 {
 	_init_file(file, fn);
+	_consume_bytes(6);
 	fprintf(*file, "EyeSDN");
 }
 
@@ -97,14 +162,6 @@ static void init_lfile (FILE **file, char *fn)
 }
 
 /* port filter */
-struct port {
-	int pnum;
-	FILE *df;
-	FILE *lf;
-	struct port *next;
-};
-struct port *ports = NULL;
-
 static inline struct port* _get_port (int pnum)
 {
 	struct port *p = ports;
@@ -119,7 +176,6 @@ static inline struct port* _get_port (int pnum)
 static struct port* new_port (int pnum)
 {
 	struct port *p;
-	char fn[256];
 
 	if ((p = _get_port(pnum)))
 		return p;
@@ -128,15 +184,15 @@ static struct port* new_port (int pnum)
 	if (!p)
 		fail_perr("calloc()");
 	if (arg_dfile) {
-		if (snprintf(fn, sizeof(fn), "%s-%d", arg_dfile, pnum) >= sizeof(fn))
+		if (snprintf(p->dfn, sizeof(p->dfn), "%s-%d", arg_dfile, pnum) >= sizeof(p->dfn))
 			fail("dumpfile prefix too long");
-		init_dfile(&p->df, fn);
+		init_dfile(&p->df, p->dfn);
 	}
 
 	if (arg_lfile) {
-		if (snprintf(fn, sizeof(fn), "%s-%d", arg_lfile, pnum) >= sizeof(fn))
+		if (snprintf(p->lfn, sizeof(p->lfn), "%s-%d", arg_lfile, pnum) >= sizeof(p->lfn))
 			fail("logfile prefix too long");
-		init_lfile(&p->lf, fn);
+		init_lfile(&p->lf, p->lfn);
 	}
 
 	p->pnum = pnum;
@@ -197,26 +253,32 @@ static char *typestr (unsigned char type)
 	return str[0];
 }
 
-static void write_esc (FILE *file, unsigned char *buf, int len)
+static int write_esc (FILE *file, unsigned char *buf, int len)
 {
     int i, byte;
+	int tmplen = 0;
+	unsigned char tmpbuf[2 * len];
     
     for (i = 0; i < len; ++i) {
 		byte = buf[i];
 		if (byte == 0xff || byte == 0xfe) {
-			fputc(0xfe, file);
+			tmpbuf[tmplen++] = 0xfe;
 			byte -= 2;
 		}
-		fputc(byte, file);
+		tmpbuf[tmplen++] = byte;
 	}
 
+	_consume_bytes(tmplen);
+	fwrite(tmpbuf, tmplen, 1, file);
 	if (ferror(file)) {
 		fprintf(stderr, "Error on writing to file!\nAborting...");
-		exit(1);
+		clean_exit(1);
 	}
+
+	return tmplen;
 }
 
-static void write_header (FILE *file, mISDN_dt_header_t *hdr)
+static int write_header (FILE *file, mISDN_dt_header_t *hdr)
 {
     unsigned char buf[12];
 	int usecs;
@@ -249,8 +311,10 @@ static void write_header (FILE *file, mISDN_dt_header_t *hdr)
 static void log_packet (FILE *file, struct sockaddr_in *sock_client, mISDN_dt_header_t *hdr, unsigned char *buf)
 {
 	int i;
+	int tmplen = 0;
+	unsigned char tmpbuf[256 + 3 * hdr->plength];
 
-	fprintf(file, "Received packet from %s:%d (vers:%d protocol:%s type:%s id:%08x plen:%d)\n%ld.%ld: ", 
+	tmplen = sprintf(tmpbuf, "Received packet from %s:%d (vers:%d protocol:%s type:%s id:%08x plen:%d)\n%ld.%ld: ", 
 		   inet_ntoa(sock_client->sin_addr),
 		   ntohs(sock_client->sin_port),
 		   hdr->version, hdr->stack_protocol & 0x10 ? "NT" : "TE",
@@ -264,16 +328,19 @@ static void log_packet (FILE *file, struct sockaddr_in *sock_client, mISDN_dt_he
 	case D_RX:
 	case D_TX:
 		for (i = 0; i < hdr->plength; ++i)
-			fprintf(file, "%.2hhx ", *(buf + i));
+			tmplen += sprintf(tmpbuf + tmplen, "%.2hhx ", *(buf + i));
 		break;
 	case NEWSTATE:
-		fprintf(file, "%u %s", *(unsigned int *)buf, buf + 4);
+		tmplen += sprintf(tmpbuf + tmplen, "%u %s", *(unsigned int *)buf, buf + 4);
 		break;
 	default:
 		break;
 	}
 	
-	fprintf(file, "\n\n");
+	tmplen += sprintf(tmpbuf + tmplen, "\n\n");
+	
+	_consume_bytes(tmplen + 1);
+	fwrite(tmpbuf, tmplen + 1, 1, file);
 }
 
 static inline void handle_packet (struct sockaddr_in *sock_client, mISDN_dt_header_t *hdr, unsigned char *buf)
@@ -292,9 +359,12 @@ static inline void handle_packet (struct sockaddr_in *sock_client, mISDN_dt_head
 	}
 
 	if (p->df && (hdr->type == D_RX || hdr->type == D_TX)) {
+		_consume_bytes(1);
 		fputc(0xff, p->df);
-		write_header(p->df, hdr);
+		p->d_unclean_bytes = 1;
+		p->d_unclean_bytes += write_header(p->df, hdr);
 		write_esc(p->df, buf, hdr->plength);
+		p->d_unclean_bytes = 0;
 		fflush(p->df);
 	}
 }
@@ -340,24 +410,9 @@ static void kernel_debugtool_disable (void)
 
 static void sighandler (int signo)
 {
-	struct port* p;
+	printf("Exiting (signal received)...\n");
 
-	printf("Exiting ...\n");
-
-	for (p = ports; p; p = p->next) {
-		if (p->df) {
-			fflush(p->df);
-			fclose(p->df);
-		}
-		if (p->lf) {
-			fflush(p->lf);
-			fclose(p->lf);
-		}
-	}
-
-	kernel_debugtool_disable();
-
-	exit(0);
+	clean_exit(0);
 }
 
 int main (int argc, char *argv[])
@@ -379,7 +434,7 @@ int main (int argc, char *argv[])
 	signal(SIGTERM, sighandler);
 
 	/* parse args */
-	while ((c = getopt(argc, argv, "p:f:l:b:dnvh")) != -1) {
+	while ((c = getopt(argc, argv, "p:f:l:s:b:dnvh")) != -1) {
 		noargs = 0;
 		switch (c) {
 		case 'p':
@@ -405,6 +460,11 @@ int main (int argc, char *argv[])
 				fprintf(stderr, "%s: argument given more than once -- l\n", self);
 				failed = 1;
 			}
+			break;
+		case 's':
+			if (!optarg || sscanf(optarg, "%d", &arg_size) != 1 || arg_size < 1)
+				fail("Invalid value for parameter -s");
+			max_bytes = arg_size * 1024;
 			break;
 		case 'b':
 			if (!optarg || sscanf(optarg, "%d", &arg_udp_port) != 1 || arg_udp_port < 1)
