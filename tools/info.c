@@ -21,6 +21,8 @@
 #define AF_COMPATIBILITY_FUNC
 #include <compat_af_isdn.h>
 
+char *spaces = "                ";
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -69,7 +71,12 @@ int main(int argc, char *argv[])
 		}
 
 		/* output the port info */
-		printf("  Port %2d: '%s': ", i, devinfo.name);
+		printf("  Port %2d '%s':", i, devinfo.name);
+		if (strlen(devinfo.name) <= strlen(spaces))
+			printf(spaces+strlen(devinfo.name));
+		else
+			printf("\n                             ");
+
 		if (devinfo.Dprotocols & (1 << ISDN_P_TE_S0))
 		{
 			bri = 1;
@@ -120,26 +127,26 @@ int main(int argc, char *argv[])
 			useable = 1;
 
 		if (te && nt && bri)
-			printf("\tTE/NT-mode BRI %s (for phone lines & phones)",
+			printf("TE/NT-mode BRI %s (for phone lines & phones)",
 				(s0) ? "S/T" : "UP0");
 		if (te && !nt && bri)
-			printf("\tTE-mode    BRI %s (for phone lines)",
+			printf("TE-mode    BRI %s (for phone lines)",
 				(s0) ? "S/T" : "UP0");
 		if (nt && !te && bri)
-			printf("\tNT-mode    BRI %s (for phones)",
+			printf("NT-mode    BRI %s (for phones)",
 				(s0) ? "S/T" : "UP0");
 		if (te && nt && pri)
-			printf("\tTE/NT-mode PRI E1  (for phone lines & E1 devices)");
+			printf("TE/NT-mode PRI E1  (for phone lines & E1 devices)");
 		if (te && !nt && pri)
-			printf("\tTE-mode    PRI E1  (for phone lines)");
+			printf("TE-mode    PRI E1  (for phone lines)");
 		if (nt && !te && pri)
-			printf("\tNT-mode    PRI E1  (for E1 devices)");
+			printf("NT-mode    PRI E1  (for E1 devices)");
 		if (te && nt && pots)
-			printf("\tFXS/FXO    POTS    (for analog lines & phones)");
+			printf("FXS/FXO    POTS    (for analog lines & phones)");
 		if (te && !nt && pots)
-			printf("\tFXS        POTS    (for analog lines)");
+			printf("FXS        POTS    (for analog lines)");
 		if (nt && !te && pots)
-			printf("\tFXO        POTS    (for analog phones)");
+			printf("FXO        POTS    (for analog phones)");
 		if (pots)
 		{
 			useable = 0;
@@ -149,7 +156,7 @@ int main(int argc, char *argv[])
 		{
 			printf("unsupported interface protocol bits 0x%016x", devinfo.Dprotocols);
 		}
-		printf("\n\t\t\t\t%d B-channels:", devinfo.nrbchan);
+		printf("\n                             %d B-channels:", devinfo.nrbchan);
 		c = 0;
 		start_c = -1;
 		while(c <= MISDN_MAX_CHANNEL + 1)
