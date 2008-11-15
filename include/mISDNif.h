@@ -291,6 +291,22 @@ struct mISDN_devrename {
 	char			name[MISDN_MAX_IDLEN];
 };
 
+struct ph_info_ch {
+	int32_t 		protocol;
+	int64_t			Flags;
+};
+
+struct ph_info_dch {
+	struct ph_info_ch	ch;
+	int16_t			state;
+	int16_t			num_bch;
+};
+
+struct ph_info {
+	struct ph_info_dch	dch;
+	struct ph_info_ch 	bch[];
+};
+
 /* timer device ioctl */
 #define IMADDTIMER	_IOR('I', 64, int)
 #define IMDELTIMER	_IOR('I', 65, int)
