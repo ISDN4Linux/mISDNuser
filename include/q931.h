@@ -60,6 +60,7 @@
 #define MT_RETRIEVE		0x31
 #define MT_RETRIEVE_ACKNOWLEDGE	0x33
 #define MT_RETRIEVE_REJECT	0x37
+#define MT_REGISTER		0x64
 
 
 /*

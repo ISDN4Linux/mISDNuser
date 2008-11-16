@@ -146,6 +146,7 @@ l3dss1_check_messagetype_validity(l3_process_t *pc, int mt)
 		case MT_RETRIEVE:
 		case MT_RETRIEVE_ACKNOWLEDGE:
 		case MT_RETRIEVE_REJECT:
+		case MT_REGISTER:
 		case MT_RESUME:
 		case MT_SUSPEND:
 		default:
@@ -620,7 +621,7 @@ l3dss1_retrieve(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_suspend(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s\n", __FUNCTION__);
 	newl3state(pc, 15);
 	mISDN_l3up(pc, MT_SUSPEND, l3m);
 }
@@ -628,9 +629,17 @@ l3dss1_suspend(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_resume(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s\n", __FUNCTION__);
 	newl3state(pc, 17);
-	 mISDN_l3up(pc, MT_RESUME, l3m);
+	mISDN_l3up(pc, MT_RESUME, l3m);
+}
+
+static void
+l3dss1_register(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
+{
+	dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s\n", __FUNCTION__);
+	newl3state(pc, 31);
+	mISDN_l3up(pc, MT_REGISTER, l3m);
 }
 
 static struct stateentry datastatelist[] =
@@ -664,7 +673,7 @@ static struct stateentry datastatelist[] =
 	{SBIT(6) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(19) | SBIT(25),
 		MT_RELEASE, l3dss1_release_i},
 	{SBIT(0) | SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(10) |
-	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19),
+	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19) | SBIT(31),
 		MT_RELEASE_COMPLETE, l3dss1_release_cmpl},
 	{SBIT(4) | SBIT(7) | SBIT(10),
 		MT_USER_INFORMATION, l3dss1_userinfo},
@@ -678,6 +687,8 @@ static struct stateentry datastatelist[] =
 		MT_SUSPEND, l3dss1_suspend},
 	{SBIT(0),
 		MT_RESUME, l3dss1_resume},
+	{SBIT(0),
+		MT_REGISTER, l3dss1_register},
 };
 
 #define DATASLLEN \
@@ -819,7 +830,7 @@ static struct stateentry mdatastatelist[] =
 		MT_RELEASE, l3dss1_release_m},
 	{SBIT(19),  MT_RELEASE, l3dss1_release_cmpl},
 	{SBIT(0) | SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(10) |
-	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19),
+	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19) | SBIT(31),
 		MT_RELEASE_COMPLETE, l3dss1_release_cmpl_mx},
 	{SBIT(6) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(22) | SBIT(25),
 		MT_RELEASE_COMPLETE, l3dss1_release_cmpl_m},
@@ -1427,7 +1438,7 @@ l3dss1_dl_ignore(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static struct stateentry downstatelist[] =
 {
 	{ALL_STATES,
-		MT_RELEASE_COMPLETE, l3dss1_release_cmpl_req},
+	 MT_RELEASE_COMPLETE, l3dss1_release_cmpl_req},
 	{SBIT(0),
 	 MT_SETUP, l3dss1_setup_req},
 	{SBIT(1),
@@ -1755,7 +1766,7 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 	proc = get_l3process4pid(l3, msg->l3.pid);
 	dprint(DBGM_L3, msg->addr.dev, "%s: proc(%x)\n", __FUNCTION__, proc ? proc->pid : 0);
 	if (!proc) {
-		if (msg->l3.type == MT_SETUP || msg->l3.type == MT_RESUME) {
+		if (msg->l3.type == MT_SETUP || msg->l3.type == MT_RESUME || msg->l3.type == MT_REGISTER) {
 			/* Setup/Resume creates a new transaction process */
 			
 			if (msg->l3.pid & 0x8000) {
@@ -1764,7 +1775,17 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 					l3_debug(l3, "dss1 wrong CRef flag");
 				goto freemsg;
 			}
-			dprint(DBGM_L3, msg->addr.dev, "%s: %s\n", __FUNCTION__, (msg->l3.type == MT_SETUP) ? "MT_SETUP" : "MT_RESUME");
+			switch (msg->l3.type) {
+				case MT_SETUP:
+					dprint(DBGM_L3, msg->addr.dev, "%s: MT_SETUP\n", __FUNCTION__);
+					break;
+				case MT_RESUME:
+					dprint(DBGM_L3, msg->addr.dev, "%s: MT_RESUME\n", __FUNCTION__);
+					break;
+				case MT_REGISTER:
+					dprint(DBGM_L3, msg->addr.dev, "%s: MT_REGISTER\n", __FUNCTION__);
+					break;
+			}
 			if (!(proc = create_new_process(l3, msg->addr.channel,msg->l3h.cr, NULL))) {
 				/* May be to answer with RELEASE_COMPLETE and
 				 * CAUSE 0x2f "Resource unavailable", but this

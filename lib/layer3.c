@@ -559,6 +559,7 @@ to_layer3(struct mlayer3 *ml3, unsigned int prim, unsigned int pid, struct l3_ms
 	case MT_RETRIEVE_REJECT:
 	case MT_RESUME: /* RESUME only in user->net */
 	case MT_SUSPEND: /* SUSPEND only in user->net */
+	case MT_REGISTER: /* REGISTER only in user->net */
 		if (!l3m) {
 			l3m = alloc_l3_msg();
 			if (!l3m)

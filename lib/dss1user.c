@@ -138,6 +138,7 @@ static int ie_RETRIEVE_REJECT[] = {IE_CAUSE | IE_MANDATORY, IE_DISPLAY, -1};
  * static int ie_USER_INFORMATION[] = {IE_MORE_DATA, IE_USER_USER | IE_MANDATORY, -1};
  * static int ie_RESTART[] = {IE_CHANNEL_ID, IE_DISPLAY, IE_RESTART_IND |
  *		IE_MANDATORY, -1};
+ * static int ie_REGISTER[] = {IE_FACILITY, IE_DISPLAY, -1};
  */
 static int ie_FACILITY[] = {IE_FACILITY | IE_MANDATORY, IE_DISPLAY, -1};
 
@@ -274,6 +275,7 @@ l3dss1_check_messagetype_validity(l3_process_t *pc, int mt)
 		case MT_RETRIEVE:
 		case MT_RETRIEVE_ACKNOWLEDGE:
 		case MT_RETRIEVE_REJECT:
+		case MT_REGISTER:
 			break;
 		case MT_RESUME: /* RESUME only in user->net */
 		case MT_SUSPEND: /* SUSPEND only in user->net */
@@ -579,6 +581,12 @@ l3dss1_restart_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	if (l3m) {
 		SendMsg(pc, l3m, -1);
 	}
+}
+
+static void
+l3dss1_register_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
+{
+	SendMsg(pc, l3m, 31);
 }
 
 static void
@@ -1862,6 +1870,8 @@ static struct stateentry downstatelist[] =
 {
 	{SBIT(0),
 	 MT_SETUP, l3dss1_setup_req},
+	{SBIT(0),
+	 MT_REGISTER, l3dss1_register_req},
 	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) |
 		SBIT(10) | SBIT(11) | SBIT(12) | SBIT(15) | SBIT(25),
 	 MT_INFORMATION, l3dss1_information_req},
@@ -1948,7 +1958,7 @@ static struct stateentry datastatelist[] =
 	{ALL_STATES,
 	 MT_NOTIFY, l3dss1_notify},
 	{SBIT(0) | SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(10) |
-	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19) | SBIT(25),
+	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19) | SBIT(25) | SBIT(31),
 	 MT_RELEASE_COMPLETE, l3dss1_release_cmpl},
 	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(25),
 	 MT_RELEASE, l3dss1_release},
