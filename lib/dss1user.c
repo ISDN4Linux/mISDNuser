@@ -89,11 +89,12 @@ l3dss1_msg_without_setup(l3_process_t *pc, u_char cause)
 	release_l3_process(pc);
 }
 
-static int ie_ALERTING[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
-		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_SIGNAL, IE_REDIR_DN,
-		IE_HLC, IE_USER_USER, -1};
-static int ie_CALL_PROCEEDING[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
-		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_REDIR_DN, IE_HLC, -1};
+static int ie_ALERTING[] = {IE_BEARER, IE_NOTIFY, IE_CHANNEL_ID |
+		IE_MANDATORY_1, IE_FACILITY, IE_PROGRESS, IE_DISPLAY,
+		IE_SIGNAL, IE_REDIR_DN, IE_HLC, IE_USER_USER, -1};
+static int ie_CALL_PROCEEDING[] = {IE_BEARER, IE_NOTIFY, IE_CHANNEL_ID |
+		IE_MANDATORY_1, IE_FACILITY, IE_PROGRESS, IE_DISPLAY,
+		IE_REDIR_DN, IE_HLC, -1};
 static int ie_CONNECT[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
 		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_DATE, IE_SIGNAL,
 		IE_CONNECT_PN, IE_CONNECT_SUB, IE_LLC, IE_HLC, IE_USER_USER, -1};
@@ -219,7 +220,7 @@ check_infoelements(l3_process_t *pc, struct l3_msg *l3m, int *checklist, int mt)
 		if (v_ie[i]) {
 			ie = l3_pos2ie(i);
 			if (!(pos = ie_in_set(pc, ie, checklist))) {
-				eprint("Received IE %x not allowed (mt=%x)\n", mt);
+				eprint("Received IE %x not allowed (mt=%x)\n", ie, mt);
 				err_ureg++;
 			}
 			l = *v_ie[i];
