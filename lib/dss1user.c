@@ -879,6 +879,14 @@ l3dss1_setup(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 }
 
 static void
+l3dss1_register(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
+{
+	dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s\n", __FUNCTION__);
+	newl3state(pc, 31);
+	mISDN_l3up(pc, MT_REGISTER, l3m);
+}
+
+static void
 l3dss1_reset(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (l3m)
@@ -1942,6 +1950,8 @@ static struct stateentry datastatelist[] =
 	 MT_STATUS, l3dss1_status},
 	{SBIT(0),
 	 MT_SETUP, l3dss1_setup},
+	{SBIT(0),
+	 MT_REGISTER, l3dss1_register},
 	{SBIT(6) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(11) | SBIT(12) |
 	 SBIT(15) | SBIT(17) | SBIT(19) | SBIT(25),
 	 MT_SETUP, l3dss1_dummy},
@@ -2112,11 +2122,19 @@ dss1_fromdown(layer3_t *l3, struct mbuffer *msg)
 		/* No transaction process exist, that means no call with
 		 * this callreference is active
 		 */
-		if (msg->l3h.type == MT_SETUP) {
+		if (msg->l3h.type == MT_SETUP || msg->l3h.type == MT_REGISTER) {
 			/* Setup creates a new l3 process */
 			if (msg->l3h.cr & 0x8000) {
 				/* Setup with wrong CREF flag */
 				goto freemsg;
+			}
+			switch (msg->l3h.type) {
+				case MT_SETUP:
+					dprint(DBGM_L3, msg->addr.dev, "%s: MT_SETUP\n", __FUNCTION__);
+					break;
+				case MT_REGISTER:
+					dprint(DBGM_L3, msg->addr.dev, "%s: MT_REGISTER\n", __FUNCTION__);
+					break;
 			}
 			if (!(proc = create_new_process(l3, msg->addr.channel,msg->l3h.cr, NULL))) {
 				/* Maybe should answer with RELEASE_COMPLETE and

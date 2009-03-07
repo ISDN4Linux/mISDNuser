@@ -149,6 +149,7 @@ l3dss1_check_messagetype_validity(l3_process_t *pc, int mt)
 		case MT_REGISTER:
 		case MT_RESUME:
 		case MT_SUSPEND:
+			break;
 		default:
 			l3dss1_status_send(pc, CAUSE_MT_NOTIMPLEMENTED);
 			return 1;
@@ -893,6 +894,18 @@ l3dss1_setup_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 }
 
 static void
+l3dss1_register_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
+{
+	if (!test_bit(MISDN_FLG_PTP, &pc->l2if->l3->ml3.options)) {
+		eprint("%s MT_REGISTER is only allowed in PTP configuration!\n", __FUNCTION__);
+		send_proc(pc, IMSG_END_PROC_M, NULL);
+		return;
+	}
+	/* No child process is used, we use master process for state 31. */
+	SendMsg(pc, l3m, 31);
+}
+
+static void
 l3dss1_disconnect_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m);
 
 static void
@@ -1441,6 +1454,8 @@ static struct stateentry downstatelist[] =
 	 MT_RELEASE_COMPLETE, l3dss1_release_cmpl_req},
 	{SBIT(0),
 	 MT_SETUP, l3dss1_setup_req},
+	{SBIT(0),
+	 MT_REGISTER, l3dss1_register_req},
 	{SBIT(1),
 	 MT_SETUP_ACKNOWLEDGE, l3dss1_setup_ack_req},
 	{SBIT(1) | SBIT(2),
