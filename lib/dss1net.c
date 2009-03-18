@@ -1019,9 +1019,9 @@ l3dss1_disconnect_req_out(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	}
 	L3DelTimer(&pc->timer1);
 	if (l3m) {
-		if (l3m->cause){
-			cause[0] = l3m->cause[2] & 0x7f;
-			cause[1] = l3m->cause[3] & 0x7f;
+		if (l3m->cause && l3m->cause[0] >= 2) {
+			cause[0] = l3m->cause[1];
+			cause[1] = l3m->cause[2];
 		} else {
 			cause[0] = CAUSE_LOC_PRVN_LOCUSER | 0x80;
 			cause[1] = CAUSE_NORMALUNSPECIFIED | 0x80;
@@ -1468,9 +1468,9 @@ static struct stateentry downstatelist[] =
 	 MT_CONNECT_ACKNOWLEDGE, l3dss1_connect_ack_req},
 	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(10),
 	 MT_DISCONNECT, l3dss1_disconnect_req},
-	{ SBIT(2) | SBIT(6) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(25),
+	{SBIT(6) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(25),
 	 MT_DISCONNECT, l3dss1_disconnect_req_out},
-	{ SBIT(2) | SBIT(7) | SBIT(9) | SBIT(11) | SBIT(12) | SBIT(25),
+	{SBIT(2) | SBIT(7) | SBIT(9) | SBIT(11) | SBIT(12) | SBIT(25),
 	 MT_RELEASE, l3dss1_release_req},
 	{ALL_STATES,
 	 MT_FACILITY, l3dss1_facility_req},
