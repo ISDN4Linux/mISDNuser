@@ -811,6 +811,12 @@ l3dss1_information_mx(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	l3dss1_information(pc, pr, l3m);
 }
 
+static void
+l3dss1_facility_mx(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
+{
+	l3dss1_facility(pc, pr, l3m);
+}
+
 static struct stateentry mdatastatelist[] =
 {
 	{SBIT(6) | SBIT(7) | SBIT(9) | SBIT(25),
@@ -835,6 +841,8 @@ static struct stateentry mdatastatelist[] =
 		MT_RELEASE_COMPLETE, l3dss1_release_cmpl_mx},
 	{SBIT(6) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(22) | SBIT(25),
 		MT_RELEASE_COMPLETE, l3dss1_release_cmpl_m},
+	{SBIT(31),
+		MT_FACILITY, l3dss1_facility_mx},
 };
 
 #define MDATASLLEN \
