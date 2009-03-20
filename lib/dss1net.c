@@ -1488,7 +1488,7 @@ static struct stateentry downstatelist[] =
 	 MT_INFORMATION, l3dss1_information_req},
 	{SBIT(2) | SBIT(3) | SBIT(4),
 	 MT_PROGRESS, l3dss1_progress_req},
-	{SBIT(10) | SBIT(15),
+	{ALL_STATES,
 	 MT_NOTIFY, l3dss1_notify_req},
 	{SBIT(3) | SBIT(4) | SBIT(10) | SBIT(12),
 	 MT_HOLD_ACKNOWLEDGE, l3dss1_holdack_req},

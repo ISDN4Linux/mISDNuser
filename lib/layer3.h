@@ -150,7 +150,7 @@ extern int		l3_ie2pos(u_char);
 extern unsigned char	l3_pos2ie(int);
 
 #define SBIT(state)	(1 << state)
-#define ALL_STATES	0x03ffffff
+#define ALL_STATES	0xffffffff
 
 /*
  * internal used property flags
