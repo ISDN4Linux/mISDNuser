@@ -609,7 +609,7 @@ int main_data_loop(devinfo_t *di)
 	tout.tv_usec = 0;
 	tout.tv_sec = 1;
 
-	printf ("\nwaiting for data (use CTRL-C to cancel) stop(%i) sleep(%i)...\n", stop, usleep_val, sleep);
+	printf ("\nwaiting for data (use CTRL-C to cancel) stop(%i) sleep(%i)...\n", stop, usleep_val);
 	while (1)
 	{
 		for (ch_idx=0; ch_idx<MAX_CHAN; ch_idx++)

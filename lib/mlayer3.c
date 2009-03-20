@@ -69,7 +69,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	int			fd, ret;
 	struct mISDNversion	ver;
 	struct mISDN_devinfo	devinfo;
-	int			clean = 1;
+	int			set = 1;
 
 	if (__init_done == 0) {
 		fprintf(stderr, "You should call init_layer3(nr of message cache entres) first\n"); 
@@ -162,9 +162,16 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	}
 	if (test_bit(MISDN_FLG_L2_CLEAN, &l3->ml3.options)
 		&& proto == L3_PROTOCOL_DSS1_NET) {
-		ret = ioctl(fd, IMCLEAR_L2, &clean);
+		ret = ioctl(fd, IMCLEAR_L2, &set);
        		if (ret < 0) {
 			fprintf(stderr, "could not send IOCTL IMCLEAN_L2 %s\n", strerror(errno));
+			goto fail;
+		}
+	}
+	if (test_bit(MISDN_FLG_L1_HOLD, &l3->ml3.options)) {
+		ret = ioctl(fd, IMHOLD_L1, &set);
+       		if (ret < 0) {
+			fprintf(stderr, "could not send IOCTL IMHOLD_L1 %s\n", strerror(errno));
 			goto fail;
 		}
 	}
