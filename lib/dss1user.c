@@ -1893,7 +1893,7 @@ static struct stateentry downstatelist[] =
 	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(6) | SBIT(7) |
 		SBIT(8) | SBIT(9) | SBIT(10) | SBIT(25),
 	 MT_DISCONNECT, l3dss1_disconnect_req},
-	{SBIT(6) | SBIT(11) | SBIT(12),
+	{SBIT(6) | SBIT(11) | SBIT(12) | SBIT(31),
 	 MT_RELEASE, l3dss1_release_req},
 	{ALL_STATES,
 	 MT_RESTART, l3dss1_restart},
@@ -1971,7 +1971,7 @@ static struct stateentry datastatelist[] =
 	{SBIT(0) | SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(10) |
 	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19) | SBIT(25) | SBIT(31),
 	 MT_RELEASE_COMPLETE, l3dss1_release_cmpl},
-	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(25),
+	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(25) | SBIT(31),
 	 MT_RELEASE, l3dss1_release},
 	{SBIT(19),  MT_RELEASE, l3dss1_release_ind},
 	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(11) | SBIT(15) | SBIT(17) | SBIT(25),
