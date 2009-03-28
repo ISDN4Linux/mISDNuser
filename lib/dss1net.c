@@ -1761,7 +1761,7 @@ global_handler(layer3_t *l3, u_int mt, struct mbuffer *mb)
 static int
 dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 {
-	int		ret;
+	int		cause, callState, ret;
 	l3_process_t	*proc;
 
 	if (msg->len < 3) {
@@ -1817,12 +1817,46 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 				goto freemsg;
 			}
 			dprint(DBGM_L3, msg->addr.dev, "%s: proc(%x)\n", __FUNCTION__, proc->pid);
+		} else if (msg->l3h.type == MT_STATUS) {
+			cause = 0;
+			if (msg->l3.cause) {
+				if (msg->l3.cause[0] >= 2)
+					cause = msg->l3.cause[2] & 0x7f;
+				else
+					cause = msg->l3.cause[1] & 0x7f;
+			}
+			callState = 0;
+			if (msg->l3.call_state) {
+				callState = msg->l3.call_state[1];
+			}
+			/* ETS 300-104 part 2.4.1
+			 * if setup has not been made and a message type
+			 * MT_STATUS is received with call state == 0,
+			 * we must send nothing
+			 */
+			if (callState != 0) {
+				/* ETS 300-104 part 2.4.2
+				 * if setup has not been made and a message type
+				 * MT_STATUS is received with call state != 0,
+				 * we must send MT_RELEASE_COMPLETE cause 101
+				 */
+				if ((proc = create_new_process(l3, msg->addr.channel,msg->l3h.cr, NULL))) {
+					l3dss1_msg_without_setup(proc, CAUSE_NOTCOMPAT_STATE);
+				}
+			}
+			goto freemsg;
+		} else if (msg->l3h.type == MT_RELEASE_COMPLETE) {
+			goto freemsg;
 		} else {
-			dprint(DBGM_L3, msg->addr.dev, "%s: mt(%x) do not create proc\n", __FUNCTION__,
-				msg->l3.type);
-			// TODO: it happens that a response to an outgoing setup is 
-			// received after connect of another terminal. in this case we must release.
-			// Hmm should not happen, if it is a collision and we already sent a RELEASE
+			/* ETS 300-104 part 2
+			 * if setup has not been made and a message type
+			 * (except MT_SETUP and RELEASE_COMPLETE) is received,
+			 * we must send MT_RELEASE_COMPLETE cause 81 */
+			
+			dprint(DBGM_L3, msg->addr.dev, "%s: mt(%x) without callref (maybe former process)\n", __FUNCTION__, msg->l3.type);
+			if ((proc = create_new_process(l3, msg->addr.channel,msg->l3h.cr, NULL))) {
+				l3dss1_msg_without_setup(proc, CAUSE_INVALID_CALLREF);
+			}
 			goto freemsg;
 		}
 	}
