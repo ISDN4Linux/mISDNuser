@@ -607,9 +607,7 @@ create_l2l3if(layer3_t *l3, struct sockaddr_mISDN *addr)
 	else
 		l2i = get_l2if(l3, addr->channel);
 	if (l2i) {
-		if (l2i->l2addr.tei != 127)
-			eprint("overwrite tei %d with tei %d\n", l2i->l2addr.tei, addr->tei);
-		dprint(DBGM_L3, l2i->l2addr.dev, "%s: already have layer2/3 interface for ces(%x) tei(%x/%x)\n",
+		dprint(DBGM_L3, l2i->l2addr.dev, "%s: changing tei: chan(%x) old tei(%x) new tei(%x)\n",
 			__FUNCTION__, addr->channel, addr->tei, l2i->l2addr.tei);
 		l2i->l2addr = *addr;
 		return l2i;
@@ -622,6 +620,8 @@ create_l2l3if(layer3_t *l3, struct sockaddr_mISDN *addr)
 	init_l2if(l2i, l3);
 	l2i->l2addr = *addr;
 	list_add_tail(&l2i->list, &l3->l2master.list);
+	dprint(DBGM_L3, l2i->l2addr.dev, "%s: creating tei: chan(%x) tei(%x)\n",
+		__FUNCTION__, addr->channel, addr->tei);
 	return l2i;
 }
 
@@ -704,9 +704,13 @@ handle_l2msg(struct _layer3 *l3, struct mbuffer *mb)
 	switch (mb->h->prim) {
 	case DL_DATA_IND:
 	case DL_UNITDATA_IND:
+		dprint(DBGM_L3, mb->addr.dev, "%s: DL_(UNIT)DATA_IND: chan(%x) tei(%x)\n",
+			__FUNCTION__, mb->addr.channel, mb->addr.tei);
 		l3->from_l2(l3, mb);
 		return;
 	case DL_INFORMATION_IND:
+		dprint(DBGM_L3, mb->addr.dev, "%s: DL_INFORMATION_IND: chan(%x) tei(%x)\n",
+			__FUNCTION__, mb->addr.channel, mb->addr.tei);
 		l2i = create_l2l3if(l3, &mb->addr);
 		goto free_out;
 	case MPH_INFORMATION_IND:
@@ -719,24 +723,32 @@ handle_l2msg(struct _layer3 *l3, struct mbuffer *mb)
 	}
 	l2i = get_l2if(l3, mb->addr.channel);
 	if (!l2i) {
-		eprint("%s: cannot find layer2/3 interface for ces(%x)\n", __FUNCTION__,  mb->addr.channel);
+		eprint("%s: cannot find layer2/3 interface for chan(%x)\n", __FUNCTION__,  mb->addr.channel);
 		goto free_out;
 	}
 	switch (mb->h->prim) {
 	case DL_ESTABLISH_CNF:
+		dprint(DBGM_L3, mb->addr.dev, "%s: DL_ESTABLISH_CNF: chan(%x) tei(%x)\n",
+			__FUNCTION__, mb->addr.channel, mb->addr.tei);
 		FsmEvent(&l2i->l3m, EV_ESTABLISH_CNF, NULL);
 		break;
 	case DL_ESTABLISH_IND:
+		dprint(DBGM_L3, mb->addr.dev, "%s: DL_ESTABLISH_IND: chan(%x) tei(%x)\n",
+			__FUNCTION__, mb->addr.channel, mb->addr.tei);
 		FsmEvent(&l2i->l3m, EV_ESTABLISH_IND, NULL);
 		break;
 	case DL_RELEASE_IND:
+		dprint(DBGM_L3, mb->addr.dev, "%s: DL_RELEASE_IND: chan(%x) tei(%x)\n",
+			__FUNCTION__, mb->addr.channel, mb->addr.tei);
 		FsmEvent(&l2i->l3m, EV_RELEASE_IND, NULL);
 		break;
 	case DL_RELEASE_CNF:
+		dprint(DBGM_L3, mb->addr.dev, "%s: DL_RELEASE_CNF: chan(%x) tei(%x)\n",
+			__FUNCTION__, mb->addr.channel, mb->addr.tei);
 		FsmEvent(&l2i->l3m, EV_RELEASE_CNF, NULL);
 		break;
 	default:
-		dprint(DBGM_L3, mb->addr.dev, "%s: unknown prim(%x) ces(%x)\n", __FUNCTION__,  mb->h->prim, mb->addr.channel);
+		dprint(DBGM_L3, mb->addr.dev, "%s: unknown prim(%x) chan(%x)\n", __FUNCTION__,  mb->h->prim, mb->addr.channel);
 	}
 free_out:
 	free_mbuffer(mb);
