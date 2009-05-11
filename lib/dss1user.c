@@ -2026,6 +2026,8 @@ static struct stateentry manstatelist[] =
         {SBIT(2),
          DL_ESTABLISH_IND, l3dss1_dl_reset},
         {SBIT(10),
+         DL_ESTABLISH_IND, l3dss1_dl_reest_status}, /* flapping REL/EST */
+        {SBIT(10),
          DL_ESTABLISH_CNF, l3dss1_dl_reest_status},
         {SBIT(10),
          DL_RELEASE_IND, l3dss1_dl_reestablish},
