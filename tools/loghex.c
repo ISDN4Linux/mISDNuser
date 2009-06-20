@@ -270,6 +270,7 @@ char *argv[];
 	/* try to bind on D/E channel first, fallback to D channel on error */
 	result = -1;
 	channel = 1;
+	
 	while ((result < 0) && (channel >= 0)) {
 		log_addr.channel = (unsigned char)channel;
 		result = bind(log_socket, (struct sockaddr *) &log_addr,
@@ -277,7 +278,15 @@ char *argv[];
 		printf("log bind ch(%i) return %d\n", log_addr.channel, result);
 		if (result < 0) {
 			printf("log bind error %s\n", strerror(errno));
+			close(log_socket);
+			if (channel == 0) {
+				exit(1);
+			}
 			channel--;
+			if ((log_socket = socket(PF_ISDN, SOCK_DGRAM, di.protocol)) < 0) {
+				printf("could not open log socket %s\n", strerror(errno));
+				exit(1);
+			}
 		}
 	}
 	dch_echo = (log_addr.channel == 1);

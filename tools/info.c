@@ -156,7 +156,7 @@ int main(int argc, char *argv[])
 		{
 			printf("unsupported interface protocol bits 0x%016x", devinfo.Dprotocols);
 		}
-		printf("\n                             %d B-channels:", devinfo.nrbchan);
+		printf("\n                             %2d B-channels:", devinfo.nrbchan);
 		c = 0;
 		start_c = -1;
 		while(c <= MISDN_MAX_CHANNEL + 1)
@@ -179,7 +179,40 @@ int main(int argc, char *argv[])
 			c++;
 		}
 		printf("\n");
-
+		printf("                                B-protocols:");
+		if (devinfo.Bprotocols & (1 << (ISDN_P_B_RAW & ISDN_P_B_MASK)))
+		{
+			printf(" RAW");
+		}
+		if (devinfo.Bprotocols & (1 << (ISDN_P_B_HDLC & ISDN_P_B_MASK)))
+		{
+			printf(" HDLC");
+		}
+		if (devinfo.Bprotocols & (1 << (ISDN_P_B_X75SLP & ISDN_P_B_MASK)))
+		{
+			printf(" X75slp");
+		}
+		if (devinfo.Bprotocols & (1 << (ISDN_P_B_L2DTMF & ISDN_P_B_MASK)))
+		{
+			printf(" L2:DTMF");
+		}
+		if (devinfo.Bprotocols & (1 << (ISDN_P_B_L2DSP & ISDN_P_B_MASK)))
+		{
+			printf(" L2:DSP");
+		}
+		if (devinfo.Bprotocols & (1 << (ISDN_P_B_L2DSPHDLC & ISDN_P_B_MASK)))
+		{
+			printf(" L2:DSPHDLC");
+		}
+		if (devinfo.Bprotocols & (1 << (ISDN_P_B_T30_FAX & ISDN_P_B_MASK)))
+		{
+			printf(" T30-Fax");
+		}
+		if (devinfo.Bprotocols & (1 << (ISDN_P_B_MODEM_ASYNC & ISDN_P_B_MASK)))
+		{
+			printf(" asnc.Modem");
+		}
+		printf("\n");
 		if (!useable)
 			printf(" * Port NOT useable for LCR\n");
 
