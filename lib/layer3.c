@@ -135,7 +135,7 @@ get_first_l3process4ces(layer3_t *l3, unsigned int ces)
 	if (ces == MISDN_CES_MASTER)
 		return NULL;
 	list_for_each_entry(p, &l3->plist, list)
-		if ((p->pid >> 16) == ces)
+		if (((unsigned int)p->pid >> 16) == ces)
 			return p;
 	return NULL;
 }
@@ -301,23 +301,23 @@ release_l3_process(l3_process_t *pc)
 {
 	layer3_t	*l3;
 	struct l2l3if	*l2i;
-	int		ces;
+	unsigned int	ces;
 
 	if (!pc)
 		return;
 	l2i = pc->l2if;
 	l3 = l2i->l3;
-	ces = pc->pid >> 16;
+	ces = (pc->pid >> 16);
 	mISDN_l3up(pc, MT_FREE, NULL);
 	list_del(&pc->list);
 	StopAllL3Timer(pc);
 	free(pc);
-	pc = get_first_l3process4ces(l3, ces);
-	if ((!pc) && !test_bit(MISDN_FLG_L2_HOLD, &l3->ml3.options)) {
-		if (!mqueue_len(&l2i->squeue)) {
-			FsmEvent(&l2i->l3m, EV_RELEASE_REQ, NULL);
-		}
-	}
+//	pc = get_first_l3process4ces(l3, ces);
+//	if ((!pc) && !test_bit(MISDN_FLG_L2_HOLD, &l3->ml3.options)) {
+//		if (!mqueue_len(&l2i->squeue)) {
+//			FsmEvent(&l2i->l3m, EV_RELEASE_REQ, NULL);
+//		}
+//	}
 }
 
 static void
@@ -369,7 +369,7 @@ l3down(struct l2l3if *l2i, u_int prim, struct mbuffer *mb)
 	free_mbuffer(mb);
 }
 
-#define DREL_TIMER_VALUE 40000
+#define DREL_TIMER_VALUE 10000
 
 static void
 lc_activate(struct FsmInst *fi, int event, void *arg)
@@ -393,12 +393,12 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 		l3down(l2i, DL_DATA_REQ, mb);
 		dequeued++;
 	}
-	pc = get_first_l3process4ces(l2i->l3, l2i->l2addr.channel);
-	if ((!pc) && (!test_bit(MISDN_FLG_L2_HOLD, &l2i->l3->ml3.options)) && dequeued) {
-		FsmEvent(fi, EV_RELEASE_REQ, NULL);
-	} else {
+//	pc = get_first_l3process4ces(l2i->l3, l2i->l2addr.channel);
+//	if ((!pc) && (!test_bit(MISDN_FLG_L2_HOLD, &l2i->l3->ml3.options)) && dequeued) {
+//		FsmEvent(fi, EV_RELEASE_REQ, NULL);
+//	} else {
 		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
-	}
+//	}
 	l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, l2i->l2addr.tei, NULL);
 }
 
@@ -416,12 +416,12 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 		l3down(l2i, DL_DATA_REQ, mb);
 		dequeued++;
 	}
-	pc = get_first_l3process4ces(l2i->l3, l2i->l2addr.channel);
-	if ((!pc) && (!test_bit(MISDN_FLG_L2_HOLD, &l2i->l3->ml3.options)) && dequeued) {
-		FsmEvent(fi, EV_RELEASE_REQ, NULL);
-	} else {
+//	pc = get_first_l3process4ces(l2i->l3, l2i->l2addr.channel);
+//	if ((!pc) && (!test_bit(MISDN_FLG_L2_HOLD, &l2i->l3->ml3.options)) && dequeued) {
+//		FsmEvent(fi, EV_RELEASE_REQ, NULL);
+//	} else {
 		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
-	}
+//	}
 	l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, l2i->l2addr.tei, NULL);
 }
 
