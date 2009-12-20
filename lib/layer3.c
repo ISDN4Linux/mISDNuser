@@ -632,6 +632,7 @@ init_l3(layer3_t *l3)
 	l3->global.l2if = &l3->l2master;
 	l3->global.L3 = l3;
 	l3->dummy.l2if = &l3->l2master;
+	l3->dummy.pid = MISDN_PID_DUMMY;
 	l3->dummy.L3 = l3;
 	L3TimerInit(l3, MISDN_PID_GLOBAL, &l3->global.timer1);
 	L3TimerInit(l3, MISDN_PID_GLOBAL, &l3->global.timer2);
