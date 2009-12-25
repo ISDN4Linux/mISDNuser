@@ -50,7 +50,8 @@ char *pname;
 	fprintf(stderr,"\n     Valid options are:\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr,"  -?              Usage ; printout this information\n");
-	fprintf(stderr,"  -c<n>           use card number n (default 1)\n");
+	fprintf(stderr,"  -c<n>           use card number n (default 0)\n");
+	fprintf(stderr,"  -e              try using echo channel for TX data\n");
 	fprintf(stderr,"  -w <file>       write wiresharkdump <file>\n");
 	fprintf(stderr,"\n");
 }
@@ -92,6 +93,7 @@ static void write_wfile(FILE *f, unsigned char *buf, int len, struct timeval *tv
 	else
 		origin = ((hh->prim == PH_DATA_REQ) ||
 				(hh->prim == PH_DATA_E_IND)) ? 1 : 0;
+	printf("origin=%d\n", origin);
 
 	len -= MISDN_HEADER_LEN;
 
@@ -188,6 +190,9 @@ char *argv[];
 						exit(1);
 					}
 					break;
+				case 'e':
+					dch_echo = 1;
+					break;
 				case '?' :
 					usage(argv[0]);
 					exit(1);
@@ -270,7 +275,7 @@ char *argv[];
 	/* try to bind on D/E channel first, fallback to D channel on error */
 	result = -1;
 	channel = 1;
-	
+
 	while ((result < 0) && (channel >= 0)) {
 		log_addr.channel = (unsigned char)channel;
 		result = bind(log_socket, (struct sockaddr *) &log_addr,
@@ -289,7 +294,9 @@ char *argv[];
 			}
 		}
 	}
-	dch_echo = (log_addr.channel == 1);
+	if (dch_echo)
+		dch_echo = (log_addr.channel == 1);
+	printf("%d\n", dch_echo);
 
 	opt = 1;
 	result = setsockopt(log_socket, SOL_MISDN, MISDN_TIME_STAMP, &opt, sizeof(opt));
