@@ -396,6 +396,26 @@ l3dss1_information(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m) {
 }
 
 static void
+l3dss1_notify(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m) {
+	int		err = 0;
+	unsigned char	cause = CAUSE_INVALID_CONTENTS;
+
+	if (l3m->notify) {
+		if (l3m->notify[0] != 1)
+			err = 1;
+	} else {
+		cause = CAUSE_MANDATORY_IE_MISS;
+		err = 3;
+	}
+	if (err) {
+		l3dss1_status_send(pc, cause);
+		free_l3_msg(l3m);
+		return;
+	}
+	mISDN_l3up(pc, MT_NOTIFY, l3m);
+}
+
+static void
 l3dss1_release(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int		ret;
@@ -668,6 +688,8 @@ static struct stateentry datastatelist[] =
 	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) |
 	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19) | SBIT(25),
 		MT_INFORMATION, l3dss1_information},
+	{ALL_STATES,
+		MT_NOTIFY, l3dss1_notify},
 	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(10) |
 	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(31),
 		MT_RELEASE, l3dss1_release},
