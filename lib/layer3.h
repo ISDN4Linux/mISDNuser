@@ -18,7 +18,7 @@
 #ifndef LAYER3_H
 #define LAYER3_H
 
-#include <mbuffer.h>
+#include <mISDN/mbuffer.h>
 #include "helper.h"
 #include "mlist.h"
 #include "mtimer.h"

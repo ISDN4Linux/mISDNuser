@@ -36,9 +36,9 @@
 #include <string.h>
 #include <pthread.h>
 #include <sys/ioctl.h>
-#include <mISDNif.h>
-#include <q931.h>
-#include <mlayer3.h>
+#include <mISDN/mISDNif.h>
+#include <mISDN/q931.h>
+#include <mISDN/mlayer3.h>
 #include <compat_af_isdn.h>
 
 void usage(pname) 

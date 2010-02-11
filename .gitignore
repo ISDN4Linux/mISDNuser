@@ -37,3 +37,12 @@ tools/misdn_cleanl2
 tools/misdn_info
 tools/misdn_log
 tools/misdn_rename
+
+autom4te.cache
+ChangeLog
+config.guess
+config.log
+config.sub
+config.status
+include/stamp-h1
+include/config.h

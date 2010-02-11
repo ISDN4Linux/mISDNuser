@@ -36,7 +36,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <sys/ioctl.h>
-#include <mISDNif.h>
+#include <mISDN/mISDNif.h>
 #define AF_COMPATIBILITY_FUNC
 #include <compat_af_isdn.h>
 

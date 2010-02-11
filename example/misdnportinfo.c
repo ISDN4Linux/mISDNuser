@@ -35,8 +35,8 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/ioctl.h>
-#include <mISDNif.h>
-#include <q931.h>
+#include <mISDN/mISDNif.h>
+#include <mISDN/q931.h>
 
 #define AF_COMPATIBILITY_FUNC
 #include <compat_af_isdn.h>

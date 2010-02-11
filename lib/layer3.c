@@ -23,7 +23,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <errno.h>
-#include <q931.h>
+#include <mISDN/q931.h>
 #include "layer3.h"
 #include "debug.h"
 

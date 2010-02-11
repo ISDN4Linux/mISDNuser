@@ -6,6 +6,6 @@ SUBDIRS = include lib tools bridge $(MAYBE_EXAMPLE)
 
 CLEANFILES = *~
 
-ChangeLog:
+ChangeLog: .git/objects
 	git log > $@
 

@@ -19,8 +19,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <mbuffer.h>
-#include <q931.h>
+#include <mISDN/mbuffer.h>
+#include <mISDN/q931.h>
 #include "layer3.h"
 
 static signed char __l3pos[128] = {

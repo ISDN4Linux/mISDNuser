@@ -17,7 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mbuffer.h"
+#include <mISDN/mbuffer.h>
 #include "helper.h"
 #include "debug.h"
 

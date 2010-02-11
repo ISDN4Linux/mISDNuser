@@ -22,8 +22,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <mlayer3.h>
-#include <mbuffer.h>
+#include <mISDN/mlayer3.h>
+#include <mISDN/mbuffer.h>
 #include <errno.h>
 #include "helper.h"
 #include "layer3.h"

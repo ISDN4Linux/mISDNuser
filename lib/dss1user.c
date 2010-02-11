@@ -18,9 +18,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <mlayer3.h>
-#include <mbuffer.h>
-#include <q931.h>
+#include <mISDN/mlayer3.h>
+#include <mISDN/mbuffer.h>
+#include <mISDN/q931.h>
 #include "helper.h"
 #include "dss1.h"
 #include "layer3.h"
