@@ -17,8 +17,8 @@
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
-#include <mlayer3.h>
-#include <mbuffer.h>
+#include <mISDN/mlayer3.h>
+#include <mISDN/mbuffer.h>
 #include <errno.h>
 #define AF_COMPATIBILITY_FUNC
 #include <compat_af_isdn.h>

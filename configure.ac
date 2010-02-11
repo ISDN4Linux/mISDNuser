@@ -49,6 +49,7 @@ AC_CONFIG_FILES([Makefile
                  include/Makefile
                  lib/Makefile
                  bridge/Makefile
+                 l1oip/Makefile
                  tools/Makefile
                  example/Makefile
                ])
