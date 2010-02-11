@@ -25,8 +25,8 @@ extern "C" {
 #include <sys/socket.h>
 #include <pthread.h>
 #include <semaphore.h>
-#include <mISDNif.h>
-#include <mlayer3.h>
+#include <mISDN/mISDNif.h>
+#include <mISDN/mlayer3.h>
 
 struct mqueue {
 	struct mbuffer	*prev;
