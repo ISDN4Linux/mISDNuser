@@ -787,6 +787,8 @@ ac_includes_default="\
 #endif"
 
 ac_subst_vars='LTLIBOBJS
+GIT_REPO_FALSE
+GIT_REPO_TRUE
 LIBOBJS
 QMAKE
 OPT_GUI_FALSE
@@ -6501,13 +6503,13 @@ if test "${lt_cv_nm_interface+set}" = set; then
 else
   lt_cv_nm_interface="BSD nm"
   echo "int some_variable = 0;" > conftest.$ac_ext
-  (eval echo "\"\$as_me:6504: $ac_compile\"" >&5)
+  (eval echo "\"\$as_me:6506: $ac_compile\"" >&5)
   (eval "$ac_compile" 2>conftest.err)
   cat conftest.err >&5
-  (eval echo "\"\$as_me:6507: $NM \\\"conftest.$ac_objext\\\"\"" >&5)
+  (eval echo "\"\$as_me:6509: $NM \\\"conftest.$ac_objext\\\"\"" >&5)
   (eval "$NM \"conftest.$ac_objext\"" 2>conftest.err > conftest.out)
   cat conftest.err >&5
-  (eval echo "\"\$as_me:6510: output\"" >&5)
+  (eval echo "\"\$as_me:6512: output\"" >&5)
   cat conftest.out >&5
   if $GREP 'External.*some_variable' conftest.out > /dev/null; then
     lt_cv_nm_interface="MS dumpbin"
@@ -7712,7 +7714,7 @@ ia64-*-hpux*)
   ;;
 *-*-irix6*)
   # Find out which ABI we are using.
-  echo '#line 7715 "configure"' > conftest.$ac_ext
+  echo '#line 7717 "configure"' > conftest.$ac_ext
   if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
   (eval $ac_compile) 2>&5
   ac_status=$?
@@ -9796,11 +9798,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:9799: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:9801: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:9803: \$? = $ac_status" >&5
+   echo "$as_me:9805: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -10135,11 +10137,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:10138: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:10140: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:10142: \$? = $ac_status" >&5
+   echo "$as_me:10144: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -10240,11 +10242,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:10243: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:10245: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:10247: \$? = $ac_status" >&5
+   echo "$as_me:10249: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -10295,11 +10297,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:10298: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:10300: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:10302: \$? = $ac_status" >&5
+   echo "$as_me:10304: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -13095,7 +13097,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 13098 "configure"
+#line 13100 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -13191,7 +13193,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 13194 "configure"
+#line 13196 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -15211,11 +15213,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:15214: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:15216: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:15218: \$? = $ac_status" >&5
+   echo "$as_me:15220: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -15310,11 +15312,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:15313: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:15315: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:15317: \$? = $ac_status" >&5
+   echo "$as_me:15319: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -15362,11 +15364,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:15365: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:15367: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:15369: \$? = $ac_status" >&5
+   echo "$as_me:15371: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -17440,17 +17442,44 @@ fi
 done
 
 
+{ $as_echo "$as_me:$LINENO: checking for .git/objects" >&5
+$as_echo_n "checking for .git/objects... " >&6; }
+if test "${ac_cv_file__git_objects+set}" = set; then
+  $as_echo_n "(cached) " >&6
+else
+  test "$cross_compiling" = yes &&
+  { { $as_echo "$as_me:$LINENO: error: cannot check for file existence when cross compiling" >&5
+$as_echo "$as_me: error: cannot check for file existence when cross compiling" >&2;}
+   { (exit 1); exit 1; }; }
+if test -r ".git/objects"; then
+  ac_cv_file__git_objects=yes
+else
+  ac_cv_file__git_objects=no
+fi
+fi
+{ $as_echo "$as_me:$LINENO: result: $ac_cv_file__git_objects" >&5
+$as_echo "$ac_cv_file__git_objects" >&6; }
+if test "x$ac_cv_file__git_objects" = x""yes; then
+  git_repo=true
+else
+  git_repo=false
+
+fi
+
+
+ if test "x$git_repo" = xtrue; then
+  GIT_REPO_TRUE=
+  GIT_REPO_FALSE='#'
+else
+  GIT_REPO_TRUE='#'
+  GIT_REPO_FALSE=
+fi
+
+
+
+
 ac_config_files="$ac_config_files Makefile include/Makefile lib/Makefile bridge/Makefile l1oip/Makefile tools/Makefile example/Makefile guitools/Makefile guitools/qmisdnwatch/Makefile"
 
-
-#AC_CONFIG_FILES([Makefile
-#                 bridge/Makefile
-#                 debugtool/Makefile
-#                 example/Makefile
-#                 l1oip/Makefile
-#                 lib/Makefile
-#                 suppserv/Makefile
-#                 tools/Makefile])
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -17588,6 +17617,13 @@ if test -z "${OPT_GUI_TRUE}" && test -z "${OPT_GUI_FALSE}"; then
   { { $as_echo "$as_me:$LINENO: error: conditional \"OPT_GUI\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
 $as_echo "$as_me: error: conditional \"OPT_GUI\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${GIT_REPO_TRUE}" && test -z "${GIT_REPO_FALSE}"; then
+  { { $as_echo "$as_me:$LINENO: error: conditional \"GIT_REPO\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+$as_echo "$as_me: error: conditional \"GIT_REPO\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi

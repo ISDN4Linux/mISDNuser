@@ -182,6 +182,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 l1oipctrl_SOURCES = l1oipctrl.c
+AM_CPPFLAGS = -I$(top_srcdir)/include
 CLEANFILES = *~
 all: all-am
 

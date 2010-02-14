@@ -68,6 +68,15 @@ AC_FUNC_FORK
 AC_FUNC_MALLOC
 AC_CHECK_FUNCS([gethostbyname gettimeofday inet_ntoa memset select socket strcasecmp strchr strdup strerror strstr strtol])
 
+AC_CHECK_FILE(.git/objects,
+		[git_repo=true],
+		[git_repo=false]
+	)
+
+AM_CONDITIONAL([GIT_REPO], [test "x$git_repo" = xtrue])
+	
+
+
 AC_CONFIG_FILES([Makefile
                  include/Makefile
                  lib/Makefile
@@ -78,14 +87,5 @@ AC_CONFIG_FILES([Makefile
                  guitools/Makefile
                  guitools/qmisdnwatch/Makefile
                ])
-
-#AC_CONFIG_FILES([Makefile
-#                 bridge/Makefile
-#                 debugtool/Makefile
-#                 example/Makefile
-#                 l1oip/Makefile
-#                 lib/Makefile
-#                 suppserv/Makefile
-#                 tools/Makefile])
 
 AC_OUTPUT

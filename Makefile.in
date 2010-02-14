@@ -188,7 +188,6 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 @OPT_EXAMPLE_TRUE@MAYBE_EXAMPLE = example
 @OPT_GUI_TRUE@MAYBE_GUI = guitools
-AM_CPPFLAGS = -I$(srcdir)/bridge
 SUBDIRS = include lib tools bridge l1oip $(MAYBE_EXAMPLE) $(MAYBE_GUI)
 CLEANFILES = *~
 all: all-recursive
@@ -623,8 +622,8 @@ uninstall-am:
 	uninstall uninstall-am
 
 
-ChangeLog: .git/objects
-	git log > $@
+@GIT_REPO_TRUE@ChangeLog: .git/objects
+@GIT_REPO_TRUE@	git log > $@
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:

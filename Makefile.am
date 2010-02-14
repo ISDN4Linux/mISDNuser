@@ -10,6 +10,9 @@ SUBDIRS = include lib tools bridge l1oip $(MAYBE_EXAMPLE) $(MAYBE_GUI)
 
 CLEANFILES = *~
 
+if GIT_REPO
+
 ChangeLog: .git/objects
 	git log > $@
 
+endif

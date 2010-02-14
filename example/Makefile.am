@@ -5,4 +5,6 @@ testlayer3_SOURCES = testlayer3.c
 misdnportinfo_SOURCES = misdnportinfo.c
 testlayer3_LDADD = ../lib/libmisdn.la
 
+AM_CPPFLAGS = -I$(top_srcdir)/include
+
 CLEANFILES = *~

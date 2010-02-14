@@ -182,6 +182,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 misdn_bridge_SOURCES = bridge.c
+AM_CPPFLAGS = -I$(top_srcdir)/include
 CLEANFILES = *~
 all: all-am
 

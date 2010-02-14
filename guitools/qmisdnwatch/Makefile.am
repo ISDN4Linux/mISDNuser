@@ -7,14 +7,15 @@ QMISDNWATCH_S = res/16x16-bullet-gray.png res/16x16-bullet-green.png \
 		src/mainWindow.cpp src/mainWindow.h src/misdn.cpp \
 		src/misdn.h src/Ql1logThread.cpp src/Ql1logThread.h
 
+AM_CPPFLAGS = -I$(top_srcdir)/include
 
-CLEANFILES = *~ src/*~ res/*~ Makefile.qt
+CLEANFILES = *~ src/*~ res/*~ Makefile.qt moc_*.cpp qrc_icons.cpp
 
-Makefile.qt: qmisdnwatch.pro
-		$(QMAKE) -o $@
+Makefile.qt: $(srcdir)/qmisdnwatch.pro
+		$(QMAKE) -o $@ $(srcdir)/qmisdnwatch.pro
 
 qmisdnwatch: Makefile.qt $(QMISDNWATCH_S)
 		$(MAKE) -f Makefile.qt
 
-EXTRA_DIST = $(QMISDNWATCH_S) qmisdnwatch.pro
+EXTRA_DIST = $(QMISDNWATCH_S) $(srcdir)/qmisdnwatch.pro
 

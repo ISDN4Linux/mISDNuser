@@ -6,4 +6,6 @@ misdn_log_SOURCES = loghex.c
 misdn_rename_SOURCES = rename.c
 misdn_cleanl2_SOURCES = cleanl2.c
 
+AM_CPPFLAGS = -I$(top_srcdir)/include
+
 CLEANFILES = *~
