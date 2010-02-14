@@ -2,11 +2,11 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.63])
-AC_INIT([mISDNuser], [0.99], [i4ldeveloper@isdn4linux.de])
+AC_INIT([mISDNuser], [2.0], [i4ldeveloper@isdn4linux.de])
 AC_CONFIG_SRCDIR([tools/])
 AC_CONFIG_HEADERS([include/config.h])
 
-AM_INIT_AUTOMAKE(mISDNuser,0.99)
+AM_INIT_AUTOMAKE(mISDNuser,2.0)
 
 # Checks for programs.
 AC_PROG_CXX
@@ -40,6 +40,29 @@ AC_ARG_ENABLE([example],
                          	
 AM_CONDITIONAL([OPT_EXAMPLE], [test "x$example" = xtrue])
 
+AC_ARG_ENABLE([gui],
+	[  --enable-gui   Include GUI programs],
+	[case "${enableval}" in
+		yes) gui=true ;;
+		no)  gui=false ;;
+		*) AC_MSG_ERROR([bad value ${enableval} for --enable-example]) ;;
+	  esac],
+	  [gui=false])
+                         	
+AM_CONDITIONAL([OPT_GUI], [test "x$gui" = xtrue])
+
+if $gui
+then
+	AC_CHECK_LIB(QtCore, [qt_addObject])
+	AC_ARG_VAR(QMAKE, [QT make helper])
+	AC_CHECK_TOOL(QMAKE, qmake,[NotFound],)
+	if test x$QMAKE = xNotFound
+	then
+		AC_MSG_ERROR([qmake not found])
+		
+	fi
+fi
+
 # Checks for library functions.
 AC_FUNC_FORK
 AC_FUNC_MALLOC
@@ -52,6 +75,8 @@ AC_CONFIG_FILES([Makefile
                  l1oip/Makefile
                  tools/Makefile
                  example/Makefile
+                 guitools/Makefile
+                 guitools/qmisdnwatch/Makefile
                ])
 
 #AC_CONFIG_FILES([Makefile

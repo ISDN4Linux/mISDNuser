@@ -25,7 +25,7 @@
 #include <QApplication>
 #define AF_COMPATIBILITY_FUNC
 #define MISDN_OLD_AF_COMPATIBILITY
-#include <mISDNuser/compat_af_isdn.h>
+#include <compat_af_isdn.h>
 
 
 

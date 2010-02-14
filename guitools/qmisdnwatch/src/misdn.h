@@ -29,15 +29,15 @@
 #include <netinet/udp.h>
 #include <netinet/in.h>
 #include <netdb.h>
-#include <linux/socket.h>
+#include <sys/socket.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/ioctl.h>
-#include <mISDNuser/mISDNif.h>
-#include <mISDNuser/q931.h>
+#include <mISDN/mISDNif.h>
+#include <mISDN/q931.h>
 
 
 #ifndef ISDN_P_TE_UP0

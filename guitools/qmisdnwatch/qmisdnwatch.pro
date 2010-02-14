@@ -1,7 +1,7 @@
 TEMPLATE = app
 TARGET = 
 DEPENDPATH += . src
-INCLUDEPATH += . src
+INCLUDEPATH += . src ../../include
 
 # not yet ;) LIBS += -lmisdn
 

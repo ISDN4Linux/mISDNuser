@@ -33,7 +33,6 @@
 #include <QPushButton>
 #include <QThread>
 #include <QCloseEvent>
-#include <mISDNuser/mISDNif.h>
 #include "Ql1logThread.h"
 #include "extraWidgets.h"
 #include "misdn.h"

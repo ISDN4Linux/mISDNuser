@@ -1,0 +1,3 @@
+SUBDIRS = qmisdnwatch
+
+CLEANFILES = *~

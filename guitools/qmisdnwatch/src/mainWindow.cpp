@@ -39,7 +39,7 @@
 #include <QSettings>
 #include <QPixmap>
 #include <QCloseEvent>
-#include <mISDNuser/mISDNif.h>
+#include "misdn.h"
 #include "mainWindow.h"
 
 
