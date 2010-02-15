@@ -1,2 +1,4 @@
+Version 2.0.1
 - use GNU autotools
+- public includes are now in <mISDN/*>
 

@@ -6,7 +6,7 @@ AC_INIT([mISDNuser], [2.0], [i4ldeveloper@isdn4linux.de])
 AC_CONFIG_SRCDIR([tools/])
 AC_CONFIG_HEADERS([include/config.h])
 
-AM_INIT_AUTOMAKE(mISDNuser,2.0)
+AM_INIT_AUTOMAKE(mISDNuser,2.0.1)
 
 # Checks for programs.
 AC_PROG_CXX
