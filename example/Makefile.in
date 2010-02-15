@@ -32,8 +32,8 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-bin_PROGRAMS = testcon$(EXEEXT) testlayer1$(EXEEXT) \
-	testlayer3$(EXEEXT) misdnportinfo$(EXEEXT)
+bin_PROGRAMS = misdntestcon$(EXEEXT) misdntestlayer1$(EXEEXT) \
+	misdntestlayer3$(EXEEXT) misdnportinfo$(EXEEXT)
 subdir = example
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -49,15 +49,15 @@ PROGRAMS = $(bin_PROGRAMS)
 am_misdnportinfo_OBJECTS = misdnportinfo.$(OBJEXT)
 misdnportinfo_OBJECTS = $(am_misdnportinfo_OBJECTS)
 misdnportinfo_LDADD = $(LDADD)
-am_testcon_OBJECTS = testcon.$(OBJEXT)
-testcon_OBJECTS = $(am_testcon_OBJECTS)
-testcon_LDADD = $(LDADD)
-am_testlayer1_OBJECTS = testlayer1.$(OBJEXT)
-testlayer1_OBJECTS = $(am_testlayer1_OBJECTS)
-testlayer1_LDADD = $(LDADD)
-am_testlayer3_OBJECTS = testlayer3.$(OBJEXT)
-testlayer3_OBJECTS = $(am_testlayer3_OBJECTS)
-testlayer3_DEPENDENCIES = ../lib/libmisdn.la
+am_misdntestcon_OBJECTS = testcon.$(OBJEXT)
+misdntestcon_OBJECTS = $(am_misdntestcon_OBJECTS)
+misdntestcon_LDADD = $(LDADD)
+am_misdntestlayer1_OBJECTS = testlayer1.$(OBJEXT)
+misdntestlayer1_OBJECTS = $(am_misdntestlayer1_OBJECTS)
+misdntestlayer1_LDADD = $(LDADD)
+am_misdntestlayer3_OBJECTS = testlayer3.$(OBJEXT)
+misdntestlayer3_OBJECTS = $(am_misdntestlayer3_OBJECTS)
+misdntestlayer3_DEPENDENCIES = ../lib/libmisdn.la
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/include
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -70,10 +70,10 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(misdnportinfo_SOURCES) $(testcon_SOURCES) \
-	$(testlayer1_SOURCES) $(testlayer3_SOURCES)
-DIST_SOURCES = $(misdnportinfo_SOURCES) $(testcon_SOURCES) \
-	$(testlayer1_SOURCES) $(testlayer3_SOURCES)
+SOURCES = $(misdnportinfo_SOURCES) $(misdntestcon_SOURCES) \
+	$(misdntestlayer1_SOURCES) $(misdntestlayer3_SOURCES)
+DIST_SOURCES = $(misdnportinfo_SOURCES) $(misdntestcon_SOURCES) \
+	$(misdntestlayer1_SOURCES) $(misdntestlayer3_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -193,11 +193,11 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-testcon_SOURCES = testcon.c
-testlayer1_SOURCES = testlayer1.c
-testlayer3_SOURCES = testlayer3.c
+misdntestcon_SOURCES = testcon.c
+misdntestlayer1_SOURCES = testlayer1.c
+misdntestlayer3_SOURCES = testlayer3.c
 misdnportinfo_SOURCES = misdnportinfo.c
-testlayer3_LDADD = ../lib/libmisdn.la
+misdntestlayer3_LDADD = ../lib/libmisdn.la
 AM_CPPFLAGS = -I$(top_srcdir)/include
 CLEANFILES = *~
 all: all-am
@@ -264,15 +264,15 @@ clean-binPROGRAMS:
 misdnportinfo$(EXEEXT): $(misdnportinfo_OBJECTS) $(misdnportinfo_DEPENDENCIES) 
 	@rm -f misdnportinfo$(EXEEXT)
 	$(LINK) $(misdnportinfo_OBJECTS) $(misdnportinfo_LDADD) $(LIBS)
-testcon$(EXEEXT): $(testcon_OBJECTS) $(testcon_DEPENDENCIES) 
-	@rm -f testcon$(EXEEXT)
-	$(LINK) $(testcon_OBJECTS) $(testcon_LDADD) $(LIBS)
-testlayer1$(EXEEXT): $(testlayer1_OBJECTS) $(testlayer1_DEPENDENCIES) 
-	@rm -f testlayer1$(EXEEXT)
-	$(LINK) $(testlayer1_OBJECTS) $(testlayer1_LDADD) $(LIBS)
-testlayer3$(EXEEXT): $(testlayer3_OBJECTS) $(testlayer3_DEPENDENCIES) 
-	@rm -f testlayer3$(EXEEXT)
-	$(LINK) $(testlayer3_OBJECTS) $(testlayer3_LDADD) $(LIBS)
+misdntestcon$(EXEEXT): $(misdntestcon_OBJECTS) $(misdntestcon_DEPENDENCIES) 
+	@rm -f misdntestcon$(EXEEXT)
+	$(LINK) $(misdntestcon_OBJECTS) $(misdntestcon_LDADD) $(LIBS)
+misdntestlayer1$(EXEEXT): $(misdntestlayer1_OBJECTS) $(misdntestlayer1_DEPENDENCIES) 
+	@rm -f misdntestlayer1$(EXEEXT)
+	$(LINK) $(misdntestlayer1_OBJECTS) $(misdntestlayer1_LDADD) $(LIBS)
+misdntestlayer3$(EXEEXT): $(misdntestlayer3_OBJECTS) $(misdntestlayer3_DEPENDENCIES) 
+	@rm -f misdntestlayer3$(EXEEXT)
+	$(LINK) $(misdntestlayer3_OBJECTS) $(misdntestlayer3_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
