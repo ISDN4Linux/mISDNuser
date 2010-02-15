@@ -80,6 +80,7 @@ AM_CONDITIONAL([GIT_REPO], [test "x$git_repo" = xtrue])
 AC_CONFIG_FILES([Makefile
                  include/Makefile
                  lib/Makefile
+                 suppserv/Makefile
                  bridge/Makefile
                  l1oip/Makefile
                  tools/Makefile

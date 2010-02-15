@@ -1,7 +1,7 @@
 #ifndef __ASN1_H__
 #define __ASN1_H__
 
-#include "suppserv.h"
+#include <mISDN/suppserv.h>
 #include <asm/types.h>
 #include <sys/types.h>
 #include <stdio.h>

@@ -25,7 +25,7 @@
 
 #include "asn1.h"
 #include "asn1_diversion.h"
-#include "l3dss1.h"
+#include <mISDN/q931.h>
 #include <string.h>
 
 enum {
