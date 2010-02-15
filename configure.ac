@@ -53,7 +53,10 @@ AM_CONDITIONAL([OPT_GUI], [test "x$gui" = xtrue])
 
 if $gui
 then
-	AC_CHECK_LIB(QtCore, [qt_addObject])
+	AC_CHECK_LIB(QtCore, [qt_addObject],
+		AC_MSG_RESULT(found),
+		AC_MSG_ERROR([Qt library not found])
+	)
 	AC_ARG_VAR(QMAKE, [QT make helper])
 	AC_CHECK_TOOL(QMAKE, qmake,[NotFound],)
 	if test x$QMAKE = xNotFound

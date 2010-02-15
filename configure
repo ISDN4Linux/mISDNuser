@@ -16397,8 +16397,7 @@ fi
 
 if $gui
 then
-
-{ $as_echo "$as_me:$LINENO: checking for qt_addObject in -lQtCore" >&5
+	{ $as_echo "$as_me:$LINENO: checking for qt_addObject in -lQtCore" >&5
 $as_echo_n "checking for qt_addObject in -lQtCore... " >&6; }
 if test "${ac_cv_lib_QtCore_qt_addObject+set}" = set; then
   $as_echo_n "(cached) " >&6
@@ -16464,11 +16463,12 @@ fi
 { $as_echo "$as_me:$LINENO: result: $ac_cv_lib_QtCore_qt_addObject" >&5
 $as_echo "$ac_cv_lib_QtCore_qt_addObject" >&6; }
 if test "x$ac_cv_lib_QtCore_qt_addObject" = x""yes; then
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBQTCORE 1
-_ACEOF
-
-  LIBS="-lQtCore $LIBS"
+  { $as_echo "$as_me:$LINENO: result: found" >&5
+$as_echo "found" >&6; }
+else
+  { { $as_echo "$as_me:$LINENO: error: Qt library not found" >&5
+$as_echo "$as_me: error: Qt library not found" >&2;}
+   { (exit 1); exit 1; }; }
 
 fi
 
