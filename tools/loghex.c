@@ -37,8 +37,7 @@
 #include <time.h>
 #include <sys/ioctl.h>
 #include <mISDN/mISDNif.h>
-#define AF_COMPATIBILITY_FUNC
-#include <compat_af_isdn.h>
+#include <mISDN/af_isdn.h>
 
 static int dch_echo=0;
 
@@ -214,8 +213,6 @@ char *argv[];
 		fprintf(stderr,"card nr may not be negative\n");
 		exit(1);
 	}
-
-	init_af_isdn();
 
 	if ((log_socket = socket(PF_ISDN, SOCK_RAW, 0)) < 0) {
 		printf("could not open socket %s\n", strerror(errno));

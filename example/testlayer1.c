@@ -73,9 +73,7 @@
 #include <sys/ioctl.h>
 #include <signal.h>
 #include <mISDN/mISDNif.h>
-
-#define AF_COMPATIBILITY_FUNC
-#include <compat_af_isdn.h>
+#include <mISDN/af_isdn.h>
 
 
 void usage(void)
@@ -844,7 +842,6 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	init_af_isdn();
 	err = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (err < 0) {
 		fprintf (stderr, "cannot open mISDN due to %s\n",

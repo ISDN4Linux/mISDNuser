@@ -37,9 +37,7 @@
 #include <sys/ioctl.h>
 #include <mISDN/mISDNif.h>
 #include <mISDN/q931.h>
-
-#define AF_COMPATIBILITY_FUNC
-#include <compat_af_isdn.h>
+#include <mISDN/af_isdn.h>
 
 int main()
 {
@@ -47,7 +45,6 @@ int main()
 	int			sk;
 	struct mISDN_devinfo	devinfo;
 
-	init_af_isdn();
 	sk = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (sk < 1) {
 		fprintf(stdout, "could not open socket %s\n", strerror(errno));

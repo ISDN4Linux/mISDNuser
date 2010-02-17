@@ -23,9 +23,7 @@
 #include "misdn.h"
 
 #include <QApplication>
-#define AF_COMPATIBILITY_FUNC
-#define MISDN_OLD_AF_COMPATIBILITY
-#include <compat_af_isdn.h>
+#include <mISDN/af_isdn.h>
 
 
 
@@ -41,7 +39,6 @@ mISDN::~mISDN(void) {
 }
 
 int mISDN::connectCore(void) {
-	init_af_isdn();
 	sock = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	qDebug("mISDN::connectCore %d", sock);
 	if (isCoreConnected())

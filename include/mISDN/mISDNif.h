@@ -22,6 +22,7 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/socket.h>
+#include <mISDN/mISDNcompat.h>
 
 /*
  * ABI Version 32 bit

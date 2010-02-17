@@ -16,13 +16,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
-#include <mISDN/mlayer3.h>
-#include <mISDN/mbuffer.h>
+#include <sys/socket.h>
 #include <errno.h>
 #include <ctype.h>
 #include <mISDN/mISDNif.h>
-#define AF_COMPATIBILITY_FUNC
-#include <compat_af_isdn.h>
+#include <mISDN/af_isdn.h>
 
 int main(int argc, char *argv[])
 {
@@ -42,7 +40,6 @@ int main(int argc, char *argv[])
 		exit(2);
 	}
 
-	init_af_isdn();
 	/* open mISDN */
 	sock = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (sock < 0)

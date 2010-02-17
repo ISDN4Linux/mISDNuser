@@ -37,9 +37,7 @@
 #include <sys/ioctl.h>
 #include <mISDN/mISDNif.h>
 #include <mISDN/q931.h>
-
-#define AF_COMPATIBILITY_FUNC
-#include <compat_af_isdn.h>
+#include <mISDN/af_isdn.h>
 
 void usage(pname) 
 char *pname;
@@ -55,12 +53,12 @@ char *pname;
 	fprintf(stderr,"  -?              Usage ; printout this information\n");
 	fprintf(stderr,"  -c<n>           use card number n (default 0)\n"); 
 	fprintf(stderr,"  -F<n>           use function n (default 0)\n"); 
-	fprintf(stderr,"                    0 send and recive voice\n"); 
+	fprintf(stderr,"                    0 send and receive voice\n"); 
 	fprintf(stderr,"                    1 send touchtones\n"); 
-	fprintf(stderr,"                    2 recive touchtones\n"); 
-	fprintf(stderr,"                    3 send and recive hdlc data\n"); 
-	fprintf(stderr,"                    4 send and recive X75 data\n"); 
-	fprintf(stderr,"                    5 send and recive voice early B connect\n");
+	fprintf(stderr,"                    2 receive touchtones\n"); 
+	fprintf(stderr,"                    3 send and receive hdlc data\n"); 
+	fprintf(stderr,"                    4 send and receive X75 data\n"); 
+	fprintf(stderr,"                    5 send and receive voice early B connect\n");
 	fprintf(stderr,"                    6 loop back voice\n");
 	fprintf(stderr,"  -n <phone nr>   Phonenumber to dial\n");
 	fprintf(stderr,"  -vn             Printing debug info level n\n");
@@ -1111,7 +1109,6 @@ char *argv[];
                                    aidx++;
 		} while (aidx<argc);
 	}
-	init_af_isdn();
 	err = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (err < 0) {
 		printf("TestmISDN cannot open mISDN due to %s\n",

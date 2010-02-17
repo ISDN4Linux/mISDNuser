@@ -36,10 +36,9 @@
 #include <string.h>
 #include <pthread.h>
 #include <sys/ioctl.h>
-#include <mISDN/mISDNif.h>
 #include <mISDN/q931.h>
+#include <mISDN/mISDNif.h>
 #include <mISDN/mlayer3.h>
-#include <compat_af_isdn.h>
 
 void usage(pname) 
 char *pname;
@@ -53,14 +52,15 @@ char *pname;
 	fprintf(stderr,"\n     Valid options are:\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr,"  -?              Usage ; printout this information\n");
+	fprintf(stderr,"  -a<n>           use address family number n (default %d)\n", MISDN_AF_ISDN); 
 	fprintf(stderr,"  -c<n>           use card number n (default 0)\n"); 
 	fprintf(stderr,"  -F<n>           use function n (default 0)\n"); 
 	fprintf(stderr,"                    0 send and recive voice\n"); 
 	fprintf(stderr,"                    1 send touchtones\n"); 
-	fprintf(stderr,"                    2 recive touchtones\n"); 
-	fprintf(stderr,"                    3 send and recive hdlc data\n"); 
-	fprintf(stderr,"                    4 send and recive X75 data\n"); 
-	fprintf(stderr,"                    5 send and recive voice early B connect\n");
+	fprintf(stderr,"                    2 receive touchtones\n"); 
+	fprintf(stderr,"                    3 send and receive hdlc data\n"); 
+	fprintf(stderr,"                    4 send and receive X75 data\n"); 
+	fprintf(stderr,"                    5 send and receive voice early B connect\n");
 	fprintf(stderr,"                    6 loop back voice\n");
 	fprintf(stderr,"  -n <phone nr>   Phonenumber to dial\n");
 	fprintf(stderr,"  -N              NT Mode\n");
@@ -1223,7 +1223,7 @@ char *argv[];
 
 {
 	char FileName[200],FileNameOut[200];
-	int aidx=1,para=1, idx;
+	int aidx=1,para=1, idx, af;
 	char sw;
 	devinfo_t mISDN;
 	int err;
@@ -1247,6 +1247,15 @@ char *argv[];
 						VerifyOn=1;
 						if (argv[aidx][2]) {
 							VerifyOn=atol(&argv[aidx][2]);
+						}
+						break;
+					case 'a':
+						if (argv[aidx][2]) {
+							af=atol(&argv[aidx][2]);
+							if (set_af_isdn(af) < 0) {
+								fprintf(stderr, "Wrong address family number %s\n", &argv[aidx][2]);
+								exit(1);
+							}
 						}
 						break;
 					case 'c':

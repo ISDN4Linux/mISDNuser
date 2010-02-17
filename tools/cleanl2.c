@@ -36,10 +36,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <mISDN/mISDNif.h>
-
-#define AF_COMPATIBILITY_FUNC
-#include <compat_af_isdn.h>
-
+#include <mISDN/af_isdn.h>
 
 void usage(pname) 
 char *pname;
@@ -100,7 +97,6 @@ char *argv[];
 		fprintf(stderr,"card nr cannot be negative\n");
 		exit(1);
 	}
-	init_af_isdn();
 	if ((sock = socket(PF_ISDN, SOCK_RAW, 0)) < 0) {
 		printf("could not open socket %s\n", strerror(errno));
 		exit(1);

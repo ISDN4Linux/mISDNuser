@@ -19,11 +19,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <mISDN/mlayer3.h>
-#include <mISDN/mbuffer.h>
+#include <sys/socket.h>
 #include <errno.h>
-#define AF_COMPATIBILITY_FUNC
-#include <compat_af_isdn.h>
+#include <mISDN/mISDNif.h>
+#include <mISDN/af_isdn.h>
 
 int portcount = 0; /* counts all open ports for finding pair */
 int mISDNsocket = -1;
@@ -694,6 +693,7 @@ int main(int argc, char *argv[])
 		printf("Both ports may have same mode, e.g. 'te', to bridge ISDN leased line.\n");
 		printf("Also bridging a card to ISDN over IP tunnel is possible. (L1oIP)\n");
 		printf("Use the following options before listing mode and ports:\n");
+		printf("--af_isdn <nr> use a alternativ address family number.\n");
 		printf("--fork will make a daemon fork.\n");
 		printf("--traffic will show D-channel traffic.\n");
 		printf("--hdlc will bridge all bchannel via HDLC.\n");
@@ -704,7 +704,6 @@ int main(int argc, char *argv[])
 		goto usage;
 
 	/* try to open raw socket to check kernel */
-	init_af_isdn();
 	mISDNsocket = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (mISDNsocket < 0)
 	{
@@ -717,6 +716,20 @@ int main(int argc, char *argv[])
 	while (i < argc)
 	{
 		usleep(200000);
+		if (!strcmp(argv[i], "--af_isdn"))
+		{
+			i++;
+			if (i == argc) {
+				fprintf(stderr, "Expecting address family number after --af_isdn\n\n");
+				goto error;
+			}
+			j = strtol(argv[i], NULL, 0);
+			if (set_af_isdn(j) < 0) {
+				fprintf(stderr, "Wrong address family number %s\n", argv[i]);
+				goto error;
+			}
+			continue;
+		}
 		if (!strcmp(argv[i], "--traffic"))
 		{
 			traffic = 1;

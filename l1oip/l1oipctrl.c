@@ -17,11 +17,9 @@
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
-#include <mISDN/mlayer3.h>
-#include <mISDN/mbuffer.h>
 #include <errno.h>
-#define AF_COMPATIBILITY_FUNC
-#include <compat_af_isdn.h>
+#include <mISDN/mISDNif.h>
+#include <mISDN/af_isdn.h>
 
 int main(int argc, char *argv[])
 {
@@ -37,8 +35,6 @@ int main(int argc, char *argv[])
 	struct mISDN_devinfo	devinfo;
 
 	memset(&crq, 0, sizeof(crq));
-
-	init_af_isdn();
 
 	/* usage */
 	if (argc <= 1) {

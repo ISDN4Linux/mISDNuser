@@ -1,0 +1,34 @@
+#ifndef MISDNCOMPAT_H
+#define MISDNCOMPAT_H
+
+/* hook for different AF_ISDN values */
+
+/* private protocol number for AF_ISDN */
+#define _MISDN_AF_ISDN	@MISDN_AF_ISDN_VAL@
+
+#if _MISDN_AF_ISDN > 0
+  #define MISDN_AF_ISDN	@MISDN_AF_ISDN_VAL@
+  #define ORIG_AF_ISDN	@AF_ISDN_VAL@
+#else
+  #define ORIG_AF_ISDN	@AF_ISDN_VAL@
+  #define MISDN_AF_ISDN @AF_ISDN_VAL@
+#endif
+
+#undef AF_ISDN
+#define AF_ISDN	__af_isdn
+#undef PF_ISDN
+#define PF_ISDN	__af_isdn
+
+extern	int	__af_isdn;
+
+/* 
+ * set af_isdn(int af)
+ * function set __af_isdn to to given value
+ * return  0	on success
+ * return -1	on error
+ * param  af	alternativ AF_ISDN number
+ */
+extern	int	set_af_isdn(int);
+
+/* ifndef MISDNCOMPAT_H */
+#endif
