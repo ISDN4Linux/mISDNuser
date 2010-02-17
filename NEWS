@@ -1,3 +1,7 @@
+Version 2.0.2
+- new compatibility handling for AF_ISDN
+- small bugfixes
+
 Version 2.0.1
 - use GNU autotools
 - public includes are now in <mISDN/*>

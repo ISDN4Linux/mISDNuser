@@ -2,11 +2,11 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.63])
-AC_INIT([mISDNuser], [2.0], [i4ldeveloper@isdn4linux.de])
+AC_INIT([mISDNuser], [2.0.2], [i4ldeveloper@isdn4linux.de])
 AC_CONFIG_SRCDIR([tools/])
 AC_CONFIG_HEADERS([include/config.h])
 
-AM_INIT_AUTOMAKE(mISDNuser,2.0.1)
+AM_INIT_AUTOMAKE(mISDNuser,2.0.2)
 
 # Checks for programs.
 AC_PROG_CXX
