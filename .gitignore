@@ -43,6 +43,5 @@ ChangeLog
 config.guess
 config.log
 config.sub
-config.status
 include/stamp-h1
 include/config.h
