@@ -40,8 +40,6 @@ tools/misdn_rename
 
 autom4te.cache
 ChangeLog
-config.guess
 config.log
-config.sub
 include/stamp-h1
 include/config.h
