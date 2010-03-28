@@ -64,7 +64,8 @@ int main(int argc, char *argv[])
 		ret = ioctl(sock, IMGETDEVINFO, &devinfo);
 		if (ret < 0)
 		{
-			fprintf(stderr, "error getting info for device %d: %s\n", i,strerror(errno));
+			if (errno != ENODEV)
+				fprintf(stderr, "error getting info for device %d: %s\n", i,strerror(errno));
 			goto next_dev;
 		}
 
