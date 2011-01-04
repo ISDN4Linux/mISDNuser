@@ -197,7 +197,7 @@ int ParseLen(u_char *p, u_char *end, int *len);
 			                CallASN1(ret, p, end, ParseLen(p, end, &xlen)); \
   	                                CallASN1(ret, p, end, todo(pc, p, end, arg1)); \
                                 } else { \
-                                        if (!(the_tag) & ASN1_TAG_OPT) { \
+                                        if (!((the_tag) & ASN1_TAG_OPT)) { \
                                                 print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> err 2 %s:%d\n", __FUNCTION__, __LINE__); \
                         	    	        return -1; \
                                         } \
@@ -206,7 +206,7 @@ int ParseLen(u_char *p, u_char *end, int *len);
 		                if ((u_char)(((the_tag) & 0xff) | (ASN1_TAG_CONTEXT_SPECIFIC | (act_tag & ASN1_TAG_CONSTRUCTED))) == *p) { \
   	                                CallASN1(ret, p, end, todo(pc, p, end, arg1)); \
                                 } else { \
-                                        if (!(the_tag) & ASN1_TAG_OPT) { \
+                                        if (!((the_tag) & ASN1_TAG_OPT)) { \
                                                 print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> err 3 %s:%d\n", __FUNCTION__, __LINE__); \
                         	    	        return -1; \
                                         } \
@@ -214,7 +214,7 @@ int ParseLen(u_char *p, u_char *end, int *len);
 		        } \
 		} \
         } else { \
-                if (!(the_tag) & ASN1_TAG_OPT) { \
+                if (!((the_tag) & ASN1_TAG_OPT)) { \
                         print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> err 4 %s:%d\n", __FUNCTION__, __LINE__); \
 			return -1; \
                 } \

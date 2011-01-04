@@ -50,7 +50,7 @@ add_timer(struct mtimer *mt, int tout)
 int
 del_timer(struct mtimer *mt)
 {
-	int		ret;
+	int		ret = 0;
 
 	if (mt->id) {
 		list_del(&mt->list);

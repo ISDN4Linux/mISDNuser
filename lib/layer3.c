@@ -386,7 +386,7 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 	struct l2l3if *l2i = fi->userdata;
 	struct mbuffer	*mb;
 	int dequeued = 0;
-	l3_process_t	*pc;
+	//l3_process_t	*pc;
 
 	FsmChangeState(fi, ST_L3_LC_ESTAB);
 	while ((mb = mdequeue(&l2i->squeue))) {
@@ -408,7 +408,7 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 	struct l2l3if *l2i = fi->userdata;
 	struct mbuffer	*mb;
 	int dequeued = 0;
-	l3_process_t	*pc;
+	//l3_process_t	*pc;
 
 	FsmDelTimer(&l2i->l3m_timer, 51);
 	FsmChangeState(fi, ST_L3_LC_ESTAB);

@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
 		/* output the port info */
 		printf("  Port %2d '%s':", i, devinfo.name);
 		if (strlen(devinfo.name) <= strlen(spaces))
-			printf(spaces+strlen(devinfo.name));
+			fputs(spaces+strlen(devinfo.name), stdout);
 		else
 			printf("\n                             ");
 

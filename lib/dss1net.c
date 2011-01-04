@@ -113,6 +113,7 @@ l3dss1_msg_without_setup(l3_process_t *pc, u_char cause)
 	send_proc(pc, IMSG_END_PROC, NULL);
 }
 
+#if 0
 static int
 l3dss1_check_messagetype_validity(l3_process_t *pc, int mt)
 {
@@ -156,7 +157,9 @@ l3dss1_check_messagetype_validity(l3_process_t *pc, int mt)
 	}
 	return 0;
 }
+#endif
 
+#if 0
 static void
 l3dss1_std_ie_err(l3_process_t *pc, int ret) {
 
@@ -176,6 +179,7 @@ l3dss1_std_ie_err(l3_process_t *pc, int ret) {
 			break;
 	}
 }
+#endif
 
 static int
 l3dss1_get_cid(l3_process_t *pc, struct l3_msg *l3m) {

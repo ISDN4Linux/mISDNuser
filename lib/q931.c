@@ -202,7 +202,7 @@ int
 assembleQ931(l3_process_t *pc, struct l3_msg *l3m)
 {
 	struct mbuffer	*mb = container_of(l3m, struct mbuffer, l3);
-	unsigned char	ie, **v_ie = &l3m->bearer_capability;
+	unsigned char	ie = 0, **v_ie = &l3m->bearer_capability;
 	int		i, l, eidx = -1;
 
 	mb->data = mb->tail = mb->head;

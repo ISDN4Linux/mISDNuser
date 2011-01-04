@@ -98,7 +98,7 @@ err:
 struct mbuffer *
 _alloc_mbuffer(int typ)
 {
-	struct mbuffer	*m;
+	struct mbuffer	*m = NULL;
 
 	switch(typ) {
 	case MB_TYP_L3:
