@@ -39,7 +39,7 @@
 #include <mISDN/mISDNif.h>
 #include <mISDN/af_isdn.h>
 
-static int dch_echo=0;
+static int dch_echo = 0;
 
 static void usage(pname)
 char *pname;
@@ -83,16 +83,19 @@ static void write_wfile(FILE *f, unsigned char *buf, int len, struct timeval *tv
 	/* skip PH_DATA_REQ if PH_DATA_E_IND are expected */
 	if (dch_echo && (hh->prim == PH_DATA_REQ))
 		return;
-
+	/* skip PH_DATA_E_IND if not expected */
+	if (!dch_echo && (hh->prim == PH_DATA_E_IND))
+		return;
+	/* skip all none data */
 	if ((hh->prim != PH_DATA_REQ) && (hh->prim != PH_DATA_IND) &&
 		    (hh->prim != PH_DATA_E_IND))
 		return;
+
 	if (protocol == ISDN_P_NT_S0 || protocol == ISDN_P_NT_E1)
 		origin = hh->prim == PH_DATA_REQ ? 0 : 1;
 	else
 		origin = ((hh->prim == PH_DATA_REQ) ||
 				(hh->prim == PH_DATA_E_IND)) ? 1 : 0;
-	printf("origin=%d\n", origin);
 
 	len -= MISDN_HEADER_LEN;
 
@@ -117,14 +120,19 @@ static void write_wfile(FILE *f, unsigned char *buf, int len, struct timeval *tv
 }
 
 
-static void printhex(unsigned char *p, int len)
+static void printhex(unsigned char *p, int len, int head)
 {
-	int	i;
+	int	i,j;
 
 	for (i = 1; i <= len; i++) {
 		printf(" %02x", *p++);
-		if ((i!=len) && !(i % 16))
-			printf("\n                                 ");
+		if ((i!=len) && !(i % 4) && (i % 16))
+			printf(" ");
+		if ((i!=len) && !(i % 16)) {
+			printf("\n");
+			for (j = 0; j < head; j++)
+				printf(" ");
+		}
 	}
 	printf("\n");
 }
@@ -148,6 +156,8 @@ char *argv[];
 	int	buflen = 512;
 	char	sw;
 	char	wfilename[512];
+	int	head;
+	char	*pn, pns[32];
 	u_char	buffer[buflen];
 	struct msghdr	mh;
 	struct iovec	iov[1];
@@ -271,7 +281,7 @@ char *argv[];
 
 	/* try to bind on D/E channel first, fallback to D channel on error */
 	result = -1;
-	channel = 1;
+	channel = dch_echo;
 
 	while ((result < 0) && (channel >= 0)) {
 		log_addr.channel = (unsigned char)channel;
@@ -293,7 +303,7 @@ char *argv[];
 	}
 	if (dch_echo)
 		dch_echo = (log_addr.channel == 1);
-	printf("%d\n", dch_echo);
+	printf("Echo channel loging %s\n", dch_echo ? "yes" : "no");
 
 	opt = 1;
 	result = setsockopt(log_socket, SOL_MISDN, MISDN_TIME_STAMP, &opt, sizeof(opt));
@@ -332,19 +342,83 @@ char *argv[];
 			}
 			if (cts.cmsg_type == MISDN_TIME_STAMP) {
 				mt = localtime((time_t *)&cts.tv.tv_sec);
-				printf("%02d.%02d.%04d %02d:%02d:%02d.%06ld", mt->tm_mday, mt->tm_mon + 1, mt->tm_year + 1900,
+				head = printf("%02d.%02d.%04d %02d:%02d:%02d.%06ld", mt->tm_mday, mt->tm_mon + 1, mt->tm_year + 1900,
 					mt->tm_hour, mt->tm_min, mt->tm_sec, cts.tv.tv_usec);
 			} else {
 				cts.tv.tv_sec = 0;
 				cts.tv.tv_usec = 0;
 			}
+			switch (hh->prim) {
+				case PH_DATA_E_IND:
+					pn = "ECHO IND";
+					break;
+				case PH_DATA_IND:
+					pn = "DATA IND";
+					break;
+				case PH_DATA_REQ:
+					pn = "DATA REQ";
+					break;
+				case PH_DATA_CNF:
+					pn = "DATA CNF";
+					break;
+				case PH_ACTIVATE_IND:
+					pn = "ACTIVATE IND";
+					break;
+				case PH_ACTIVATE_REQ:
+					pn = "ACTIVATE REQ";
+					break;
+				case PH_ACTIVATE_CNF:
+					pn = "ACTIVATE CNF";
+					break;
+				case PH_DEACTIVATE_IND:
+					pn = "DEACTIVATE IND";
+					break;
+				case PH_DEACTIVATE_REQ:
+					pn = "DEACTIVATE REQ";
+					break;
+				case PH_DEACTIVATE_CNF:
+					pn = "DEACTIVATE CNF";
+					break;
+				case MPH_ACTIVATE_IND:
+					pn = "MPH ACTIVATE IND";
+					break;
+				case MPH_ACTIVATE_REQ:
+					pn = "MPH ACTIVATE REQ";
+					break;
+				case MPH_INFORMATION_REQ:
+					pn = "MPH INFORMATION REQ";
+					break;
+				case MPH_DEACTIVATE_IND:
+					pn = "MPH DEACTIVATE IND";
+					break;
+				case MPH_DEACTIVATE_REQ:
+					pn = "MPH DEACTIVATE REQ";
+					break;
+				case MPH_INFORMATION_IND:
+					pn = "MPH INFORMATION IND";
+					break;
+				case PH_CONTROL_REQ:
+					pn = "PH CONTROL REQ";
+					break;
+				case PH_CONTROL_IND:
+					pn = "PH CONTROL IND";
+					break;
+				case PH_CONTROL_CNF:
+					pn = "PH CONTROL CNF";
+					break;
+				default:
+					sprintf(pns,"Unknown %04x", hh->prim);
+					pn = pns;
+					break;
+			}
+			head += printf(" %s id=%08x", pn, hh->id);
 			if (wfile && (result > MISDN_HEADER_LEN))
 				write_wfile(wfile, buffer, result, &cts.tv, di.protocol);
-			printf(" received %3d bytes prim = %04x id=%08x",
-				result, hh->prim, hh->id);
-			if (result > MISDN_HEADER_LEN)
-				printhex(&buffer[MISDN_HEADER_LEN], result - MISDN_HEADER_LEN);
-			else
+
+			if (result > MISDN_HEADER_LEN) {
+				head += printf(" %3d bytes", result - MISDN_HEADER_LEN);
+				printhex(&buffer[MISDN_HEADER_LEN], result - MISDN_HEADER_LEN, head);
+			} else
 				printf("\n");
 		}
 	}
