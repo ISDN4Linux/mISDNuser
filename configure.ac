@@ -5,6 +5,7 @@ AC_PREREQ([2.63])
 AC_INIT([mISDNuser], [2.0.2], [i4ldeveloper@isdn4linux.de])
 AC_CONFIG_SRCDIR([tools/])
 AC_CONFIG_HEADERS([include/config.h])
+AC_CONFIG_MACRO_DIR([m4])
 
 AM_INIT_AUTOMAKE(mISDNuser,2.0.2)
 

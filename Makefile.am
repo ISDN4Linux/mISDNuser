@@ -1,3 +1,6 @@
+
+ACLOCAL_AMFLAGS = -I m4
+
 if OPT_EXAMPLE
     MAYBE_EXAMPLE = example
 endif
