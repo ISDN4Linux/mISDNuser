@@ -7,7 +7,7 @@ AC_CONFIG_SRCDIR([tools/])
 AC_CONFIG_HEADERS([include/config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
-AM_INIT_AUTOMAKE(mISDNuser,2.0.2)
+AM_INIT_AUTOMAKE([-Wall foreign subdir-objects])
 
 # Checks for programs.
 AC_PROG_CXX
