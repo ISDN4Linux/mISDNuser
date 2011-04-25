@@ -10,9 +10,9 @@ AC_DEFUN([MISDN_CHECK_AF_ISDN], [
 	)
 
 	AC_COMPILE_IFELSE(
-		AC_LANG_PROGRAM([[#include <sys/socket.h>]],
+		[AC_LANG_SOURCE([[#include <sys/socket.h>]],
 			[[int xdummy = AF_ISDN;]]
-		),[
+		)],[
 			AC_COMPUTE_INT(AF_ISDN_VAL, AF_ISDN, [
 				AC_INCLUDES_DEFAULT()
 				#include <sys/socket.h>
