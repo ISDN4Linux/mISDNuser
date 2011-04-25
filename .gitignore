@@ -23,26 +23,9 @@
 *.lst
 *~
 
-bridge/misdn_bridge
-example/cleanl2
-example/loghex
-example/misdnportinfo
-example/misdnportinfo.o
-
 test_file.in
 test_file.out
-
-example/testcon
-example/testlayer1
-example/testlayer3
-l1oip/l1oipctrl
-tools/misdn_cleanl2
-tools/misdn_info
-tools/misdn_log
-tools/misdn_rename
 
 autom4te.cache
 ChangeLog
 config.log
-include/stamp-h1
-include/config.h
