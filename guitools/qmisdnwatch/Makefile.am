@@ -1,5 +1,4 @@
-bin_PROGRAMS = qmisdnwatch
-nodist_qmisdnwatch_SOURCES = Makefile.qt 
+bin_SCRIPTS = qmisdnwatch$(EXEEXT)
 
 QMISDNWATCH_S = res/16x16-bullet-gray.png res/16x16-bullet-green.png \
 		res/16x16-bullet-red.png res/16x16-bullet-yellow.png res/icons.qrc \
@@ -14,7 +13,7 @@ CLEANFILES = *~ src/*~ res/*~ Makefile.qt moc_*.cpp qrc_icons.cpp
 Makefile.qt: $(srcdir)/qmisdnwatch.pro
 		$(QMAKE) -o $@ $(srcdir)/qmisdnwatch.pro
 
-qmisdnwatch: Makefile.qt $(QMISDNWATCH_S)
+qmisdnwatch$(EXEEXT): Makefile.qt $(QMISDNWATCH_S)
 		$(MAKE) -f Makefile.qt
 
 EXTRA_DIST = $(QMISDNWATCH_S) $(srcdir)/qmisdnwatch.pro
