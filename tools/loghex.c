@@ -303,7 +303,7 @@ char *argv[];
 	}
 	if (dch_echo)
 		dch_echo = (log_addr.channel == 1);
-	printf("Echo channel loging %s\n", dch_echo ? "yes" : "no");
+	printf("Echo channel logging %s\n", dch_echo ? "yes" : "no");
 
 	opt = 1;
 	result = setsockopt(log_socket, SOL_MISDN, MISDN_TIME_STAMP, &opt, sizeof(opt));
