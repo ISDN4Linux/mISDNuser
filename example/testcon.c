@@ -61,7 +61,12 @@ char *pname;
 	fprintf(stderr,"                    5 send and receive voice early B connect\n");
 	fprintf(stderr,"                    6 loop back voice - autohangup after 30 sec\n");
 	fprintf(stderr,"                    7 loop back voice - do not auto hangup\n");
-	fprintf(stderr,"  -n <phone nr>   Phonenumber to dial\n");
+	fprintf(stderr,"                    8 set loop back B1 permanent\n");
+	fprintf(stderr,"                    9 set loop back B2 permanent\n");
+	fprintf(stderr,"                   10 set loop back D permanent\n");
+	fprintf(stderr,"                   11 clear all loopbacks\n");
+	fprintf(stderr,"                   12 L1 Timer3 value to given -n value (allowed values 5-30)\n");
+	fprintf(stderr,"  -n <phone nr>   Phonenumber to dial or on -F12 T3 value\n");
 	fprintf(stderr,"  -vn             Printing debug info level n\n");
 	fprintf(stderr,"\n");
 }
@@ -85,6 +90,7 @@ typedef struct _devinfo {
 	int			cr;
 	int			si;
 	int			timeout;
+	int			setloopback;
 } devinfo_t;
 
 #define FLG_SEND_TONE		0x0001
@@ -693,9 +699,11 @@ int do_connection(devinfo_t *di) {
 	fd_set			rds;
 	int			ret = 0, l;
 
+	if (di->setloopback)
+	        return 0;
+        if (di->func == 12)
+                return 0;
 	hh = (struct  mISDNhead *)buf;
-	/* Main loop */
-
 	if (strlen(di->phonenr)) {
 		di->flag |= FLG_CALL_ORGINATE;
 		di->cr = 0x81;
@@ -703,6 +711,7 @@ int do_connection(devinfo_t *di) {
 	}
 	di->timeout = 30;
 
+	/* Main loop */
 	while (1) {
 		tout.tv_usec = 0;
 		tout.tv_sec = di->timeout;
@@ -898,6 +907,14 @@ int do_setup(devinfo_t *di) {
 			di->si = 1;
 			di->flag |= FLG_BCHANNEL_LOOP;
 			break;
+                case 8:
+                case 9:
+                case 10:
+                case 11:
+                        di->setloopback = di->func - 7;
+                        break;
+                case 12:
+                        break;
 		default:
 			fprintf(stdout,"unknown program function %d\n",
 				di->func);
@@ -968,13 +985,47 @@ int do_setup(devinfo_t *di) {
 	}
 	if (VerifyOn > 1)
 		fprintf(stdout, "supported IMCTRLREQ operations: %x\n", creq.op);
-	if (di->func == 6 || di->func == 7) {
+	if (di->func == 6 || di->func == 7 || (di->func <= 11 && di->func >= 8)) {
 		if (!(creq.op & MISDN_CTRL_LOOP)) {
 			fprintf(stdout," hw loop not supported\n");
 			return 8;
 		}
 	}
 
+	if (di->func == 12) {
+		if (!(creq.op & MISDN_CTRL_L1_TIMER3)) {
+			fprintf(stdout,"Setting Timer 3 value - not supported\n");
+			return 8;
+		}
+		if (!di->phonenr[0]) {
+		        fprintf(stdout,"Setting Timer 3 value - need to give value with -n\n");
+		        return 8;
+		}
+	}
+
+	if (di->setloopback) {
+		creq.op = MISDN_CTRL_LOOP;
+		creq.channel = di->setloopback;
+		ret = ioctl(di->layer2, IMCTRLREQ, &creq);
+		if (ret < 0)
+			fprintf(stdout,"hw_loop ioctl error %s\n", strerror(errno));
+		else
+		        fprintf(stdout,"dhw_loop ioctl (%d) successful\n", di->setloopback);
+                close(di->layer2);
+                return ret;
+	}
+	if (di->func == 12) {
+		creq.op = MISDN_CTRL_L1_TIMER3;
+		creq.channel = 0;
+		creq.p1 = atol(di->phonenr);
+		ret = ioctl(di->layer2, IMCTRLREQ, &creq);
+		if (ret < 0)
+			fprintf(stdout,"Timer3 ioctl error %s\n", strerror(errno));
+		else
+		        fprintf(stdout,"Timer3 ioctl (%d) successful\n", di->setloopback);
+                close(di->layer2);
+                return ret;
+	}
 	hh = (struct mISDNhead *)buffer;
 
 	while (1) {
