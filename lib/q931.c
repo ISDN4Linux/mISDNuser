@@ -423,6 +423,34 @@ mi_encode_calling_nr(struct l3_msg *l3m, char *nr, int pres, unsigned int screen
 }
 
 int
+mi_encode_connected_nr(struct l3_msg *l3m, char *nr, int pres, unsigned int screen, unsigned int type, unsigned int plan)
+{
+	unsigned char ie[32];
+	int l;
+
+	if (pres < 0 && screen < 0 && (nr == NULL || *nr == 0)) /* defaults, no number provided */
+		return 0;
+	if (nr && strlen(nr) > 30)
+		return -EINVAL;
+
+	if (pres >= 0) {
+		l = 2;
+		ie[0] = (type << 4) | plan;
+		ie[1] = 0x80 | (pres << 5) | screen;
+	} else {
+		l = 1;
+		ie[0] = 0x80 | (type << 4) | plan;
+	}
+	if (pres > 0) /* restricted or no available, no number should be sent */
+		nr = NULL;
+	if (nr && *nr) {
+		strncpy((char *)&ie[l], nr, 30);
+		l += strlen(nr);
+	}
+	return add_layer3_ie(l3m, IE_CONNECT_PN, l, ie);
+}
+
+int
 mi_encode_called_nr(struct l3_msg *l3m, char *nr, unsigned int type, unsigned int plan)
 {
 	unsigned char ie[32];
@@ -770,6 +798,34 @@ mi_decode_calling_nr(struct l3_msg *l3m, int *type, int *plan, int *pres, int *s
 }
 
 int
+mi_decode_connected_nr(struct l3_msg *l3m, int *type, int *plan, int *pres, int *screen, char *nr)
+{
+	int _pres = 0, _screen = 0, i = 2, l;
+
+	if (l3m == NULL || !l3m->connected_nr)
+		return 0;
+	if (*l3m->connected_nr < 2)
+		return -EINVAL;
+	if (*l3m->connected_nr > 32)
+		return -EINVAL;
+	_ASSIGN_PVAL(type, (l3m->connected_nr[1] & 0x70) >> 4);
+	_ASSIGN_PVAL(plan, l3m->connected_nr[1] & 0x0f);
+	if ((l3m->connected_nr[1] & 0x80) == 0 && *l3m->connected_nr >= 2) {
+		_pres = (l3m->connected_nr[2] & 0x60) >> 5;
+		_screen = l3m->connected_nr[2] & 0x03;
+		i++;
+	}
+	l = *l3m->connected_nr + 1 - i;
+	if (nr) {
+		memcpy(nr, &l3m->connected_nr[i], l);
+		nr[l] = 0;
+	}
+	_ASSIGN_PVAL(pres, _pres);
+	_ASSIGN_PVAL(screen, _screen);
+	return 0;
+}
+
+int
 mi_decode_called_nr(struct l3_msg *l3m, int *type, int *plan, char *nr)
 {
 	int l;
@@ -786,6 +842,39 @@ mi_decode_called_nr(struct l3_msg *l3m, int *type, int *plan, char *nr)
 		memcpy(nr, &l3m->called_nr[2], l);
 		nr[l] = 0;
 	}
+	return 0;
+}
+
+int
+mi_decode_redir_nr(struct l3_msg *l3m, int *type, int *plan, int *pres, int *screen, int *reason, char *nr)
+{
+	int _pres = 0, _screen = 0, _reason = 0, i = 2, l;
+
+	if (l3m == NULL || !l3m->redirect_nr)
+		return 0;
+	if (*l3m->redirect_nr < 2)
+		return -EINVAL;
+	if (*l3m->redirect_nr > 32)
+		return -EINVAL;
+	_ASSIGN_PVAL(type, (l3m->redirect_nr[1] & 0x70) >> 4);
+	_ASSIGN_PVAL(plan, l3m->redirect_nr[1] & 0x0f);
+	if ((l3m->redirect_nr[1] & 0x80) == 0 && *l3m->redirect_nr >= 2) {
+		_pres = (l3m->redirect_nr[2] & 0x60) >> 5;
+		_screen = l3m->redirect_nr[2] & 0x03;
+		i++;
+		if ((l3m->redirect_nr[2] & 0x80) == 0 && *l3m->redirect_nr >= 3) {
+			_reason = l3m->redirect_nr[3] & 0x0f;
+			i++;
+		}
+	}
+	l = *l3m->redirect_nr + 1 - i;
+	if (nr) {
+		memcpy(nr, &l3m->redirect_nr[i], l);
+		nr[l] = 0;
+	}
+	_ASSIGN_PVAL(pres, _pres);
+	_ASSIGN_PVAL(screen, _screen);
+	_ASSIGN_PVAL(reason, _reason);
 	return 0;
 }
 

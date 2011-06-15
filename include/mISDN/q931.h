@@ -266,6 +266,7 @@ struct l3_msg;
 extern int mi_encode_bearer(struct l3_msg *, unsigned int, unsigned int, unsigned int, unsigned int);
 extern int mi_encode_channel_id(struct l3_msg *, struct misdn_channel_info *);
 extern int mi_encode_calling_nr(struct l3_msg *, char *, int, unsigned int, unsigned int, unsigned int);
+extern int mi_encode_connected_nr(struct l3_msg *, char *, int, unsigned int, unsigned int, unsigned int);
 extern int mi_encode_called_nr(struct l3_msg *, char *, unsigned int, unsigned int);
 extern int mi_encode_redir_nr(struct l3_msg *, char *, int, unsigned int, unsigned int, unsigned int, int);
 extern int mi_encode_useruser(struct l3_msg *, int, int, char *);
@@ -280,7 +281,9 @@ extern int mi_decode_bearer_capability(struct l3_msg *, int *, int *, int *, int
 extern int mi_decode_cause(struct l3_msg *, int *, int *, int *, int *, int *, unsigned char *);
 extern int mi_decode_channel_id(struct l3_msg *, struct misdn_channel_info *);
 extern int mi_decode_calling_nr(struct l3_msg *, int *, int *, int *, int *, char *);
+extern int mi_decode_connected_nr(struct l3_msg *, int *, int *, int *, int *, char *);
 extern int mi_decode_called_nr(struct l3_msg *, int *, int *, char *);
+extern int mi_decode_redir_nr(struct l3_msg *, int *, int *, int *, int *, int *, char *);
 extern int mi_decode_display(struct l3_msg *, char *, int);
 extern int mi_decode_useruser(struct l3_msg *, int *, int *, char *, int);
 
