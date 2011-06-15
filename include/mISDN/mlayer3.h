@@ -22,7 +22,6 @@
 extern "C" {
 #endif
 
-
 struct l3_head {
 	unsigned char	type;
 	unsigned char	crlen;
@@ -91,13 +90,24 @@ struct mlayer3;
  */
 typedef int (mlayer3_cb_t)(struct mlayer3 *, unsigned int, unsigned int, struct l3_msg *);
 
+
+/*
+ * To avoid to include always all headers needed for mISDNif.h we redefine MISDN_CHMAP_SIZE here
+ * Please make sure to keep it in sync with mISDNif.h (but changes are very unlikely)
+ */
+#ifndef MISDN_CHMAP_SIZE
+#define MISDN_MAX_CHANNEL	127
+#define MISDN_CHMAP_SIZE	((MISDN_MAX_CHANNEL + 1) >> 3)
+#endif
+
 struct mlayer3 {
 	unsigned int	device;
 	unsigned int	nr_bchannel;
 	unsigned long	options;
 	mlayer3_cb_t	*to_layer3;
 	mlayer3_cb_t	*from_layer3;
-	void		*priv; /* free user for applications */
+	void		*priv; /* free use for applications */
+	unsigned char	channelmap[MISDN_CHMAP_SIZE];
 };
 
 /*
@@ -129,6 +139,7 @@ struct mlayer3 {
 #define MT_FREE			0x1001
 #define MT_L2ESTABLISH		0x2000
 #define MT_L2RELEASE		0x2001
+#define MT_L2IDLE		0x2002
 #define MT_ERROR		0x8000
 #define MT_TIMEOUT		0x8001
 
@@ -139,6 +150,7 @@ struct mlayer3 {
  */
 #define MISDN_PID_DUMMY		0x81000000
 #define MISDN_PID_GLOBAL	0x82000000
+#define MISDN_PID_NONE		0xFFFFFFFF
 #define MISDN_PID_MASTER	0xFF000000
 #define MISDN_PID_CRTYPE_MASK	0xFF000000
 #define MISDN_PID_CID_MASK	0x00FF0000
@@ -162,11 +174,11 @@ extern void             cleanup_layer3(void);
 
 /*
  * open a layer3 stack
- * parameter1 - device id
- * parameter2 - protocol
- * parameter3 - layer3 additional properties
- * parameter4 - callback function to deliver messages
- * parameter5 - pointer for private application use
+ * @parameter1 - device id
+ * @parameter2 - protocol
+ * @parameter3 - layer3 additional properties
+ * @parameter4 - callback function to deliver messages
+ * @parameter5 - pointer for private application use
  */
 extern struct mlayer3	*open_layer3(unsigned int, unsigned int, unsigned int, mlayer3_cb_t *, void *);
 
@@ -177,6 +189,8 @@ extern struct mlayer3	*open_layer3(unsigned int, unsigned int, unsigned int, mla
 extern void		close_layer3(struct mlayer3 *);
 
 extern unsigned int	request_new_pid(struct mlayer3 *);
+extern int		mISDN_get_pcm_slots(struct mlayer3 *, int, int *, int *);
+extern int		mISDN_set_pcm_slots(struct mlayer3 *, int, int, int);
 extern struct l3_msg	*alloc_l3_msg(void);
 extern void		free_l3_msg(struct l3_msg *);
 extern int		add_layer3_ie(struct l3_msg *, unsigned char, int, unsigned char *);

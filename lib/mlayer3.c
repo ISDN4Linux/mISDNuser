@@ -110,6 +110,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	}
 	close(fd);
 	l3->ml3.nr_bchannel = devinfo.nrbchan;
+	memcpy(l3->ml3.channelmap, devinfo.channelmap, MISDN_CHMAP_SIZE);
 	if (!(devinfo.Dprotocols & (1 << ISDN_P_TE_E1))
 	 && !(devinfo.Dprotocols & (1 << ISDN_P_NT_E1)))
 		test_and_set_bit(FLG_BASICRATE, &l3->ml3.options);
@@ -219,3 +220,44 @@ close_layer3(struct mlayer3 *ml3)
 	free(l3);
 }
 
+int
+mISDN_set_pcm_slots(struct mlayer3 *ml3, int channel, int tx, int rx)
+{
+	struct _layer3	*l3;
+	struct mISDN_ctrl_req ctrlrq;
+	int ret;
+
+	ctrlrq.op = MISDN_CTRL_SET_PCM_SLOTS;
+	ctrlrq.channel = 0; /* via D-channel */
+	ctrlrq.p1 = channel;
+	ctrlrq.p2 = tx;
+	ctrlrq.p3 = rx;
+	l3 = container_of(ml3, struct _layer3, ml3);
+	ret = ioctl(l3->l2sock, IMCTRLREQ, &ctrlrq);
+	if (ret < 0)
+		fprintf(stderr, "could not send IOCTL IMCTRLREQ %s\n", strerror(errno));
+	return ret;
+}
+
+int
+mISDN_get_pcm_slots(struct mlayer3 *ml3, int channel, int *txp, int *rxp)
+{
+	struct _layer3	*l3;
+	struct mISDN_ctrl_req ctrlrq;
+	int ret;
+
+	ctrlrq.op = MISDN_CTRL_GET_PCM_SLOTS;
+	ctrlrq.channel = 0; /* via D-channel */
+	ctrlrq.p1 = channel;
+	l3 = container_of(ml3, struct _layer3, ml3);
+	ret = ioctl(l3->l2sock, IMCTRLREQ, &ctrlrq);
+	if (ret < 0)
+		fprintf(stderr, "could not send IOCTL IMCTRLREQ %s\n", strerror(errno));
+	else {
+		if (txp)
+			*txp = ctrlrq.p2;
+		if (rxp)
+			*rxp = ctrlrq.p3;
+	}
+	return ret;
+}
