@@ -59,7 +59,8 @@ char *pname;
 	fprintf(stderr,"                    3 send and receive hdlc data\n"); 
 	fprintf(stderr,"                    4 send and receive X75 data\n"); 
 	fprintf(stderr,"                    5 send and receive voice early B connect\n");
-	fprintf(stderr,"                    6 loop back voice\n");
+	fprintf(stderr,"                    6 loop back voice - autohangup after 30 sec\n");
+	fprintf(stderr,"                    7 loop back voice - do not auto hangup\n");
 	fprintf(stderr,"  -n <phone nr>   Phonenumber to dial\n");
 	fprintf(stderr,"  -vn             Printing debug info level n\n");
 	fprintf(stderr,"\n");
@@ -546,6 +547,7 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 				}
 				break;
 			case 6:
+			case 7:
 				di->flag |= FLG_BCHANNEL_SETUP;
 				break;
 		}
@@ -601,6 +603,7 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 			di->timeout = 1;
 			break;
 		case 6:
+		case 7:
 			do_hw_loop(di);
 			break;
 		}
@@ -635,6 +638,7 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 			di->timeout = 1;
 			break;
 		case 6:
+		case 7:
 			do_hw_loop(di);
 			break;
 		}
@@ -752,6 +756,13 @@ int do_connection(devinfo_t *di) {
 				di->timeout = 1;
 				di->flag |= FLG_SEND_DATA;
 				continue;
+			}
+			if (di->flag & FLG_BCHANNEL_LOOPSET) {
+			        if (di->func == 7) { /* we never end on timeout */
+			                if (VerifyOn>3)
+			                        fprintf(stdout,"timed out but continue\n");
+			                continue;
+                                }
 			}
 			/* hangup */
 			fprintf(stdout,"timed out sending hangup\n");
@@ -882,6 +893,7 @@ int do_setup(devinfo_t *di) {
 			di->flag |= FLG_BCHANNEL_ACTDELAYED;
 			break;
 		case 6:
+		case 7:
 			di->bproto = ISDN_P_B_RAW;
 			di->si = 1;
 			di->flag |= FLG_BCHANNEL_LOOP;
@@ -956,7 +968,7 @@ int do_setup(devinfo_t *di) {
 	}
 	if (VerifyOn > 1)
 		fprintf(stdout, "supported IMCTRLREQ operations: %x\n", creq.op);
-	if (di->func == 6) {
+	if (di->func == 6 || di->func == 7) {
 		if (!(creq.op & MISDN_CTRL_LOOP)) {
 			fprintf(stdout," hw loop not supported\n");
 			return 8;
