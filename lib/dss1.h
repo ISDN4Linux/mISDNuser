@@ -28,7 +28,8 @@
 #define T308	4000
 /* for layer 1 certification T309 < layer1 T3 (e.g. 4000) */
 /* This makes some tests easier and quicker */
-#define T309	40000
+/* default value is 90 seconds */
+#define T309	90000
 /* T310 can be between 30-120 Seconds. We use 120 Seconds so the user can hear
    the inband messages */
 #define T310	120000
