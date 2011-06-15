@@ -100,14 +100,16 @@ typedef int (mlayer3_cb_t)(struct mlayer3 *, unsigned int, unsigned int, struct 
 #define MISDN_CHMAP_SIZE	((MISDN_MAX_CHANNEL + 1) >> 3)
 #endif
 
+struct mISDN_devinfo;
+
 struct mlayer3 {
-	unsigned int	device;
-	unsigned int	nr_bchannel;
-	unsigned long	options;
-	mlayer3_cb_t	*to_layer3;
-	mlayer3_cb_t	*from_layer3;
-	void		*priv; /* free use for applications */
-	unsigned char	channelmap[MISDN_CHMAP_SIZE];
+	unsigned int		device;
+	unsigned int		nr_bchannel;
+	unsigned long		options;
+	mlayer3_cb_t		*to_layer3;
+	mlayer3_cb_t		*from_layer3;
+	void			*priv; /* free use for applications */
+	struct mISDN_devinfo	*devinfo;
 };
 
 /*
@@ -134,14 +136,14 @@ struct mlayer3 {
  * Basic messages are coded like Q931 MT_ from q931.h
  */
 /* Application <---> L3 */
-#define MT_ASSIGN		0x1000
+#define MT_ASSIGN		0x11000
 /* L3 ---> Application */
-#define MT_FREE			0x1001
-#define MT_L2ESTABLISH		0x2000
-#define MT_L2RELEASE		0x2001
-#define MT_L2IDLE		0x2002
-#define MT_ERROR		0x8000
-#define MT_TIMEOUT		0x8001
+#define MT_FREE			0x11001
+#define MT_L2ESTABLISH		0x12000
+#define MT_L2RELEASE		0x12001
+#define MT_L2IDLE		0x12002
+#define MT_ERROR		0x18000
+#define MT_TIMEOUT		0x18001
 
 /* 
  * process IDs

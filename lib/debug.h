@@ -32,7 +32,10 @@
 #define DBGM_L3DATA	0x00000080
 #define DBGM_L3BUFFER	0x00000100
 #define DBGM_L2		0x00000200
+#define DBGM_L2_STATE	0x00000400
 #define DBGM_ALL	0xffffffff
+
+extern unsigned int	mI_debug_mask;
 
 extern	int		dprint(unsigned int mask, int port, const char *fmt, ...);
 extern	int		iprint(const char *fmt, ...);

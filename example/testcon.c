@@ -37,7 +37,7 @@
 #include <sys/ioctl.h>
 #include <mISDN/mISDNif.h>
 #include <mISDN/q931.h>
-#include <mISDN/af_isdn.h>
+#include <mISDN/mlayer3.h>
 
 void usage(pname) 
 char *pname;
@@ -471,8 +471,8 @@ int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 			fprintf(stdout,"unknown PH_CONTROL len %d/val %x\n", len, hh->id);
 	} else {
 		if (VerifyOn)
-			fprintf(stdout,"got unexpected B frame prim(%x) id(%x) len(%d)\n",
-				hh->prim, hh->id, len);
+			fprintf(stdout,"got unexpected B frame prim %s (%x) id(%x) len(%d)\n",
+				mi_msg_type2str(hh->prim), hh->prim, hh->id, len);
 	}
 	return 0;
 }
@@ -496,8 +496,8 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 			hh->prim, hh->id, len);
 	if (hh->prim != DL_DATA_IND && hh->prim != DL_UNITDATA_IND) {
 		if (VerifyOn)
-			fprintf(stdout,"got unexpected D frame prim(%x) id(%x) len(%d)\n",
-				hh->prim, hh->id, len);
+			fprintf(stdout,"got unexpected D frame prim %s (%x) id(%x) len(%d)\n",
+				mi_msg_type2str(hh->prim), hh->prim, hh->id, len);
 		return 0;
 	}
 	if (len > (L3_MT_OFF +1) && (((!(di->flag & FLG_CALL_ORGINATE)) && (buf[L3_MT_OFF] == MT_SETUP)) ||
@@ -671,8 +671,8 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 		return 8;
 	} else {
 		if (VerifyOn) {
-			fprintf(stdout,"got unexpected D frame prim(%x) id(%x) len(%d)\n",
-				hh->prim, hh->id, len);
+			fprintf(stdout,"got unexpected D frame prim %s (%x) id(%x) len(%d)\n",
+				mi_msg_type2str(hh->prim), hh->prim, hh->id, len);
 			if (len > MISDN_HEADER_LEN) {
 				int	i;
 				for (i = MISDN_HEADER_LEN; i < len; i++)
@@ -1031,7 +1031,7 @@ int do_setup(devinfo_t *di) {
 				fprintf(stdout, "got DL_ESTABLISH_CNF\n");
 				break;
 			} else {
-				fprintf(stdout, "got unexpected %x message\n", hh->prim );
+				fprintf(stdout, "got unexpected %s (%x) message\n", mi_msg_type2str(hh->prim), hh->prim );
 			}
 		} else {
 			fprintf(stdout, "layer2 fd not in set\n");

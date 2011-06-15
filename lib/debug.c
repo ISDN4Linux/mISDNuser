@@ -22,7 +22,8 @@
 #include "debug.h"
 
 
-static unsigned int	debug_mask = 0;
+unsigned int	mI_debug_mask;
+
 static FILE		*debug_file = NULL;
 static FILE		*warn_file = NULL;
 static FILE		*error_file = NULL;
@@ -30,6 +31,7 @@ static FILE		*error_file = NULL;
 int
 mISDN_debug_init(unsigned int mask, char *dfile, char *wfile, char *efile)
 {
+	mI_debug_mask = mask;
 	if (dfile) {
 		if (debug_file && (debug_file != stderr))
 			debug_file = freopen(dfile, "a", debug_file);
@@ -78,7 +80,6 @@ mISDN_debug_init(unsigned int mask, char *dfile, char *wfile, char *efile)
 			error_file = stderr;
 		}
 	}
-	debug_mask = mask;
 	return 0;
 }
 
@@ -105,7 +106,7 @@ dprint(unsigned int mask, int port, const char *fmt, ...)
 	if (p) *p=':';
 
 	va_start(args, fmt);
-	if (debug_mask & mask) {
+	if (mI_debug_mask & mask) {
 		if (debug_file != stderr)
 			fprintf(debug_file, "%s P(%02d): L(0x%02x):",tmp, port,mask);
 		ret = vfprintf(debug_file, fmt, args);
@@ -165,7 +166,7 @@ dhexprint(unsigned int mask, char *head, unsigned char *buf, int len)
 	int	ret = 0;
 	char	*p,*obuf;
 
-	if (debug_mask & mask) {
+	if (mI_debug_mask & mask) {
 		obuf = malloc(3*(len+1));
 		if (!obuf)
 			return(-ENOMEM);

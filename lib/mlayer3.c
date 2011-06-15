@@ -67,7 +67,6 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	struct _layer3		*l3;
 	int			fd, ret;
 	struct mISDNversion	ver;
-	struct mISDN_devinfo	devinfo;
 	int			set = 1;
 
 	if (__init_done == 0) {
@@ -99,27 +98,31 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	l3 = calloc(1, sizeof(struct _layer3));
 	if (!l3)
 		return NULL;
+	l3->ml3.devinfo = calloc(1, sizeof(*l3->ml3.devinfo));
+	if (!l3->ml3.devinfo) {
+		free(l3);
+		return NULL;
+	}
 	l3->ml3.options = prop;
 	l3->ml3.from_layer3 = f;
 	l3->ml3.priv = p;
 
 	init_l3(l3);
-	devinfo.id = dev;
-	ret = ioctl(fd, IMGETDEVINFO, &devinfo);
+	l3->ml3.devinfo->id = dev;
+	ret = ioctl(fd, IMGETDEVINFO, l3->ml3.devinfo);
 	if (ret < 0) {
 		fprintf(stderr,"could not send IOCTL IMGETCOUNT %s\n", strerror(errno));
 		goto fail;
 	}
 	close(fd);
-	l3->ml3.nr_bchannel = devinfo.nrbchan;
-	memcpy(l3->ml3.channelmap, devinfo.channelmap, MISDN_CHMAP_SIZE);
-	if (!(devinfo.Dprotocols & (1 << ISDN_P_TE_E1))
-	 && !(devinfo.Dprotocols & (1 << ISDN_P_NT_E1)))
+	l3->ml3.nr_bchannel = l3->ml3.devinfo->nrbchan;
+	if (!(l3->ml3.devinfo->Dprotocols & (1 << ISDN_P_TE_E1))
+	 && !(l3->ml3.devinfo->Dprotocols & (1 << ISDN_P_NT_E1)))
 		test_and_set_bit(FLG_BASICRATE, &l3->ml3.options);
 	switch(proto) {
 	case L3_PROTOCOL_DSS1_USER:
-		if (!(devinfo.Dprotocols & (1 << ISDN_P_TE_S0))
-		 && !(devinfo.Dprotocols & (1 << ISDN_P_TE_E1))) {
+		if (!(l3->ml3.devinfo->Dprotocols & (1 << ISDN_P_TE_S0))
+		 && !(l3->ml3.devinfo->Dprotocols & (1 << ISDN_P_TE_E1))) {
 			fprintf(stderr,"protocol L3_PROTOCOL_DSS1_USER device do not support ISDN_P_TE_S0 / ISDN_P_TE_E1\n");
 			goto fail;
 		}
@@ -131,8 +134,8 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 		dss1user.init(l3);
 		break;
 	case L3_PROTOCOL_DSS1_NET:
-		if (!(devinfo.Dprotocols & (1 << ISDN_P_NT_S0)) 
-		 && !(devinfo.Dprotocols & (1 << ISDN_P_NT_E1))) {
+		if (!(l3->ml3.devinfo->Dprotocols & (1 << ISDN_P_NT_S0))
+		 && !(l3->ml3.devinfo->Dprotocols & (1 << ISDN_P_NT_E1))) {
 			fprintf(stderr,"protocol L3_PROTOCOL_DSS1_NET device do not support ISDN_P_NT_S0 / ISDN_P_NT_E1\n");
 			goto fail;
 		}
@@ -201,6 +204,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 fail:
 	close(fd);
 	release_l3(l3);
+	free(l3->ml3.devinfo);
 	free(l3);
 	return NULL;
 }
