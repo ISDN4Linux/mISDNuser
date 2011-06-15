@@ -76,15 +76,15 @@ AC_CHECK_FUNCS([gethostbyname gettimeofday inet_ntoa memset select socket strcas
 MISDN_CHECK_AF_ISDN
 
 
-AC_CHECK_FILE(.git/objects,
-		[git_repo=true],
-		[git_repo=false]
-	)
+if test -d .git/objects
+then
+	git_repo=true
+else
+	git_repo=false
+fi
 
 AM_CONDITIONAL([GIT_REPO], [test "x$git_repo" = xtrue])
 	
-
-
 AC_CONFIG_FILES([Makefile
                  include/Makefile
                  include/mISDN/mISDNcompat.h
