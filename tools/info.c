@@ -64,15 +64,14 @@ int main(int argc, char *argv[])
 		ret = ioctl(sock, IMGETDEVINFO, &devinfo);
 		if (ret < 0)
 		{
-			if (errno != ENODEV)
-				fprintf(stderr, "error getting info for device %d: %s\n", i,strerror(errno));
+			fprintf(stderr, "error getting info for device %d: %s\n", i,strerror(errno));
 			goto next_dev;
 		}
 
 		/* output the port info */
 		printf("  Port %2d '%s':", i, devinfo.name);
 		if (strlen(devinfo.name) <= strlen(spaces))
-			fputs(spaces+strlen(devinfo.name), stdout);
+			printf(spaces+strlen(devinfo.name));
 		else
 			printf("\n                             ");
 
