@@ -1710,6 +1710,7 @@ l3dss1_t302(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	L3DelTimer(&pc->timer1);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_INVALID_NUMBER);
+	L3AddTimer(&pc->timer1, T305, CC_T305);
 	send_timeout(pc, "302");
 }
 
@@ -1745,6 +1746,7 @@ l3dss1_t304(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	L3DelTimer(&pc->timer1);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
+	L3AddTimer(&pc->timer1, T305, CC_T305);
 	send_timeout(pc, "304");
 }
 
@@ -1771,6 +1773,7 @@ l3dss1_t310(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	L3DelTimer(&pc->timer1);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
+	L3AddTimer(&pc->timer1, T305, CC_T305);
 	send_timeout(pc, "310");
 }
 
@@ -1780,6 +1783,7 @@ l3dss1_t313(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	L3DelTimer(&pc->timer1);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
+	L3AddTimer(&pc->timer1, T305, CC_T305);
 	send_timeout(pc, "313");
 }
 
