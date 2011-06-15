@@ -568,17 +568,15 @@ mi_encode_progress(struct l3_msg *l3m, struct misdn_progress_info *prg)
 }
 
 int
-mi_encode_date(struct l3_msg *l3m, time_t ti)
+mi_encode_date(struct l3_msg *l3m, struct tm *tm)
 {
 	unsigned char ie[5];
-	struct tm tm;
 
-	localtime_r(&ti, &tm);
-	ie[0] = tm.tm_year % 100;
-	ie[1] = tm.tm_mon + 1;
-	ie[2] = tm.tm_mday;
-	ie[3] = tm.tm_hour;
-	ie[4] = tm.tm_min;
+	ie[0] = tm->tm_year % 100;
+	ie[1] = tm->tm_mon + 1;
+	ie[2] = tm->tm_mday;
+	ie[3] = tm->tm_hour;
+	ie[4] = tm->tm_min;
 	return add_layer3_ie(l3m, IE_DATE, 5, ie);
 }
 
@@ -930,6 +928,32 @@ mi_decode_useruser(struct l3_msg *l3m, int *pd, int *uulen, char *uu, int maxlen
 		memcpy(uu, &l3m->useruser[2], l);
 	_ASSIGN_PVAL(uulen, l);
 	_ASSIGN_PVAL(pd, l3m->useruser[1]);
+	return 0;
+}
+
+int
+mi_decode_date(struct l3_msg *l3m, struct tm *dat)
+{
+	struct tm tm;
+
+	if (!dat)
+		return 0;
+
+	if (l3m == NULL || !l3m->date)
+		return 0;
+
+	if (*l3m->date < 5)
+		return 0;
+
+	memset(&tm, 0, sizeof(tm));
+	tm.tm_year = l3m->date[1];
+	if (tm.tm_year < 70)
+		tm.tm_year += 100;
+	tm.tm_mon = l3m->date[2] - 1;
+	tm.tm_mday = l3m->date[3];
+	tm.tm_hour = l3m->date[4];
+	tm.tm_min = l3m->date[5];
+	_ASSIGN_PVAL(dat, tm);
 	return 0;
 }
 

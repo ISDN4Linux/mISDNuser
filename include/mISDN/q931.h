@@ -20,6 +20,8 @@
 #ifndef _Q931_H
 #define _Q931_H
 
+#include <time.h>
+
 /*
  * Q931 protocol discriminator
  */
@@ -282,7 +284,7 @@ extern int mi_encode_redir_nr(struct l3_msg *, char *, int, unsigned int, unsign
 extern int mi_encode_useruser(struct l3_msg *, int, int, char *);
 extern int mi_encode_cause(struct l3_msg *l, int cause, int, int, unsigned char *);
 extern int mi_encode_progress(struct l3_msg *, struct misdn_progress_info *);
-extern int mi_encode_date(struct l3_msg *, time_t);
+extern int mi_encode_date(struct l3_msg *, struct tm *);
 extern int mi_encode_restart_ind(struct l3_msg *, unsigned char);
 
 /* Common IE decode helpers */
@@ -297,6 +299,7 @@ extern int mi_decode_called_nr(struct l3_msg *, int *, int *, char *);
 extern int mi_decode_redir_nr(struct l3_msg *, int *, int *, int *, int *, int *, char *);
 extern int mi_decode_display(struct l3_msg *, char *, int);
 extern int mi_decode_useruser(struct l3_msg *, int *, int *, char *, int);
+extern int mi_decode_date(struct l3_msg *, struct tm *);
 extern int mi_decode_restart_ind(struct l3_msg *, unsigned char *);
 
 /* some print helpers */
