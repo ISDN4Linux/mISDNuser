@@ -290,4 +290,5 @@ extern int mi_decode_useruser(struct l3_msg *, int *, int *, char *, int);
 /* some print helpers */
 extern const char *mi_bearer2str(int);
 extern const char *mi_msg_type2str(unsigned int);
+extern const char *_mi_msg_type2str(unsigned int);
 #endif

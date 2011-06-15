@@ -28,8 +28,46 @@
 #include "debug.h"
 
 void
-l3_debug(layer3_t *l3, char *fmt, ...)
+mIl3_debug(layer3_t *l3, char *fmt, ...)
 {
+	va_list args;
+	char buf[256], *p;
+
+	va_start(args, fmt);
+	p = buf;
+	p += sprintf(p, "l3 ");
+	p += vsprintf(p, fmt, args);
+	va_end(args);
+	dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s\n", buf);
+}
+
+void
+mIpc_debug(u_int dmask, l3_process_t *pc, char *fmt, ...)
+{
+	struct _layer3 *l3;
+	va_list args;
+	char buf[256], *p;
+
+	if (!(mI_debug_mask & dmask))
+		return;
+	if (!pc)
+		return;
+	l3 = pc->L3;
+	if (!l3)
+		return;
+	va_start(args, fmt);
+	p = buf;
+	p += sprintf(p, "pc-%08x ", pc->pid);
+	p += vsprintf(p, fmt, args);
+	va_end(args);
+	dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s\n", buf);
+}
+
+static void
+l3fi_debug(struct FsmInst *fi, char *fmt, ...)
+{
+	layer3_t *l3 = fi->l3;
+
 	va_list args;
 	char buf[256], *p;
 
@@ -365,7 +403,7 @@ l3down(struct l2l3if *l2i, u_int prim, struct mbuffer *mb)
 		mb->h->id = 0;
 		mb->addr = l2i->l2addr;
 	}
-	dprint(DBGM_L3DATA, l2i->l3->l2master.l2addr.dev, "%s send %s to tei %d\n", __func__, mi_msg_type2str(prim), l2i->l2addr.tei);
+	dprint(DBGM_L3DATA, l2i->l3->l2master.l2addr.dev, "%s send %s to tei %d\n", __func__, _mi_msg_type2str(prim), l2i->l2addr.tei);
 	ret = sendto(l2i->l3->l2sock, mb->head, mb->len, 0, (struct sockaddr *)&mb->addr, sizeof(mb->addr));
 	if (ret < 0)
 		eprint("%s write socket error %s\n", __FUNCTION__, strerror(errno));
@@ -613,7 +651,7 @@ init_l2if(struct l2l3if *l2i, layer3_t *l3)
 	l2i->l3m.l3 = l3;
 	l2i->l3m.userint = 0;
 	FsmInitTimer(&l2i->l3m, &l2i->l3m_timer);
-	l2i->l3m.printdebug = l3_debug;
+	l2i->l3m.printdebug = l3fi_debug;
 	l2i->l3m.debug = mI_debug_mask & DBGM_L2_STATE;
 }
 
@@ -784,10 +822,10 @@ to_l2(layer3_t *l3, struct l3_msg *l3m)
 	struct l2l3if	*l2i;
 
 	/* given tei or 0=first tei, but not 127 */
-	dprint(DBGM_L3, l3->l2master.l2addr.dev, "got %s tei %d\n", mi_msg_type2str(l3m->type), l3m->pid);
+	dprint(DBGM_L3, l3->l2master.l2addr.dev, "got %s tei %d\n", _mi_msg_type2str(l3m->type), l3m->pid);
 	if (l3m->pid == l3->l2master.l2addr.tei
 	 || (l3m->pid == 0 && l3->l2master.l2addr.tei != 127)) {
-		dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s tei %d match first\n", mi_msg_type2str(l3m->type), l3m->pid);
+		dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s tei %d match first\n", _mi_msg_type2str(l3m->type), l3m->pid);
 		switch(l3m->type) {
 		case MT_L2ESTABLISH:
 			FsmEvent(&l3->l2master.l3m, EV_ESTABLISH_REQ, NULL);
@@ -803,7 +841,7 @@ to_l2(layer3_t *l3, struct l3_msg *l3m)
 		/* given tei or 0=first tei, but not 127 */
 		if (l3m->pid == l2i->l2addr.tei
 		 || (l3m->pid == 0 && l2i->l2addr.tei != 127)) {
-			dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s tei %d match second\n", mi_msg_type2str(l3m->type), l3m->pid);
+			dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s tei %d match second\n", _mi_msg_type2str(l3m->type), l3m->pid);
 			switch(l3m->type) {
 			case MT_L2ESTABLISH:
 				FsmEvent(&l2i->l3m, EV_ESTABLISH_REQ, NULL);
@@ -874,7 +912,7 @@ layer3_thread(void *arg)
 		}
 		if (l3->l2master.l3m.state == ST_L3_LC_ESTAB) {
 			while ((mb = mdequeue(&l3->l2master.squeue))) {
-				dprint(DBGM_L3DATA, l3->l2master.l2addr.dev, "%s send %s to tei %d\n", __func__, mi_msg_type2str(mb->h->prim), mb->addr.tei);
+				dprint(DBGM_L3DATA, l3->l2master.l2addr.dev, "%s send %s to tei %d\n", __func__, _mi_msg_type2str(mb->h->prim), mb->addr.tei);
 				ret = sendto(l3->l2sock, mb->head, mb->len, 0, (struct sockaddr *)&mb->addr, sizeof(mb->addr));
 				if (ret < 0)
 					eprint("%s write socket error %s\n", __FUNCTION__, strerror(errno));
@@ -884,7 +922,7 @@ layer3_thread(void *arg)
 		list_for_each_entry(l2i, &l3->l2master.list, list) {
 			if (l2i->l3m.state == ST_L3_LC_ESTAB) {
 				while ((mb = mdequeue(&l2i->squeue))) {
-					dprint(DBGM_L2, mb->addr.dev, "send msg (%s) len=%d to L2 tei %d\n", mi_msg_type2str(mb->h->prim), mb->len, mb->addr.tei);
+					dprint(DBGM_L2, mb->addr.dev, "send msg (%s) len=%d to L2 tei %d\n", _mi_msg_type2str(mb->h->prim), mb->len, mb->addr.tei);
 					ret = sendto(l3->l2sock, mb->head, mb->len, 0, (struct sockaddr *)&mb->addr, sizeof(mb->addr));
 					if (ret < 0)
 						eprint("%s write socket error %s\n", __FUNCTION__, strerror(errno));

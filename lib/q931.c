@@ -23,6 +23,7 @@
 #include <mISDN/mbuffer.h>
 #include <mISDN/q931.h>
 #include "layer3.h"
+#include "dss1.h"
 
 static signed char __l3pos[128] = {
 			-1,-2,-2,-2, 0,-2,-2,-2, 1,-2,-2,-2,-2,-2,-2,-2,
@@ -701,8 +702,10 @@ mi_decode_cause(struct l3_msg *l3m, int *coding, int *loc, int *rec, int *val, i
 	_ASSIGN_PVAL(rec, r);
 	_ASSIGN_PVAL(val, l3m->cause[l] & 0x7f);
 	dl = *l3m->cause - l;
-	if (dl > 0 && dia)
+	if (dl > 0 && dl < 30 && dia)
 		memcpy(dia, &l3m->cause[l + 1], dl);
+	else
+		dl = 0;
 	_ASSIGN_PVAL(dialen, dl);
 	return 0;
 }
@@ -1033,7 +1036,7 @@ static const struct _cmdtab {
 	{DL_UNITDATA_IND	, "DL_UNITDATA_IND"},
 	{DL_INFORMATION_IND	, "DL_INFORMATION_IND"},
 
-/* intern layer 2 managment */
+/* intern layer 2 management */
 	{MDL_ASSIGN_REQ		, "MDL_ASSIGN_REQ"},
 	{MDL_ASSIGN_IND		, "MDL_ASSIGN_IND"},
 	{MDL_REMOVE_REQ		, "MDL_REMOVE_REQ"},
@@ -1043,6 +1046,24 @@ static const struct _cmdtab {
 	{MDL_STATUS_UI_IND	, "MDL_STATUS_UI_IND"},
 	{MDL_ERROR_IND		, "MDL_ERROR_IND"},
 	{MDL_ERROR_RSP		, "MDL_ERROR_RSP"},
+
+/* L3 timer */
+	{CC_T301		, "Timer 301"},
+	{CC_T302		, "Timer 302"},
+	{CC_T303		, "Timer 303"},
+	{CC_T304		, "Timer 304"},
+	{CC_T305		, "Timer 305"},
+	{CC_T308_1		, "Timer 308(1)"},
+	{CC_T308_2		, "Timer 308(2)"},
+	{CC_T309		, "Timer 309"},
+	{CC_T310		, "Timer 310"},
+	{CC_T312		, "Timer 312"},
+	{CC_T313		, "Timer 313"},
+	{CC_T318		, "Timer 318"},
+	{CC_T319		, "Timer 319"},
+	{CC_TCTRL		, "Timer CTRL"},
+	{CC_THOLD		, "Timer HOLD"},
+	{CC_TRETRIEVE		, "Timer RETRIEVE"},
 	{0xFFFFFFFF		, "UNKNOWN"}
 };
 
@@ -1050,7 +1071,7 @@ static const struct _cmdtab {
 const char *
 mi_msg_type2str(unsigned int cmd)
 {
-	struct _cmdtab *ct = cmdtab;
+	const struct _cmdtab *ct = cmdtab;
 
 	while (ct->cmd != 0xFFFFFFFF) {
 		if (ct->cmd == cmd)
@@ -1061,4 +1082,16 @@ mi_msg_type2str(unsigned int cmd)
 		return NULL;
 	else
 		return ct->name;
+}
+
+static const char _unknown_mt[] = {"UNKNOWN"};
+
+const char *
+_mi_msg_type2str(unsigned int cmd)
+{
+	const char *t = mi_msg_type2str(cmd);
+
+	if (!t)
+		t = _unknown_mt;
+	return t;
 }

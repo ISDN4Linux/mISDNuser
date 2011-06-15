@@ -23,6 +23,7 @@
 #include "mlist.h"
 #include "mtimer.h"
 #include "fsm.h"
+#include "debug.h"
 
 typedef struct _l3_process	l3_process_t;
 
@@ -115,11 +116,13 @@ extern l3_process_t	*create_new_process(layer3_t *, unsigned int, unsigned int, 
 extern void 		release_l3_process(struct _l3_process *);
 extern void		SendMsg(struct _l3_process *, struct l3_msg *, int);
 extern void 		mISDN_l3up(l3_process_t *, unsigned int, struct l3_msg *);
-extern void		l3_debug(layer3_t *, char *, ...);
+extern void		mIl3_debug(layer3_t *, char *, ...);
+extern void		mIpc_debug(u_int, struct _l3_process *, char *, ...);
 
 static inline void
 newl3state(l3_process_t *pc, int state)
 {
+	mIpc_debug(L3_DEB_STATE, pc, "state %d --> %d", pc->state, state);
 	pc->state = state;
 }
 

@@ -44,6 +44,7 @@
 #define TRETRIEVE	4000
 
 /* private TIMER events */
+#define CC_T301		0x030101
 #define CC_T302		0x030201
 #define CC_T303		0x030301
 #define CC_T304		0x030401

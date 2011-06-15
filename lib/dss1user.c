@@ -1801,6 +1801,17 @@ l3dss1_t308_2(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 }
 
 static void
+l3dss1_t309(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
+{
+	L3DelTimer(&pc->timer1);
+	test_and_clear_bit(FLG_L3P_TIMER309, &pc->flags);
+	send_timeout(pc, "309");
+	newl3state(pc, 0);
+	release_l3_process(pc);
+}
+
+
+static void
 l3dss1_t318(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	L3DelTimer(&pc->timer1);
@@ -1837,6 +1848,7 @@ l3dss1_dl_reset(l3_process_t *pc, unsigned int pr, struct l3_msg *arg)
 	c[0] = 0x80 | CAUSE_LOC_USER;
 	c[1] = 0x80 | CAUSE_TEMPORARY_FAILURE;
 	add_layer3_ie(l3m, IE_CAUSE, 2, c);
+	mIpc_debug(L3_DEB_STATE, pc, "dss1 TE reset DL - send DISCONNECT");
 	l3dss1_disconnect_req(pc, pr, l3m);
 }
 
@@ -1848,14 +1860,19 @@ l3dss1_dl_release(l3_process_t *pc, unsigned int pr, struct l3_msg  *arg)
         pc->cause = 0x1b;          /* Destination out of order */
         pc->para.loc = 0;
 #endif
+	mIpc_debug(L3_DEB_STATE, pc, "dss1 TE release DL");
 	release_l3_process(pc);
 }
 
 static void
 l3dss1_dl_reestablish(l3_process_t *pc, unsigned int pr, struct l3_msg  *arg)
 {
-	L3DelTimer(&pc->timer1);
-	L3AddTimer(&pc->timer1, T309, CC_T309);
+	if (!test_and_set_bit(FLG_L3P_TIMER309, &pc->flags)) {
+		L3DelTimer(&pc->timer1);
+		L3AddTimer(&pc->timer1, T309, CC_T309);
+		mIpc_debug(L3_DEB_STATE, pc, "dss1 TE reestablish DL request - start T309");
+	} else
+		mIpc_debug(L3_DEB_STATE, pc, "dss1 TE reestablish DL request");
 	l3_manager(pc->l2if, DL_ESTABLISH_REQ);
 }
 
@@ -1863,13 +1880,15 @@ static void
 l3dss1_dl_reest_status(l3_process_t *pc, unsigned int pr, struct l3_msg  *arg)
 {
 	L3DelTimer(&pc->timer1);
-
+	test_and_clear_bit(FLG_L3P_TIMER309, &pc->flags);
 	l3dss1_status_send(pc, CAUSE_NORMALUNSPECIFIED);
+	mIpc_debug(L3_DEB_STATE, pc, "dss1 TE reestablish DL - send STATUS");
 }
 
 static void
 l3dss1_dl_ignore(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
+	mIpc_debug(L3_DEB_STATE, pc, "dss1 TE dl_ignore msg:%s", l3m ? _mi_msg_type2str(l3m->type) : "nil");
 	if (l3m)
 		free_l3_msg(l3m);
 }
@@ -2058,7 +2077,7 @@ static struct stateentry manstatelist[] =
 	{SBIT(19),
 	 CC_T308_2, l3dss1_t308_2},
 	{SBIT(10),
-	 CC_T309, l3dss1_dl_release},
+	 CC_T309, l3dss1_t309},
 	{SBIT(6),
 	 CC_TCTRL, l3dss1_reset},
 	{ALL_STATES,
@@ -2086,9 +2105,11 @@ global_handler(layer3_t *l3, u_int mt, struct mbuffer *mb)
 		    ((1 << proc->state) & globalmes_list[i].state))
 			break;
 	if (i == GLOBALM_LEN) {
+		mIpc_debug(L3_DEB_STATE, proc, "dss1 TE gloabal CR state %d from down %s - not handled", proc->state, _mi_msg_type2str(mt));
 		l3dss1_status_send(proc, CAUSE_INVALID_CALLREF);
 		free_mbuffer(mb);
 	} else {
+		mIpc_debug(L3_DEB_STATE, proc, "dss1 TE gloabal CR state %d from down %s", proc->state, _mi_msg_type2str(mt));
 		globalmes_list[i].rout(proc, mt, &mb->l3);
 	}
 }
@@ -2199,17 +2220,25 @@ dss1_fromdown(layer3_t *l3, struct mbuffer *msg)
 			goto freemsg;
 		}
 	}
-	if (l3dss1_check_messagetype_validity(proc, msg->l3h.type))
-			goto freemsg;
+	if (l3dss1_check_messagetype_validity(proc, msg->l3h.type)) {
+		mIpc_debug(L3_DEB_STATE, proc, "dss1 TE state %d from down %s (%x) - invalid msg type",
+			proc->state, _mi_msg_type2str(msg->l3h.type), msg->l3h.type);
+		goto freemsg;
+	}
 	for (i = 0; i < DATASLLEN; i++)
 		if ((msg->l3h.type == datastatelist[i].primitive) &&
 		    ((1 << proc->state) & datastatelist[i].state))
 			break;
 	if (i == DATASLLEN) {
 		if ((MT_RELEASE_COMPLETE != msg->l3h.type) && (MT_RELEASE != msg->l3h.type)) {
+			mIpc_debug(L3_DEB_STATE, proc, "dss1 TE state %d from down %s - STATUS not compatible state",
+				proc->state, _mi_msg_type2str(msg->l3h.type));
 			l3dss1_status_send(proc, CAUSE_NOTCOMPAT_STATE);
-		}
+		} else
+			mIpc_debug(L3_DEB_STATE, proc, "dss1 TE state %d from down %s - ignored",
+				proc->state, _mi_msg_type2str(msg->l3h.type));
 	} else {
+		mIpc_debug(L3_DEB_STATE, proc, "dss1 TE state %d from down %s", proc->state, _mi_msg_type2str(msg->l3h.type));
 		datastatelist[i].rout(proc, msg->h->prim, &msg->l3);
 		return 0;
 	}
@@ -2249,8 +2278,11 @@ dss1_fromup(layer3_t *l3, struct l3_msg *l3m)
 		if ((l3m->type == downstatelist[i].primitive) && ((1 << proc->state) & downstatelist[i].state))
 			break;
 	if (i == DOWNSLLEN) {
+		mIpc_debug(L3_DEB_STATE, proc, "dss1 TE state %d from up %s - not handled",
+			proc->state, _mi_msg_type2str(l3m->type));
 		free_l3_msg(l3m);
 	} else {
+		mIpc_debug(L3_DEB_STATE, proc, "dss1 TE state %d from up %s", proc->state, _mi_msg_type2str(l3m->type));
 		downstatelist[i].rout(proc, l3m->type, l3m);
 	}
 	return 0;
@@ -2260,21 +2292,22 @@ static int
 dss1man(l3_process_t *proc, u_int pr, struct l3_msg *l3m)
 {
 	u_int	i;
-/* handles dl_estab und dl_release messages */
+	/* This handles dl_estab and dl_release messages */
 
 	if (!proc) {
-		eprint("mISDN dss1man without proc pr=%04x\n", pr);
+		eprint("mISDN dss1man without proc pr=%s\n", _mi_msg_type2str(pr));
 		return -EINVAL;
 	}
 	for (i = 0; i < MANSLLEN; i++)
 		if ((pr == manstatelist[i].primitive) && ((1 << proc->state) & manstatelist[i].state))
 			break;
 	if (i == MANSLLEN) {
-		eprint("cr %x dss1man state %d prim %#x unhandled\n",
-			proc->pid & 0x7fff, proc->state, pr);
+		eprint("cr %x dss1man state %d prim %s unhandled\n",
+			proc->pid & 0x7fff, proc->state, _mi_msg_type2str(pr));
 		if (l3m)
 			free_l3_msg(l3m);
 	} else {
+		mIpc_debug(L3_DEB_STATE, proc, "dss1 TE state %d pr %s", proc->state, _mi_msg_type2str(pr));
 		manstatelist[i].rout(proc, pr, l3m);
 	}
 	return 0;

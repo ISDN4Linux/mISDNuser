@@ -354,7 +354,7 @@ l3dss1_disconnect(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	ret = l3dss1_get_cause(pc, l3m);
 	if (ret) {
 		if (pc->L3->debug & L3_DEB_WARN)
-			l3_debug(pc->L3, "DISC get_cause ret(%d)", ret);
+			mIl3_debug(pc->L3, "DISC get_cause ret(%d)", ret);
 	} 
 	mISDN_l3up(pc, MT_DISCONNECT, l3m);
 }
@@ -374,7 +374,7 @@ l3dss1_disconnect_i(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	ret = l3dss1_get_cause(pc, l3m);
 	if (ret) {
 		if (pc->L3->debug & L3_DEB_WARN)
-			l3_debug(pc->L3, "DISC get_cause ret(%d)", ret);
+			mIl3_debug(pc->L3, "DISC get_cause ret(%d)", ret);
 		if (ret < 0)
 			cause = CAUSE_MANDATORY_IE_MISS;
 		else
@@ -433,7 +433,7 @@ l3dss1_release(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	if (ret) {
 		if (pc->state != 12)
 			if (pc->L3->debug & L3_DEB_WARN)
-				l3_debug(pc->L3, "REL get_cause ret(%d)", ret);
+				mIl3_debug(pc->L3, "REL get_cause ret(%d)", ret);
 		if ((ret < 0) && (pc->state != 12))
 			cause = CAUSE_MANDATORY_IE_MISS;
 		else if (ret > 0)
@@ -472,7 +472,7 @@ l3dss1_release_cmpl(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	if (ret) {
 		if (ret > 0)
 			if (pc->L3->debug & L3_DEB_WARN)
-				l3_debug(pc->L3, "RELCMPL get_cause err(%d)", ret);
+				mIl3_debug(pc->L3, "RELCMPL get_cause err(%d)", ret);
 	}
 	mISDN_l3up(pc, MT_RELEASE_COMPLETE, l3m);
 	send_proc(pc, IMSG_END_PROC_M, NULL);
@@ -550,7 +550,7 @@ l3dss1_call_proc(l3_process_t *pc, unsigned int pr, void *arg)
 		if (!(pc->L3->nst->feature & FEATURE_NET_EXTCID)) { /* BRI */
 			if ((0 == pc->bc) || (3 == pc->bc)) {
 				if (pc->L3->debug & L3_DEB_WARN)
-					l3_debug(pc->L3, "setup answer with wrong chid %x", pc->bc);
+					mIl3_debug(pc->L3, "setup answer with wrong chid %x", pc->bc);
 				l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
 				free_msg(umsg);
 				return;
@@ -558,7 +558,7 @@ l3dss1_call_proc(l3_process_t *pc, unsigned int pr, void *arg)
 		}
 	} else if (1 == pc->state) {
 		if (pc->L3->debug & L3_DEB_WARN)
-			l3_debug(pc->L3, "setup answer wrong chid (ret %d)", pc->err);
+			mIl3_debug(pc->L3, "setup answer wrong chid (ret %d)", pc->err);
 		if (pc->err == -1)
 			cause = CAUSE_MANDATORY_IE_MISS;
 		else
@@ -728,7 +728,7 @@ static l3_process_t
 
 	p3i = create_new_process(pc->L3, mb->addr.channel, pc->pid & MISDN_PID_CRVAL_MASK, pc);
 	if (!p3i) {
-		l3_debug(pc->L3, "cannot create child\n");
+		mIl3_debug(pc->L3, "cannot create child\n");
 		return(NULL);
 	}
 	p3i->state = pc->state;
@@ -1224,7 +1224,7 @@ l3dss1_t312(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	test_and_clear_bit(FLG_L3P_TIMER312, &pc->flags);
 	L3DelTimer(&pc->timer2);
 	dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
-	l3_debug(pc->L3, "%s: state %d", __FUNCTION__, pc->state);
+	mIl3_debug(pc->L3, "%s: state %d", __FUNCTION__, pc->state);
 // only action if proc in state 22 ETSI !!!
 //	if (pc->state == 22 || pc->state == 25 || pc->state == 9 || pc->state == 7) {
 	if (pc->state == 22) {
@@ -1261,7 +1261,7 @@ l3dss1_t312(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	test_and_clear_bit(FLG_L3P_TIMER312, &pc->flags);
 	L3DelTimer(&pc->timer2);
 	dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
-	l3_debug(pc->L3, "%s: state %d", __FUNCTION__, pc->state);
+	mIl3_debug(pc->L3, "%s: state %d", __FUNCTION__, pc->state);
 	if (list_empty(&pc->child)) {
 		StopAllL3Timer(pc);
 		newl3state(pc, 0);
@@ -1647,7 +1647,7 @@ send_proc(l3_process_t *proc, int op, void *arg)
 	l3_process_t	*p, *np;
 
 	if (proc->L3 && proc->L3->debug & L3_DEB_PROC)
-		l3_debug(proc->L3, "%s: proc(%x) op(%d)", __FUNCTION__,
+		mIl3_debug(proc->L3, "%s: proc(%x) op(%d)", __FUNCTION__,
 			proc->pid, op);  
 	switch(op) {
 		case IMSG_END_PROC:
@@ -1674,7 +1674,7 @@ send_proc(l3_process_t *proc, int op, void *arg)
 					break;
 			if (i == DATASLLEN) {
 				if (proc->L3->debug & L3_DEB_STATE) {
-					l3_debug(proc->L3, "dss1 state %d mt %#x unhandled",
+					mIl3_debug(proc->L3, "dss1 state %d mt %#x unhandled",
 						proc->state, l3m->type);
 				}
 				if ((MT_RELEASE_COMPLETE != l3m->type) && (MT_RELEASE != l3m->type)) {
@@ -1683,7 +1683,7 @@ send_proc(l3_process_t *proc, int op, void *arg)
 				free_l3_msg(l3m);
 			} else {
 				if (proc->L3->debug & L3_DEB_STATE) {
-					l3_debug(proc->L3, "dss1 state %d mt %x",
+					mIl3_debug(proc->L3, "dss1 state %d mt %x",
 						proc->state, l3m->type);
 				}
 				datastatelist[i].rout(proc, l3m->type, l3m);
@@ -1696,7 +1696,7 @@ send_proc(l3_process_t *proc, int op, void *arg)
 					break;
 			if (i == MDATASLLEN) {
 				if (proc->L3->debug & L3_DEB_STATE) {
-					l3_debug(proc->L3, "dss1 state %d mt %#x unhandled",
+					mIl3_debug(proc->L3, "dss1 state %d mt %#x unhandled",
 						proc->state, l3m->type);
 				}
 				if ((MT_RELEASE_COMPLETE != l3m->type) && (MT_RELEASE != l3m->type)) {
@@ -1705,7 +1705,7 @@ send_proc(l3_process_t *proc, int op, void *arg)
 				free_l3_msg(l3m);
 			} else {
 				if (proc->L3->debug & L3_DEB_STATE) {
-					l3_debug(proc->L3, "dss1 state %d mt %x",
+					mIl3_debug(proc->L3, "dss1 state %d mt %x",
 						proc->state, l3m->type);
 				}
 				mdatastatelist[i].rout(proc, l3m->type, l3m);
@@ -1718,13 +1718,13 @@ send_proc(l3_process_t *proc, int op, void *arg)
 					break;
 			if (i == DOWNSLLEN) {
 				if (proc->L3->debug & L3_DEB_STATE) {
-					l3_debug(proc->L3, "dss1 state %d L4 %#x unhandled",
+					mIl3_debug(proc->L3, "dss1 state %d L4 %#x unhandled",
 						proc->state, l3m->type);
 				}
 				free_l3_msg(l3m);
 			} else {
 				if (proc->L3->debug & L3_DEB_STATE) {
-					l3_debug(proc->L3, "dss1 state %d L4 %x",
+					mIl3_debug(proc->L3, "dss1 state %d L4 %x",
 						proc->state, l3m->type);
 				}
 				downstatelist[i].rout(proc, l3m->type, l3m);
@@ -1823,7 +1823,7 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 			if (msg->l3.pid & 0x8000) {
 				/* Setup/Resume with wrong CREF flag */
 				if (l3->debug & L3_DEB_STATE)
-					l3_debug(l3, "dss1 wrong CRef flag");
+					mIl3_debug(l3, "dss1 wrong CRef flag");
 				goto freemsg;
 			}
 			switch (msg->l3.type) {
