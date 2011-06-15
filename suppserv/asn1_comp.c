@@ -1,67 +1,287 @@
-/* $Id: asn1_comp.c,v 1.3 2006/08/16 14:15:52 nadi Exp $
+/* $Id$
  *
  */
 
 #include "asn1.h"
-#include <stdio.h>
+#include "asn1_diversion.h"
+#include "asn1_ccbs.h"
+#include "asn1_ect.h"
+#include <string.h>
 
 // ======================================================================
 // Component EN 300 196-1 D.1
 
-int
-ParseInvokeId(struct asn1_parm *pc, u_char *p, u_char *end, int *invokeId)
+static const struct asn1OidConvert OIDConversion[] = {
+/* *INDENT-OFF* */
+	/*
+	 * Note the first value in oid.values[] is really the first two
+	 * OID subidentifiers.  They are compressed using this formula:
+	 * First_Value = (First_Subidentifier * 40) + Second_Subidentifier
+	 */
+
+	/* {ccitt(0) identified-organization(4) etsi(0) 359 operations-and-errors(1)} */
+	{ FacOIDBase_CCBS,			{ 4, { 4, 0, 359, 1 } } },
+
+	/* {ccitt(0) identified-organization(4) etsi(0) 359 private-networks-operations-and-errors(2)} */
+	{ FacOIDBase_CCBS_T,		{ 4, { 4, 0, 359, 2 } } },
+
+	/* {ccitt(0) identified-organization(4) etsi(0) 1065 operations-and-errors(1)} */
+	{ FacOIDBase_CCNR,			{ 4, { 4, 0, 1065, 1 } } },
+
+	/* {ccitt(0) identified-organization(4) etsi(0) 1065 private-networks-operations-and-errors(2)} */
+	{ FacOIDBase_CCNR_T,		{ 4, { 4, 0, 1065, 2 } } },
+
+	/* {itu-t(0) identified-organization(4) etsi(0) 196 status-request-procedure(9)} */
+	{ FacOIDBase_StatusRequest,	{ 4, { 4, 0, 196, 9 } } },
+
+	/* {ccitt(0) identified-organization(4) etsi(0) 369 operations-and-errors(1)} */
+	{ FacOIDBase_ECT,			{ 4, { 4, 0, 369, 1 } } },
+/* *INDENT-ON* */
+};
+
+const struct asn1OidConvert *FindOidByOidValue(int length, const __u16 oidValues[])
 {
-	return ParseInteger(pc, p, end, invokeId);
+	int index;
+
+	for (index = 0; index < sizeof(OIDConversion) / sizeof(OIDConversion[0]); ++index) {
+		if (OIDConversion[index].oid.numValues == length
+		    && memcmp(OIDConversion[index].oid.value, oidValues, length * sizeof(oidValues[0])) == 0) {
+			return &OIDConversion[index];
+		}
+	}			/* end for */
+
+	return NULL;
+}				/* end FindOidByOidValue() */
+
+const struct asn1OidConvert *FindOidByEnum(__u16 value)
+{
+	int index;
+
+	for (index = 0; index < sizeof(OIDConversion) / sizeof(OIDConversion[0]); ++index) {
+		if (FAC_OID_BASE(OIDConversion[index].baseCode) <= value && value < FAC_OID_BASE(OIDConversion[index].baseCode + 1)) {
+			return &OIDConversion[index];
+		}
+	}			/* end for */
+
+	return NULL;
+}				/* end FindOidByEnum() */
+
+__u16 ConvertOidToEnum(const struct asn1Oid * oid, __u16 errorValue)
+{
+	const struct asn1OidConvert *convert;
+	__u16 enumValue;
+
+	enumValue = errorValue;
+	if (oid->numValues) {
+		convert = FindOidByOidValue(oid->numValues - 1, oid->value);
+		if (convert) {
+			enumValue = FAC_OID_BASE(convert->baseCode) + oid->value[oid->numValues - 1];
+		}
+	}
+
+	return enumValue;
+}				/* end ConvertOidToEnum() */
+
+int ConvertEnumToOid(struct asn1Oid *oid, __u16 enumValue)
+{
+	int status;
+	const struct asn1OidConvert *convert;
+
+	status = 0;		/* Assume failure */
+	convert = FindOidByEnum(enumValue);
+	if (convert) {
+		*oid = convert->oid;
+		if (oid->numValues < sizeof(oid->value) / sizeof(oid->value[0])) {
+			oid->value[oid->numValues] = enumValue - FAC_OID_BASE(convert->baseCode);
+			++oid->numValues;
+			status = 1;	/* successful */
+		}
+	}
+
+	return status;
+}				/* end ConvertEnumToOid() */
+
+static int ParseOperationOid(struct asn1_parm *pc, u_char * p, u_char * end, int *operationValue)
+{
+	struct asn1Oid operationOid;
+	int rval;
+
+	CallASN1(rval, p, end, ParseOid(pc, p, end, &operationOid));
+	*operationValue = ConvertOidToEnum(&operationOid, Fac_None);
+
+	return rval;
+}				/* end ParseOperationOid() */
+
+static int ParseOperationValue(struct asn1_parm *pc, u_char * p, u_char * end, int *operationValue)
+{
+	INIT;
+
+	XCHOICE_1(ParseUnsignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, operationValue);
+	XCHOICE_1(ParseOperationOid, ASN1_TAG_OBJECT_IDENTIFIER, ASN1_NOT_TAGGED, operationValue);
+	XCHOICE_DEFAULT;
 }
 
-int
-ParseErrorValue(struct asn1_parm *pc, u_char *p, u_char *end, int *errorValue)
+static int ParseInvokeComponent(struct asn1_parm *pc, u_char * p, u_char * end, int dummy)
 {
-	return ParseInteger(pc, p, end, errorValue);
-}
-
-int
-ParseOperationValue(struct asn1_parm *pc, u_char *p, u_char *end, int *operationValue)
-{
-	return ParseInteger(pc, p, end, operationValue);
-}
-
-int
-ParseInvokeComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
-{
-	int invokeId, operationValue;
+	signed int invokeId;
+	signed int linkedId;
+	unsigned int operationValue;
 	INIT;
 
 	pc->comp = invoke;
-	XSEQUENCE_1(ParseInvokeId, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &invokeId);
-//	XSEQUENCE_OPT(ParseLinkedId, ASN1_TAG_INTEGER, 0);
-	XSEQUENCE_1(ParseOperationValue, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &operationValue);
+	XSEQUENCE_1(ParseSignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &invokeId);
 	pc->u.inv.invokeId = invokeId;
+	XSEQUENCE_OPT_1(ParseSignedInteger, ASN1_TAG_CONTEXT_SPECIFIC, 0, &linkedId);
+	XSEQUENCE_1(ParseOperationValue, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &operationValue);
 	pc->u.inv.operationValue = operationValue;
+
 	switch (operationValue) {
+		/* Diversion support */
+	case Fac_ActivationDiversion:
+		XSEQUENCE_1(ParseActivationDiversion_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.ActivationDiversion);
+		break;
+	case Fac_DeactivationDiversion:
+		XSEQUENCE_1(ParseDeactivationDiversion_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.DeactivationDiversion);
+		break;
+	case Fac_ActivationStatusNotificationDiv:
+		XSEQUENCE_1(ParseActivationStatusNotificationDiv_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED,
+			    &pc->u.inv.o.ActivationStatusNotificationDiv);
+		break;
+	case Fac_DeactivationStatusNotificationDiv:
+		XSEQUENCE_1(ParseDeactivationStatusNotificationDiv_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED,
+			    &pc->u.inv.o.DeactivationStatusNotificationDiv);
+		break;
+	case Fac_InterrogationDiversion:
+		XSEQUENCE_1(ParseInterrogationDiversion_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED,
+			    &pc->u.inv.o.InterrogationDiversion);
+		break;
+	case Fac_DiversionInformation:
+		XSEQUENCE_1(ParseDiversionInformation_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.DiversionInformation);
+		break;
+	case Fac_CallDeflection:
+		XSEQUENCE_1(ParseCallDeflection_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.CallDeflection);
+		break;
+	case Fac_CallRerouteing:
+		XSEQUENCE_1(ParseCallRerouteing_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.CallRerouteing);
+		break;
+	case Fac_InterrogateServedUserNumbers:
+		/* No additional invoke parameters */
+		break;
+	case Fac_DivertingLegInformation1:
+		XSEQUENCE_1(ParseDivertingLegInformation1_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED,
+			    &pc->u.inv.o.DivertingLegInformation1);
+		break;
+	case Fac_DivertingLegInformation2:
+		XSEQUENCE_1(ParseDivertingLegInformation2_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED,
+			    &pc->u.inv.o.DivertingLegInformation2);
+		break;
+	case Fac_DivertingLegInformation3:
+		XSEQUENCE_1(ParseDivertingLegInformation3_ARG, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED,
+			    &pc->u.inv.o.DivertingLegInformation3);
+		break;
+
+		/* ECT support */
+	case Fac_EctExecute:
+		/* No additional invoke parameters */
+		break;
+	case Fac_ExplicitEctExecute:
+		XSEQUENCE_1(ParseExplicitEctExecute_ARG, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.ExplicitEctExecute);
+		break;
+	case Fac_RequestSubaddress:
+		/* No additional invoke parameters */
+		break;
+	case Fac_SubaddressTransfer:
+		XSEQUENCE_1(ParseSubaddressTransfer_ARG, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.SubaddressTransfer);
+		break;
+	case Fac_EctLinkIdRequest:
+		/* No additional invoke parameters */
+		break;
+	case Fac_EctInform:
+		XSEQUENCE_1(ParseEctInform_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.EctInform);
+		break;
+	case Fac_EctLoopTest:
+		XSEQUENCE_1(ParseEctLoopTest_ARG, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.EctLoopTest);
+		break;
+
+		/* AOC support */
 #if 0
-	case 7:	 XSEQUENCE(ParseARGActivationDiversion, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
-	case 8:	 XSEQUENCE(ParseARGDeactivationDiversion, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
+	case Fac_ChargingRequest:
+	case Fac_AOCSCurrency:
+	case Fac_AOCSSpecialArr:
+		break;
 #endif
- 	case 9:	 XSEQUENCE_1(ParseARGActivationStatusNotificationDiv, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.actNot); break;
- 	case 10: XSEQUENCE_1(ParseARGDeactivationStatusNotificationDiv, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.deactNot); break;
-#if 0
- 	case 11: XSEQUENCE(ParseARGInterrogationDiversion, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
- 	case 12: XSEQUENCE(ParseARGDiversionInformation, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
-#endif
-	case 13: XSEQUENCE_1(ParseARGReqCallDeflection, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.reqCD); break;
-#if 0
- 	case 17: XSEQUENCE(ParseARGInterrogateServedUserNumbers, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
-//	case 30: XSEQUENCE(ParseChargingRequest, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
-//	case 31: XSEQUENCE(ParseAOCSCurrency, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
-//	case 32: XSEQUENCE(ParseAOCSSpecialArr, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
-#endif
-	case 33: XSEQUENCE_1(ParseAOCDCurrency, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.AOCDcur); break;
-	case 34: XSEQUENCE_1(ParseAOCDChargingUnit, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.AOCDchu); break;
-#if 0
-	case 35: XSEQUENCE(ParseAOCECurrency, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
-	case 36: XSEQUENCE(ParseAOCEChargingUnit, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED); break;
-#endif
+	case Fac_AOCDCurrency:
+		XSEQUENCE_1(ParseAOCDCurrency, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.AOCcur);
+		break;
+	case Fac_AOCDChargingUnit:
+		XSEQUENCE_1(ParseAOCDChargingUnit, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.AOCchu);
+		break;
+	case Fac_AOCECurrency:
+		XSEQUENCE_1(ParseAOCECurrency, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.AOCcur);
+		break;
+	case Fac_AOCEChargingUnit:
+		XSEQUENCE_1(ParseAOCEChargingUnit, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.AOCchu);
+		break;
+	case Fac_StatusRequest:
+		XSEQUENCE_1(ParseStatusRequest_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.StatusRequest);
+		break;
+
+		/* CCBS/CCNR support */
+	case Fac_CallInfoRetain:
+		XSEQUENCE_1(ParseCallInfoRetain_ARG, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.CallInfoRetain);
+		break;
+	case Fac_CCBSRequest:
+		XSEQUENCE_1(ParseCCBSRequest_ARG, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.CCBSRequest);
+		break;
+	case Fac_CCBSDeactivate:
+		XSEQUENCE_1(ParseCCBSDeactivate_ARG, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.CCBSDeactivate);
+		break;
+	case Fac_CCBSInterrogate:
+		XSEQUENCE_1(ParseCCBSInterrogate_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.CCBSInterrogate);
+		break;
+	case Fac_CCBSErase:
+		XSEQUENCE_1(ParseCCBSErase_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.CCBSErase);
+		break;
+	case Fac_CCBSRemoteUserFree:
+		XSEQUENCE_1(ParseCCBSRemoteUserFree_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.CCBSRemoteUserFree);
+		break;
+	case Fac_CCBSCall:
+		XSEQUENCE_1(ParseCCBSCall_ARG, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.CCBSCall);
+		break;
+	case Fac_CCBSStatusRequest:
+		XSEQUENCE_1(ParseCCBSStatusRequest_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.CCBSStatusRequest);
+		break;
+	case Fac_CCBSBFree:
+		XSEQUENCE_1(ParseCCBSBFree_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.CCBSBFree);
+		break;
+	case Fac_EraseCallLinkageID:
+		XSEQUENCE_1(ParseEraseCallLinkageID_ARG, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.EraseCallLinkageID);
+		break;
+	case Fac_CCBSStopAlerting:
+		XSEQUENCE_1(ParseCCBSStopAlerting_ARG, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.CCBSStopAlerting);
+		break;
+	case Fac_CCNRRequest:
+		XSEQUENCE_1(ParseCCNRRequest_ARG, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.inv.o.CCNRRequest);
+		break;
+	case Fac_CCNRInterrogate:
+		XSEQUENCE_1(ParseCCNRInterrogate_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.CCNRInterrogate);
+		break;
+
+		/* CCBS-T/CCNR-T support */
+	case Fac_CCBS_T_Call:
+	case Fac_CCBS_T_Suspend:
+	case Fac_CCBS_T_Resume:
+	case Fac_CCBS_T_RemoteUserFree:
+	case Fac_CCBS_T_Available:
+		/* No additional invoke parameters */
+		break;
+	case Fac_CCBS_T_Request:
+		XSEQUENCE_1(ParseCCBS_T_Request_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.CCBS_T_Request);
+		break;
+	case Fac_CCNR_T_Request:
+		XSEQUENCE_1(ParseCCNR_T_Request_ARG, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.CCNR_T_Request);
+		break;
+
 	default:
 		return -1;
 	}
@@ -69,92 +289,247 @@ ParseInvokeComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 	return p - beg;
 }
 
-int
-ParseReturnResultComponentSequence(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+int ParseReturnResultComponentSequence(struct asn1_parm *pc, u_char * p, u_char * end, int dummy)
 {
-	int operationValue;
 	INIT;
 
-	XSEQUENCE_1(ParseOperationValue, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &operationValue);
-	switch (operationValue) {
- 	case 11: XSEQUENCE(ParseRESInterrogationDiversion, ASN1_TAG_SET, ASN1_NOT_TAGGED); break;
- 	case 17: XSEQUENCE(ParseRESInterrogateServedUserNumbers, ASN1_TAG_SET, ASN1_NOT_TAGGED); break;
-	default: return -1;
+	XSEQUENCE_1(ParseOperationValue, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.retResult.operationValue);
+	pc->u.retResult.operationValuePresent = 1;
+
+	switch (pc->u.retResult.operationValue) {
+		/* Diversion support */
+	case Fac_ActivationDiversion:
+	case Fac_DeactivationDiversion:
+		/* No additional result parameters */
+		break;
+	case Fac_InterrogationDiversion:
+		XSEQUENCE_1(ParseInterrogationDiversion_RES, ASN1_TAG_SET, ASN1_NOT_TAGGED,
+			    &pc->u.retResult.o.InterrogationDiversion);
+		break;
+	case Fac_CallDeflection:
+	case Fac_CallRerouteing:
+		/* No additional result parameters */
+		break;
+	case Fac_InterrogateServedUserNumbers:
+		XSEQUENCE_1(ParseInterrogateServedUserNumbers_RES, ASN1_TAG_SET, ASN1_NOT_TAGGED,
+			    &pc->u.retResult.o.InterrogateServedUserNumbers);
+		break;
+
+		/* ECT support */
+	case Fac_EctLinkIdRequest:
+		XSEQUENCE_1(ParseEctLinkIdRequest_RES, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.retResult.o.EctLinkIdRequest);
+		break;
+	case Fac_EctLoopTest:
+		XSEQUENCE_1(ParseEctLoopTest_RES, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.retResult.o.EctLoopTest);
+		break;
+
+	case Fac_StatusRequest:
+		XSEQUENCE_1(ParseStatusRequest_RES, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.retResult.o.StatusRequest);
+		break;
+
+#if 0
+		/* AOC support */
+	case Fac_ChargingRequest:
+		break;
+#endif
+
+		/* CCBS/CCNR support */
+	case Fac_CCBSDeactivate:
+		/* No additional result parameters */
+		break;
+	case Fac_CCBSStatusRequest:
+		XSEQUENCE_1(ParseCCBSStatusRequest_RES, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.retResult.o.CCBSStatusRequest);
+		break;
+	case Fac_CCBSRequest:
+		XSEQUENCE_1(ParseCCBSRequest_RES, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.retResult.o.CCBSRequest);
+		break;
+	case Fac_CCBSInterrogate:
+		XSEQUENCE_1(ParseCCBSInterrogate_RES, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.retResult.o.CCBSInterrogate);
+		break;
+	case Fac_CCNRRequest:
+		XSEQUENCE_1(ParseCCNRRequest_RES, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.retResult.o.CCNRRequest);
+		break;
+	case Fac_CCNRInterrogate:
+		XSEQUENCE_1(ParseCCNRInterrogate_RES, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.retResult.o.CCNRInterrogate);
+		break;
+
+		/* CCBS-T/CCNR-T support */
+	case Fac_CCBS_T_Request:
+		XSEQUENCE_1(ParseCCBS_T_Request_RES, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.retResult.o.CCBS_T_Request);
+		break;
+	case Fac_CCNR_T_Request:
+		XSEQUENCE_1(ParseCCNR_T_Request_RES, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &pc->u.retResult.o.CCNR_T_Request);
+		break;
+
+	default:
+		return -1;
 	}
-		
+
 	return p - beg;
 }
 
-int
-ParseReturnResultComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+static int ParseReturnResultComponent(struct asn1_parm *pc, u_char * p, u_char * end, int dummy)
 {
-	int invokeId;
+	signed int invokeId;
 	INIT;
 
 	pc->comp = returnResult;
-	XSEQUENCE_1(ParseInvokeId, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &invokeId);
-	XSEQUENCE_OPT(ParseReturnResultComponentSequence, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED);
+	XSEQUENCE_1(ParseSignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &invokeId);
 	pc->u.retResult.invokeId = invokeId;
+	pc->u.retResult.operationValuePresent = 0;
+	XSEQUENCE_OPT(ParseReturnResultComponentSequence, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED);
 
 	return p - beg;
 }
 
-int
-ParseReturnErrorComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+static int ParseErrorOid(struct asn1_parm *pc, u_char * p, u_char * end, int *errorValue)
 {
-        int invokeId;
-        int errorValue;
-        char error[80];
-        INIT;
+	struct asn1Oid errorOid;
+	int rval;
+
+	CallASN1(rval, p, end, ParseOid(pc, p, end, &errorOid));
+	*errorValue = ConvertOidToEnum(&errorOid, FacError_Unknown);
+
+	return rval;
+}				/* end ParseErrorOid() */
+
+static int ParseErrorValue(struct asn1_parm *pc, u_char * p, u_char * end, int *errorValue)
+{
+	INIT;
+
+	XCHOICE_1(ParseUnsignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, errorValue);
+	XCHOICE_1(ParseErrorOid, ASN1_TAG_OBJECT_IDENTIFIER, ASN1_NOT_TAGGED, errorValue);
+	XCHOICE_DEFAULT;
+}
+
+int ParseReturnErrorComponent(struct asn1_parm *pc, u_char * p, u_char * end, int dummy)
+{
+	int invokeId;
+	int errorValue;
+#if defined(ASN1_DEBUG)
+	char *error;
+	char msg[20];
+#endif				/* defined(ASN1_DEBUG) */
+	INIT;
 
 	pc->comp = returnError;
 
-	XSEQUENCE_1(ParseInvokeId, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &invokeId);
-	XSEQUENCE_1(ParseErrorValue, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &errorValue);
+	XSEQUENCE_1(ParseSignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &invokeId);
+	XSEQUENCE_1(ParseErrorValue, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &errorValue);
 
 	pc->u.retError.invokeId = invokeId;
 	pc->u.retError.errorValue = errorValue;
 
+#if defined(ASN1_DEBUG)
 	switch (errorValue) {
-		case 0: sprintf(error, "not subscribed"); break;
-		case 3: sprintf(error, "not available"); break;
-		case 4: sprintf(error, "not implemented"); break;
-		case 6: sprintf(error, "invalid served user nr"); break;
-		case 7: sprintf(error, "invalid call state"); break;
-		case 8: sprintf(error, "basic service not provided"); break;
-		case 9: sprintf(error, "not incoming call"); break;
-		case 10: sprintf(error, "supplementary service interaction not allowed"); break;
-		case 11: sprintf(error, "resource unavailable"); break;
-		case 12: sprintf(error, "invalid diverted-to nr"); break;
-		case 14: sprintf(error, "special service nr"); break;
-		case 15: sprintf(error, "diversion to served user nr"); break;
-		case 23: sprintf(error, "incoming call accepted"); break;
-		case 24: sprintf(error, "number of diversions exceeded"); break;
-		case 46: sprintf(error, "not activated"); break;
-		case 48: sprintf(error, "request already accepted"); break;
-		default: sprintf(error, "(%d)", errorValue); break;
+	case FacError_Gen_NotSubscribed:
+		error = "not subscribed";
+		break;
+	case FacError_Gen_NotAvailable:
+		error = "not available";
+		break;
+	case FacError_Gen_NotImplemented:
+		error = "not implemented";
+		break;
+	case FacError_Gen_InvalidServedUserNr:
+		error = "invalid served user nr";
+		break;
+	case FacError_Gen_InvalidCallState:
+		error = "invalid call state";
+		break;
+	case FacError_Gen_BasicServiceNotProvided:
+		error = "basic service not provided";
+		break;
+	case FacError_Gen_NotIncomingCall:
+		error = "not incoming call";
+		break;
+	case FacError_Gen_SupplementaryServiceInteractionNotAllowed:
+		error = "supplementary service interaction not allowed";
+		break;
+	case FacError_Gen_ResourceUnavailable:
+		error = "resource unavailable";
+		break;
+	case FacError_Div_InvalidDivertedToNr:
+		error = "invalid diverted-to nr";
+		break;
+	case FacError_Div_SpecialServiceNr:
+		error = "special service nr";
+		break;
+	case FacError_Div_DiversionToServedUserNr:
+		error = "diversion to served user nr";
+		break;
+	case FacError_Div_IncomingCallAccepted:
+		error = "incoming call accepted";
+		break;
+	case FacError_Div_NumberOfDiversionsExceeded:
+		error = "number of diversions exceeded";
+		break;
+	case FacError_Div_NotActivated:
+		error = "not activated";
+		break;
+	case FacError_Div_RequestAlreadyAccepted:
+		error = "request already accepted";
+		break;
+	case FacError_AOC_NoChargingInfoAvailable:
+		error = "no charging info available";
+		break;
+	case FacError_CCBS_InvalidCallLinkageID:
+		error = "invalid call linkage id";
+		break;
+	case FacError_CCBS_InvalidCCBSReference:
+		error = "invalid ccbs reference";
+		break;
+	case FacError_CCBS_T_LongTermDenial:
+	case FacError_CCBS_LongTermDenial:
+		error = "long term denial";
+		break;
+	case FacError_CCBS_T_ShortTermDenial:
+	case FacError_CCBS_ShortTermDenial:
+		error = "short term denial";
+		break;
+	case FacError_CCBS_IsAlreadyActivated:
+		error = "ccbs is already activated";
+		break;
+	case FacError_CCBS_AlreadyAccepted:
+		error = "already accepted";
+		break;
+	case FacError_CCBS_OutgoingCCBSQueueFull:
+		error = "outgoing ccbs queue full";
+		break;
+	case FacError_CCBS_CallFailureReasonNotBusy:
+		error = "call failure reason not busy";
+		break;
+	case FacError_CCBS_NotReadyForCall:
+		error = "not ready for call";
+		break;
+	case FacError_Unknown:
+		error = "unknown OID error code";
+		break;
+	default:
+		sprintf(msg, "(%d)", errorValue);
+		error = msg;
+		break;
 	}
-	print_asn1msg(PRT_DEBUG_DECODE, "ReturnError: %s\n", error);
+	print_asn1msg(PRT_DEBUG_DECODE, "%s Decoded-Error: %s\n", __FUNCTION__, error);
+#endif				/* defined(ASN1_DEBUG) */
 
 	return p - beg;
+}				/* end of ParseReturnErrorComponent() */
+
+int ParseProblemValue(struct asn1_parm *pc, u_char * p, u_char * end, asn1Problem prob)
+{
+	int rval;
+
+	pc->u.reject.problem = prob;
+	rval = ParseUnsignedInteger(pc, p, end, &pc->u.reject.problemValue);
+	print_asn1msg(PRT_DEBUG_DECODE, "ParseProblemValue: %d %d, rval:%d\n", prob, pc->u.reject.problemValue, rval);
+
+	return rval;
 }
 
-int
-ParseProblemValue(struct asn1_parm *pc, u_char *p, u_char *end, asn1Problem prob)
+int ParseRejectProblem(struct asn1_parm *pc, u_char * p, u_char * end, int dummy)
 {
 	INIT;
-	
-	pc->u.reject.problem = prob;
-	
-	print_asn1msg(PRT_DEBUG_DECODE, "ParseProblemValue: %d %d\n", prob, *p);
-	pc->u.reject.problemValue = *p++;
-	return p - beg;
-}
-
-int
-ParseRejectProblem(struct asn1_parm *pc, u_char *p, u_char *end)
-{
-        INIT;
 
 	XCHOICE_1(ParseProblemValue, ASN1_TAG_CONTEXT_SPECIFIC, 0, GeneralP);
 	XCHOICE_1(ParseProblemValue, ASN1_TAG_CONTEXT_SPECIFIC, 1, InvokeP);
@@ -163,62 +538,43 @@ ParseRejectProblem(struct asn1_parm *pc, u_char *p, u_char *end)
 	XCHOICE_DEFAULT;
 }
 
-int
-ParseRejectComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+static int ParseRejectInvokeId(struct asn1_parm *pc, u_char * p, u_char * end, int dummy)
 {
-        int invokeId = -1;
-        int rval;
-        INIT;
+	INIT;
+
+	pc->u.reject.invokeIdPresent = 1;
+	XCHOICE_1(ParseSignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &pc->u.reject.invokeId);
+
+	pc->u.reject.invokeIdPresent = 0;
+	pc->u.reject.invokeId = 0;
+	XCHOICE(ParseNull, ASN1_TAG_NULL, ASN1_NOT_TAGGED);
+
+	XCHOICE_DEFAULT;
+}
+
+int ParseRejectComponent(struct asn1_parm *pc, u_char * p, u_char * end, int dummy)
+{
+	INIT;
 
 	pc->comp = reject;
 
-	XSEQUENCE_OPT_1(ParseInvokeId, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &invokeId);
-	XSEQUENCE_OPT(ParseNull, ASN1_TAG_NULL, ASN1_NOT_TAGGED);
-	
-	print_asn1msg(PRT_DEBUG_DECODE, "ParseRejectComponent: invokeId %d\n", invokeId);
+	XSEQUENCE(ParseRejectInvokeId, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED);
+	if (pc->u.reject.invokeIdPresent) {
+		print_asn1msg(PRT_DEBUG_DECODE, "ParseRejectComponent: invokeId %d\n", pc->u.reject.invokeId);
+	}
 
-	pc->u.reject.invokeId = invokeId;
-	
-	rval = ParseRejectProblem(pc, p, end);
-
-	print_asn1msg(PRT_DEBUG_DECODE, "ParseRejectComponent: rval %d\n", rval);
-
-	if (rval > 0)
-		p += rval;
-	else
-		return(-1);
+	XSEQUENCE(ParseRejectProblem, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED);
 
 	return p - beg;
 }
 
-int
-ParseUnknownComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+int ParseComponent(struct asn1_parm *pc, u_char * p, u_char * end)
 {
 	INIT;
-	
-	pc->comp = tag;
-	return end - beg;
-}
 
-int
-ParseComponent(struct asn1_parm *pc, u_char *p, u_char *end)
-{
-        INIT;
-
-	XCHOICE(ParseInvokeComponent, ASN1_TAG_SEQUENCE, 1);
-	XCHOICE(ParseReturnResultComponent, ASN1_TAG_SEQUENCE, 2);
-	XCHOICE(ParseReturnErrorComponent, ASN1_TAG_SEQUENCE, 3);
-	XCHOICE(ParseRejectComponent, ASN1_TAG_SEQUENCE, 4);
-	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 5);
-	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 6);
-	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 7);
-	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 8);
-	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 9);
-	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 10);
-	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 11);
-	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 12);
-	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 13);
-	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 14);
+	XCHOICE(ParseInvokeComponent, ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED, 1);
+	XCHOICE(ParseReturnResultComponent, ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED, 2);
+	XCHOICE(ParseReturnErrorComponent, ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED, 3);
+	XCHOICE(ParseRejectComponent, ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED, 4);
 	XCHOICE_DEFAULT;
 }
-

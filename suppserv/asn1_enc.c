@@ -1,134 +1,161 @@
-/* $Id: asn1_enc.c,v 1.2 2006/08/16 14:15:52 nadi Exp $
+/* $Id$
  *
  */
 
 #include "asn1.h"
 #include <string.h>
 
-int encodeNull(__u8 *dest)
+int encodeLen_Long_u8(__u8 * dest, __u8 length)
 {
-	dest[0] = 0x05;  // null
-	dest[1] = 0;     // length
+	dest[0] = 0x80 + ASN1_NUM_OCTETS_LONG_LENGTH_u8 - 1;
+	dest[1] = length;
+	return ASN1_NUM_OCTETS_LONG_LENGTH_u8;
+}				/* end encodeLen_Long_u8() */
+
+int encodeLen_Long_u16(__u8 * dest, __u16 length)
+{
+	dest[0] = 0x80 + ASN1_NUM_OCTETS_LONG_LENGTH_u16 - 1;
+	dest[1] = (length >> 8) & 0xFF;
+	dest[2] = length & 0xFF;
+	return ASN1_NUM_OCTETS_LONG_LENGTH_u16;
+}				/* end encodeLen_Long_u16() */
+
+int encodeNull(__u8 * dest, __u8 tagType)
+{
+	dest[0] = tagType;
+	dest[1] = 0;		/* length */
 	return 2;
 }
 
-int encodeBoolean(__u8 *dest, __u32 i)
+int encodeBoolean(__u8 * dest, __u8 tagType, __u32 i)
 {
-	dest[0] = 0x01;  // BOOLEAN
-	dest[1] = 1;     // length 1
-	dest[2] = i ? 1:0;  // Value
+	dest[0] = tagType;
+	dest[1] = 1;		/* length */
+	dest[2] = i ? 1 : 0;	/* value */
 	return 3;
 }
 
-int encodeInt(__u8 *dest, __u32 i)
+int encodeInt(__u8 * dest, __u8 tagType, __s32 i)
 {
+	unsigned count;
+	__u32 test_mask;
+	__u32 value;
 	__u8 *p;
 
-	dest[0] = 0x02;  // integer
-	dest[1] = 0;     // length
+	dest[0] = tagType;
+
+	/* Find most significant octet of 32 bit integer that carries meaning. */
+	test_mask = 0xFF800000;
+	value = (__u32) i;
+	for (count = 4; --count;) {
+		if ((value & test_mask) != test_mask && (value & test_mask) != 0) {
+			/*
+			 * The first 9 bits of a multiple octet integer is not
+			 * all ones or zeroes.
+			 */
+			break;
+		}
+		test_mask >>= 8;
+	}			/* end for */
+
+	/* length */
+	dest[1] = count + 1;
+
+	/* Store value */
 	p = &dest[2];
 	do {
-		*p++ = i;
-		i >>= 8;
-	} while (i);
+		value = (__u32) i;
+		value >>= (8 * count);
+		*p++ = value & 0xFF;
+	} while (count--);
 
-	dest[1] = p - &dest[2];
 	return p - dest;
 }
 
-int encodeEnum(__u8 *dest, __u32 i)
+int encodeEnum(__u8 * dest, __u8 tagType, __s32 i)
 {
-	__u8 *p;
-
-	dest[0] = 0x0a;  // integer
-	dest[1] = 0;     // length
-	p = &dest[2];
-	do {
-		*p++ = i;
-		i >>= 8;
-	} while (i);
-
-	dest[1] = p - &dest[2];
-	return p - dest;
+	return encodeInt(dest, tagType, i);
 }
 
-int encodeNumberDigits(__u8 *dest, __s8 *nd, __u8 len)
+/*
+ * Use to encode the following string types:
+ * ASN1_TAG_OCTET_STRING
+ * ASN1_TAG_NUMERIC_STRING
+ * ASN1_TAG_PRINTABLE_STRING
+ * ASN1_TAG_IA5_STRING
+ *
+ * Note The string length MUST be less than 128 characters.
+ */
+static int encodeString(__u8 * dest, __u8 tagType, const __s8 * str, __u8 len)
 {
 	__u8 *p;
 	int i;
 
-	dest[0] = 0x12;    // numeric string
-	dest[1] = 0x0;     // length
+	dest[0] = tagType;
+
+	/* Store value */
 	p = &dest[2];
 	for (i = 0; i < len; i++)
-		*p++ = *nd++;
+		*p++ = *str++;
 
+	/* length */
 	dest[1] = p - &dest[2];
+
 	return p - dest;
 }
 
-int encodePublicPartyNumber(__u8 *dest, __s8 *facilityPartyNumber)
+int encodeOctetString(__u8 * dest, __u8 tagType, const __s8 * str, __u8 len)
 {
+	return encodeString(dest, tagType, str, len);
+}				/* end encodeOctetString() */
+
+int encodeNumericString(__u8 * dest, __u8 tagType, const __s8 * str, __u8 len)
+{
+	return encodeString(dest, tagType, str, len);
+}				/* end encodeNumericString() */
+
+int encodePrintableString(__u8 * dest, __u8 tagType, const __s8 * str, __u8 len)
+{
+	return encodeString(dest, tagType, str, len);
+}				/* end encodePrintableString() */
+
+int encodeIA5String(__u8 * dest, __u8 tagType, const __s8 * str, __u8 len)
+{
+	return encodeString(dest, tagType, str, len);
+}				/* end encodeIA5String() */
+
+int encodeOid(__u8 * dest, __u8 tagType, const struct asn1Oid *oid)
+{
+	unsigned numValues;
+	unsigned count;
+	__u32 value;
 	__u8 *p;
 
-	dest[0] = 0x20;  // sequence
-	dest[1] = 0;     // length
+	dest[0] = tagType;
+
+	/* For all OID subidentifer values */
 	p = &dest[2];
-	p += encodeEnum(p, (facilityPartyNumber[2] & 0x70) >> 4);
-	p += encodeNumberDigits(p, &facilityPartyNumber[4], facilityPartyNumber[0] - 3);
+	for (numValues = 0; numValues < oid->numValues; ++numValues) {
+		/*
+		 * Count the number of 7 bit chunks that are needed
+		 * to encode the integer.
+		 */
+		value = oid->value[numValues] >> 7;
+		for (count = 0; value; ++count) {
+			/* There are bits still set */
+			value >>= 7;
+		}		/* end for */
 
+		/* Store OID subidentifier value */
+		do {
+			value = oid->value[numValues];
+			value >>= (7 * count);
+			*p++ = (value & 0x7F) | (count ? 0x80 : 0);
+		} while (count--);
+	}			/* end for */
+
+	/* length */
 	dest[1] = p - &dest[2];
+
 	return p - dest;
-}
-
-int encodePartyNumber(__u8 *dest, __s8 *facilityPartyNumber)
-{
-	__u8 *p = dest;
-
-	p += encodeNumberDigits(p, facilityPartyNumber, strlen((char *)facilityPartyNumber));
-	dest[0] = 0x80;
-#if 0
-	switch (facilityPartyNumber[1]) {
-	case 0: // unknown
-		p += encodeNumberDigits(p, &facilityPartyNumber[4], facilityPartyNumber[0] - 3);
-		dest[0] &= 0x20;
-		dest[0] |= 0x81;
-		break;
-	case 1: // publicPartyNumber
-		p += encodePublicPartyNumber(p, facilityPartyNumber);
-		dest[0] &= 0x20;
-		dest[0] |= 0x81;
-		break;
-	default:
-		int_error();
-		return -1;
-	}
-#endif
-	return p - dest;
-}
-
-int encodeServedUserNumber(__u8 *dest, __s8 *servedUserNumber)
-{
-	if (servedUserNumber[0])
-		return encodePartyNumber(dest, servedUserNumber);
-        else
-		return encodeNull(dest);
-}
-
-int encodeAddress(__u8 *dest, __s8 *facilityPartyNumber, __s8 *calledPartySubaddress)
-{
-	__u8 *p = dest;
-
-	dest[0] = 0x30;  // invoke id tag, integer
-	dest[1] = 0;     // length
-	p = &dest[2];
-
-	p += encodePartyNumber(p, facilityPartyNumber);
-#if 0 // FIXME
-	if (calledPartySubaddress[0])
-		p += encodePartySubaddress(p, calledPartySubaddress);
-#endif
-	dest[1] = p - &dest[2];
-	return p - dest;
-}
-
+}				/* end encodeOid() */

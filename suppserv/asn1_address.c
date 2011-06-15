@@ -1,233 +1,624 @@
-/* $Id: asn1_address.c,v 1.2 2006/08/16 14:15:52 nadi Exp $
+/* $Id$
  *
+ * Addressing-Data-Elements ETS 300 196-1 D.3
+ *
+ * Addressing-Data-Elements encode/decode
  */
 
 #include "asn1.h"
-#include <stdio.h>
 #include <string.h>
 
-void buildnumber(char *num, int oc3, int oc3a, char *result, int version,
-		 int *provider, int *sondernummer, int *intern, int *local,
-		 int dir, int who);
+/* ------------------------------------------------------------------- */
 
-
-// ======================================================================
-// Address Types EN 300 196-1 D.3
-
-int ParsePresentationRestricted(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
+/* ******************************************************************* */
+/*!
+ * \internal
+ * \brief Parse the NumberDigits PartyNumber argument parameters.
+ *
+ * \param pc Complete component message storage data.
+ * \param p Starting buffer position to parse arguments
+ * \param end End buffer position that must not go past.
+ * \param PartyNumber Parameter storage to fill.
+ *
+ * \retval length of buffer consumed
+ * \retval -1 on error.
+ */
+static int ParseNumberDigits_Full(struct asn1_parm *pc, u_char * p, u_char * end, struct FacPartyNumber *PartyNumber)
 {
-	int ret;
+	struct asn1ParseString Number;
+	int LengthConsumed;
 
-	ret = ParseNull(pc, p, end, -1);
-	if (ret < 0)
-		return ret;
-	strcpy(str, "(presentation restricted)");
-	return ret;
-}
+	Number.buf = (char *)PartyNumber->Number;
+	Number.maxSize = sizeof(PartyNumber->Number);
+	Number.length = 0;
+	LengthConsumed = ParseNumericString(pc, p, end, &Number);
+	PartyNumber->LengthOfNumber = Number.length;
+	return LengthConsumed;
+}				/* end ParseNumberDigits_Full() */
 
-int ParseNotAvailInterworking(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
+/* ******************************************************************* */
+/*!
+ * \internal
+ * \brief Parse the NSAP PartyNumber argument parameters.
+ *
+ * \param pc Complete component message storage data.
+ * \param p Starting buffer position to parse arguments
+ * \param end End buffer position that must not go past.
+ * \param PartyNumber Parameter storage to fill.
+ *
+ * \retval length of buffer consumed
+ * \retval -1 on error.
+ */
+static int ParseNSAPPartyNumber(struct asn1_parm *pc, u_char * p, u_char * end, struct FacPartyNumber *PartyNumber)
 {
-	int ret;
+	struct asn1ParseString Number;
+	int LengthConsumed;
 
-	ret = ParseNull(pc, p, end, -1);
-	if (ret < 0)
-		return ret;
-	strcpy(str, "(not available)");
-	return ret;
-}
+	Number.buf = (char *)PartyNumber->Number;
+	Number.maxSize = sizeof(PartyNumber->Number);
+	Number.length = 0;
+	LengthConsumed = ParseOctetString(pc, p, end, &Number);
+	PartyNumber->LengthOfNumber = Number.length;
+	return LengthConsumed;
+}				/* end ParseNSAPPartyNumber() */
 
-int ParsePresentedAddressScreened(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
+/* ******************************************************************* */
+/*!
+ * \internal
+ * \brief Encode the public or private network PartyNumber type.
+ *
+ * \param Dest Where to put the encoding
+ * \param Number
+ * \param LengthOfNumber
+ * \param TypeOfNumber
+ *
+ * \retval length
+ */
+static int encodeNetworkPartyNumber(__u8 * Dest, const __s8 * Number, __u8 LengthOfNumber, __u8 TypeOfNumber)
 {
+	__u8 *p;
+
+	Dest[0] = ASN1_TAG_SEQUENCE;
+	p = &Dest[2];
+
+	p += encodeEnum(p, ASN1_TAG_ENUM, TypeOfNumber);
+	p += encodeNumericString(p, ASN1_TAG_NUMERIC_STRING, Number, LengthOfNumber);
+
+	/* length */
+	Dest[1] = p - &Dest[2];
+
+	return p - Dest;
+}				/* end encodeNetworkPartyNumber() */
+
+/* ******************************************************************* */
+/*!
+ * \internal
+ * \brief Parse the public or private network PartyNumber argument parameters.
+ *
+ * \param pc Complete component message storage data.
+ * \param p Starting buffer position to parse arguments
+ * \param end End buffer position that must not go past.
+ * \param PartyNumber Parameter storage to fill.
+ *
+ * \retval length of buffer consumed
+ * \retval -1 on error.
+ */
+static int ParseNetworkPartyNumber(struct asn1_parm *pc, u_char * p, u_char * end, struct FacPartyNumber *PartyNumber)
+{
+	int TypeOfNumber;
 	INIT;
 
-	XCHOICE_1(ParseAddressScreened, ASN1_TAG_SEQUENCE, 0, str);
-	XCHOICE_1(ParsePresentationRestricted, ASN1_TAG_NULL, 1, str);
-	XCHOICE_1(ParseNotAvailInterworking, ASN1_TAG_NULL, 2, str);
-	XCHOICE_1(ParseAddressScreened, ASN1_TAG_NULL, 3, str);
-	XCHOICE_DEFAULT;
-}
-
-int ParsePresentedNumberScreened(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
-{
-	INIT;
-
-	XCHOICE_1(ParseNumberScreened, ASN1_TAG_SEQUENCE, 0, str);
-	XCHOICE_1(ParsePresentationRestricted, ASN1_TAG_NULL, 1, str);
-	XCHOICE_1(ParseNotAvailInterworking, ASN1_TAG_NULL, 2, str);
-	XCHOICE_1(ParseNumberScreened, ASN1_TAG_NULL, 3, str);
-	XCHOICE_DEFAULT;
-}
-
-int ParsePresentedNumberUnscreened(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
-{
-	struct PartyNumber partyNumber;
-	INIT;
-
-	XCHOICE_1(ParsePartyNumber, ASN1_TAG_SEQUENCE, 0, &partyNumber); // FIXME EXP
-	XCHOICE_1(ParsePresentationRestricted, ASN1_TAG_NULL, 1, str);
-	XCHOICE_1(ParseNotAvailInterworking, ASN1_TAG_NULL, 2, str);
-	XCHOICE_1(ParsePartyNumber, ASN1_TAG_SEQUENCE, 3, &partyNumber); // FIXME EXP
-	XCHOICE_DEFAULT;
-}
-
-int ParseNumberScreened(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
-{
-	struct PartyNumber partyNumber;
-	char screeningIndicator[30];
-	INIT;
-
-	XSEQUENCE_1(ParsePartyNumber, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &partyNumber);
-	XSEQUENCE_1(ParseScreeningIndicator, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, screeningIndicator);
-
-//	str += sprintf(str, "%s", partyNumber);
+	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &TypeOfNumber);
+	PartyNumber->TypeOfNumber = TypeOfNumber;
+	XSEQUENCE_1(ParseNumberDigits_Full, ASN1_TAG_NUMERIC_STRING, ASN1_NOT_TAGGED, PartyNumber);
 
 	return p - beg;
-}
+}				/* end ParseNetworkPartyNumber() */
 
-int ParseAddressScreened(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
+/* ******************************************************************* */
+/*!
+ * \brief Encode the PartyNumber type.
+ *
+ * \param Dest Where to put the encoding
+ * \param PartyNumber Number information to encode.
+ *
+ * \retval length
+ */
+int encodePartyNumber_Full(__u8 * Dest, const struct FacPartyNumber *PartyNumber)
 {
-	struct PartyNumber partyNumber;
-	char partySubaddress[30] = { 0, };
-	char screeningIndicator[30];
+	int Length;
+
+	switch (PartyNumber->Type) {
+	case 0:		/* Unknown PartyNumber */
+		Length =
+		    encodeNumericString(Dest, ASN1_TAG_CONTEXT_SPECIFIC | 0, (const __s8 *)PartyNumber->Number,
+					PartyNumber->LengthOfNumber);
+		break;
+	case 1:		/* Public PartyNumber */
+		Length =
+		    encodeNetworkPartyNumber(Dest, (const __s8 *)PartyNumber->Number, PartyNumber->LengthOfNumber,
+					     PartyNumber->TypeOfNumber);
+		Dest[0] &= ASN1_TAG_CONSTRUCTED;
+		Dest[0] |= ASN1_TAG_CONTEXT_SPECIFIC | 1;
+		break;
+	case 2:		/* NSAP encoded PartyNumber */
+		Length =
+		    encodeOctetString(Dest, ASN1_TAG_CONTEXT_SPECIFIC | 2, (const __s8 *)PartyNumber->Number,
+				      PartyNumber->LengthOfNumber);
+		break;
+	case 3:		/* Data PartyNumber (Not used) */
+		Length =
+		    encodeNumericString(Dest, ASN1_TAG_CONTEXT_SPECIFIC | 3, (const __s8 *)PartyNumber->Number,
+					PartyNumber->LengthOfNumber);
+		break;
+	case 4:		/* Telex PartyNumber (Not used) */
+		Length =
+		    encodeNumericString(Dest, ASN1_TAG_CONTEXT_SPECIFIC | 4, (const __s8 *)PartyNumber->Number,
+					PartyNumber->LengthOfNumber);
+		break;
+	case 5:		/* Private PartyNumber */
+		Length =
+		    encodeNetworkPartyNumber(Dest, (const __s8 *)PartyNumber->Number, PartyNumber->LengthOfNumber,
+					     PartyNumber->TypeOfNumber);
+		Dest[0] &= ASN1_TAG_CONSTRUCTED;
+		Dest[0] |= ASN1_TAG_CONTEXT_SPECIFIC | 5;
+		break;
+	case 8:		/* National Standard PartyNumber (Not used) */
+		Length =
+		    encodeNumericString(Dest, ASN1_TAG_CONTEXT_SPECIFIC | 8, (const __s8 *)PartyNumber->Number,
+					PartyNumber->LengthOfNumber);
+		break;
+	default:
+		Length = 0;
+		break;
+	}			/* end switch */
+
+	return Length;
+}				/* end encodePartyNumber_Full() */
+
+/* ******************************************************************* */
+/*!
+ * \brief Parse the PartyNumber argument parameters.
+ *
+ * \param pc Complete component message storage data.
+ * \param p Starting buffer position to parse arguments
+ * \param end End buffer position that must not go past.
+ * \param PartyNumber Parameter storage to fill.
+ *
+ * \retval length of buffer consumed
+ * \retval -1 on error.
+ */
+int ParsePartyNumber_Full(struct asn1_parm *pc, u_char * p, u_char * end, struct FacPartyNumber *PartyNumber)
+{
 	INIT;
 
-	XSEQUENCE_1(ParsePartyNumber, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &partyNumber);
-	XSEQUENCE_1(ParseScreeningIndicator, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, screeningIndicator);
-	XSEQUENCE_OPT_1(ParsePartySubaddress, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, partySubaddress);
+	PartyNumber->Type = 0;	/* Unknown PartyNumber */
+	XCHOICE_1(ParseNumberDigits_Full, ASN1_TAG_CONTEXT_SPECIFIC, 0, PartyNumber);
+	PartyNumber->Type = 1;	/* Public PartyNumber */
+	XCHOICE_1(ParseNetworkPartyNumber, ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED, 1, PartyNumber);
+	PartyNumber->Type = 2;	/* NSAP encoded PartyNumber */
+	XCHOICE_1(ParseNSAPPartyNumber, ASN1_TAG_CONTEXT_SPECIFIC, 2, PartyNumber);
+	PartyNumber->Type = 3;	/* Data PartyNumber (Not used) */
+	XCHOICE_1(ParseNumberDigits_Full, ASN1_TAG_CONTEXT_SPECIFIC, 3, PartyNumber);
+	PartyNumber->Type = 4;	/* Telex PartyNumber (Not used) */
+	XCHOICE_1(ParseNumberDigits_Full, ASN1_TAG_CONTEXT_SPECIFIC, 4, PartyNumber);
+	PartyNumber->Type = 5;	/* Private PartyNumber */
+	XCHOICE_1(ParseNetworkPartyNumber, ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED, 5, PartyNumber);
+	PartyNumber->Type = 8;	/* National Standard PartyNumber (Not used) */
+	XCHOICE_1(ParseNumberDigits_Full, ASN1_TAG_CONTEXT_SPECIFIC, 8, PartyNumber);
 
-//	str += sprintf(str, "%s", partyNumber);
-	if (strlen(partySubaddress))
-		str += sprintf(str, ".%s", partySubaddress);
-
-	return p - beg;
-}
-
-int ParseAddress(struct asn1_parm *pc, u_char *p, u_char *end, struct Address *address)
-{
-	INIT;
-
-	address->partySubaddress[0] = 0;
-	XSEQUENCE_1(ParsePartyNumber, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &address->partyNumber);
-	
-	XSEQUENCE_OPT_1(ParsePartySubaddress, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, address->partySubaddress);
-
-	return p - beg;
-}
-
-int ParsePartyNumber(struct asn1_parm *pc, u_char *p, u_char *end, struct PartyNumber *partyNumber)
-{
-	INIT;
-
-	partyNumber->type = 0;
-	XCHOICE_1(ParseNumberDigits, ASN1_TAG_NUMERIC_STRING, 0, partyNumber->p.unknown); // unknownPartyNumber
-	partyNumber->type = 1;
-	XCHOICE_1(ParsePublicPartyNumber, ASN1_TAG_SEQUENCE, 1, &partyNumber->p.publicPartyNumber); 
-#if 0
-	XCHOICE_1(ParseNumberDigits, ASN1_TAG_NUMERIC_STRING, 3, str); // dataPartyNumber
-	XCHOICE_1(ParseNumberDigits, ASN1_TAG_NUMERIC_STRING, 4, str); // telexPartyNumber
-	XCHOICE_1(ParsePrivatePartyNumber, ASN1_TAG_SEQUENCE, 5, str);
-	XCHOICE_1(ParseNumberDigits, ASN1_TAG_NUMERIC_STRING, 8, str); // nationalStandardPartyNumber
-#endif
 	XCHOICE_DEFAULT;
-}
+}				/* end ParsePartyNumber_Full() */
 
-int ParsePublicPartyNumber(struct asn1_parm *pc, u_char *p, u_char *end, struct PublicPartyNumber *publicPartyNumber)
+/* ******************************************************************* */
+/*!
+ * \internal
+ * \brief Parse the User information string PartySubaddress argument parameters.
+ *
+ * \param pc Complete component message storage data.
+ * \param p Starting buffer position to parse arguments
+ * \param end End buffer position that must not go past.
+ * \param PartySubaddress Parameter storage to fill.
+ *
+ * \retval length of buffer consumed
+ * \retval -1 on error.
+ */
+static int ParseUserSubaddressInfo(struct asn1_parm *pc, u_char * p, u_char * end, struct FacPartySubaddress *PartySubaddress)
 {
+	struct asn1ParseString Subaddress;
+	int LengthConsumed;
+
+	Subaddress.buf = (char *)PartySubaddress->u.UserSpecified.Information;
+	Subaddress.maxSize = sizeof(PartySubaddress->u.UserSpecified.Information);
+	Subaddress.length = 0;
+	LengthConsumed = ParseOctetString(pc, p, end, &Subaddress);
+	PartySubaddress->Length = Subaddress.length;
+	return LengthConsumed;
+}				/* end ParseUserSubaddressInfo() */
+
+/* ******************************************************************* */
+/*!
+ * \internal
+ * \brief Parse the User PartySubaddress argument parameters.
+ *
+ * \param pc Complete component message storage data.
+ * \param p Starting buffer position to parse arguments
+ * \param end End buffer position that must not go past.
+ * \param PartySubaddress Parameter storage to fill.
+ *
+ * \retval length of buffer consumed
+ * \retval -1 on error.
+ */
+static int ParseUserSubaddress(struct asn1_parm *pc, u_char * p, u_char * end, struct FacPartySubaddress *PartySubaddress)
+{
+	int OddCount;
 	INIT;
 
-	XSEQUENCE_1(ParsePublicTypeOfNumber, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &publicPartyNumber->publicTypeOfNumber);
-	XSEQUENCE_1(ParseNumberDigits, ASN1_TAG_NUMERIC_STRING, ASN1_NOT_TAGGED, publicPartyNumber->numberDigits);
+	PartySubaddress->Type = 0;	/* UserSpecified */
 
-	return p - beg;
-}
-
-#if 0
-int ParsePrivatePartyNumber(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
-{
-	int privateTypeOfNumber;
-	char numberDigits[20];
-	INIT;
-
-	XSEQUENCE_1(ParsePrivateTypeOfNumber, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &privateTypeOfNumber); 
-	XSEQUENCE_1(ParseNumberDigits, ASN1_TAG_NUMERIC_STRING, ASN1_NOT_TAGGED, numberDigits); 
-
-	switch (privateTypeOfNumber) {
-	case 0: str += sprintf(str, "(unknown)"); break;
-	case 1: str += sprintf(str, "(regional2)"); break;
-	case 2: str += sprintf(str, "(regional1)"); break;
-	case 3: str += sprintf(str, "(ptn)"); break;
-	case 4: str += sprintf(str, "(local)"); break;
-	case 6: str += sprintf(str, "(abbrev)"); break;
+	XSEQUENCE_1(ParseUserSubaddressInfo, ASN1_TAG_OCTET_STRING, ASN1_NOT_TAGGED, PartySubaddress);
+	if (p < end) {
+		XSEQUENCE_1(ParseBoolean, ASN1_TAG_BOOLEAN, ASN1_NOT_TAGGED, &OddCount);
+		PartySubaddress->u.UserSpecified.OddCount = OddCount;
+		PartySubaddress->u.UserSpecified.OddCountPresent = 1;
+	} else {
+		PartySubaddress->u.UserSpecified.OddCount = 0;
+		PartySubaddress->u.UserSpecified.OddCountPresent = 0;
 	}
-	str += sprintf(str, numberDigits);
-
 	return p - beg;
-}
-#endif
+}				/* end ParseUserSubaddress() */
 
-int ParsePublicTypeOfNumber(struct asn1_parm *pc, u_char *p, u_char *end, int *publicTypeOfNumber)
+/* ******************************************************************* */
+/*!
+ * \internal
+ * \brief Parse the NSAP PartySubaddress argument parameters.
+ *
+ * \param pc Complete component message storage data.
+ * \param p Starting buffer position to parse arguments
+ * \param end End buffer position that must not go past.
+ * \param PartySubaddress Parameter storage to fill.
+ *
+ * \retval length of buffer consumed
+ * \retval -1 on error.
+ */
+static int ParseNSAPSubaddress_Full(struct asn1_parm *pc, u_char * p, u_char * end, struct FacPartySubaddress *PartySubaddress)
 {
-	return ParseEnum(pc, p, end, publicTypeOfNumber);
-}
+	struct asn1ParseString Subaddress;
+	int LengthConsumed;
 
-#if 0
-int ParsePrivateTypeOfNumber(struct asn1_parm *pc, u_char *p, u_char *end, int *privateTypeOfNumber)
+	PartySubaddress->Type = 1;	/* NSAP */
+
+	Subaddress.buf = (char *)PartySubaddress->u.Nsap;
+	Subaddress.maxSize = sizeof(PartySubaddress->u.Nsap);
+	Subaddress.length = 0;
+	LengthConsumed = ParseOctetString(pc, p, end, &Subaddress);
+	PartySubaddress->Length = Subaddress.length;
+	return LengthConsumed;
+}				/* end ParseNSAPSubaddress_Full() */
+
+/* ******************************************************************* */
+/*!
+ * \brief Encode the PartySubaddress type.
+ *
+ * \param Dest Where to put the encoding
+ * \param PartySubaddress Subaddress information to encode.
+ *
+ * \retval length
+ */
+int encodePartySubaddress_Full(__u8 * Dest, const struct FacPartySubaddress *PartySubaddress)
 {
-	return ParseEnum(pc, p, end, privateTypeOfNumber);
-}
-#endif
+	__u8 *p;
+	int Length;
 
-int ParsePartySubaddress(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
+	switch (PartySubaddress->Type) {
+	case 0:		/* UserSpecified */
+		Dest[0] = ASN1_TAG_SEQUENCE;
+		p = &Dest[2];
+
+		p += encodeOctetString(p, ASN1_TAG_OCTET_STRING, (const __s8 *)PartySubaddress->u.UserSpecified.Information,
+				       PartySubaddress->Length);
+		if (PartySubaddress->u.UserSpecified.OddCountPresent) {
+			p += encodeBoolean(p, ASN1_TAG_BOOLEAN, PartySubaddress->u.UserSpecified.OddCount);
+		}
+
+		/* length */
+		Dest[1] = p - &Dest[2];
+
+		Length = p - Dest;
+		break;
+	case 1:		/* NSAP */
+		Length =
+		    encodeOctetString(Dest, ASN1_TAG_OCTET_STRING, (const __s8 *)PartySubaddress->u.Nsap, PartySubaddress->Length);
+		break;
+	default:
+		Length = 0;
+		break;
+	}			/* end switch */
+
+	return Length;
+}				/* end encodePartySubaddress_Full() */
+
+/* ******************************************************************* */
+/*!
+ * \brief Parse the PartySubaddress argument parameters.
+ *
+ * \param pc Complete component message storage data.
+ * \param p Starting buffer position to parse arguments
+ * \param end End buffer position that must not go past.
+ * \param PartySubaddress Parameter storage to fill.
+ *
+ * \retval length of buffer consumed
+ * \retval -1 on error.
+ */
+int ParsePartySubaddress_Full(struct asn1_parm *pc, u_char * p, u_char * end, struct FacPartySubaddress *PartySubaddress)
 {
 	INIT;
 
-	XCHOICE_1(ParseUserSpecifiedSubaddress, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, str);
-	XCHOICE_1(ParseNSAPSubaddress, ASN1_TAG_OCTET_STRING, ASN1_NOT_TAGGED, str);
+	XCHOICE_1(ParseUserSubaddress, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, PartySubaddress);
+	XCHOICE_1(ParseNSAPSubaddress_Full, ASN1_TAG_OCTET_STRING, ASN1_NOT_TAGGED, PartySubaddress);
+
 	XCHOICE_DEFAULT;
-}
+}				/* end ParsePartySubaddress_Full() */
 
-int ParseUserSpecifiedSubaddress(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
+/* ******************************************************************* */
+/*!
+ * \brief Encode the Address type.
+ *
+ * \param Dest Where to put the encoding
+ * \param Address Address information to encode.
+ *
+ * \retval length
+ */
+int encodeAddress_Full(__u8 * Dest, const struct FacAddress *Address)
 {
-	int oddCountIndicator;
-	INIT;
+	__u8 *p;
 
-	XSEQUENCE_1(ParseSubaddressInformation, ASN1_TAG_OCTET_STRING, ASN1_NOT_TAGGED, str);
-	XSEQUENCE_OPT_1(ParseBoolean, ASN1_TAG_BOOLEAN, ASN1_NOT_TAGGED, &oddCountIndicator);
-	
-	return p - beg;
-}
+	Dest[0] = ASN1_TAG_SEQUENCE;
+	p = &Dest[2];
 
-int ParseNSAPSubaddress(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
-{
-	return ParseOctetString(pc, p, end, str);
-}
-
-int ParseSubaddressInformation(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
-{
-	return ParseOctetString(pc, p, end, str);
-}
-
-int ParseScreeningIndicator(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
-{
-	int ret;
-	int screeningIndicator;
-
-	ret = ParseEnum(pc, p, end, &screeningIndicator);
-	if (ret < 0)
-		return ret;
-	
-	switch (screeningIndicator) {
-	case 0: sprintf(str, "user provided, not screened"); break;
-	case 1: sprintf(str, "user provided, passed"); break;
-	case 2: sprintf(str, "user provided, failed"); break;
-	case 3: sprintf(str, "network provided"); break;
-	default: sprintf(str, "(%d)", screeningIndicator); break;
+	p += encodePartyNumber_Full(p, &Address->Party);
+	if (Address->Subaddress.Length) {
+		p += encodePartySubaddress_Full(p, &Address->Subaddress);
 	}
 
-	return ret;
-}
+	/* length */
+	Dest[1] = p - &Dest[2];
 
-int ParseNumberDigits(struct asn1_parm *pc, u_char *p, u_char *end, char *str)
+	return p - Dest;
+}				/* end encodeAddress_Full() */
+
+/* ******************************************************************* */
+/*!
+ * \brief Parse the Address argument parameters.
+ *
+ * \param pc Complete component message storage data.
+ * \param p Starting buffer position to parse arguments
+ * \param end End buffer position that must not go past.
+ * \param Address Parameter storage to fill.
+ *
+ * \retval length of buffer consumed
+ * \retval -1 on error.
+ */
+int ParseAddress_Full(struct asn1_parm *pc, u_char * p, u_char * end, struct FacAddress *Address)
 {
-	return ParseNumericString(pc, p, end, str);
-}
+	INIT;
+
+	XSEQUENCE_1(ParsePartyNumber_Full, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &Address->Party);
+	if (p < end) {
+		/* The optional subaddress must be present since there is something left. */
+		XSEQUENCE_1(ParsePartySubaddress_Full, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &Address->Subaddress);
+	} else {
+		Address->Subaddress.Length = 0;	/* Subaddress not present */
+	}
+
+	return p - beg;
+}				/* end ParseAddress_Full() */
+
+/* ******************************************************************* */
+/*!
+ * \brief Encode the PresentedNumberUnscreened type.
+ *
+ * \param Dest Where to put the encoding
+ * \param Presented Number information to encode.
+ *
+ * \retval length
+ */
+int encodePresentedNumberUnscreened_Full(__u8 * Dest, const struct FacPresentedNumberUnscreened *Presented)
+{
+	__u8 *p;
+	__u8 *TagStart;
+
+	p = Dest;
+	switch (Presented->Type) {
+	case 0:		/* presentationAllowedNumber */
+		TagStart = p;
+		TagStart[0] = ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED | 0;
+		p = &TagStart[2];
+
+		p += encodePartyNumber_Full(p, &Presented->Unscreened);
+
+		/* tag Length */
+		TagStart[1] = p - &TagStart[2];
+		break;
+	case 1:		/* presentationRestricted */
+		p += encodeNull(p, ASN1_TAG_CONTEXT_SPECIFIC | 1);
+		break;
+	case 2:		/* numberNotAvailableDueToInterworking */
+		p += encodeNull(p, ASN1_TAG_CONTEXT_SPECIFIC | 2);
+		break;
+	case 3:		/* presentationRestrictedNumber */
+		TagStart = p;
+		TagStart[0] = ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED | 3;
+		p = &TagStart[2];
+
+		p += encodePartyNumber_Full(p, &Presented->Unscreened);
+
+		/* tag Length */
+		TagStart[1] = p - &TagStart[2];
+		break;
+	default:
+		break;
+	}			/* end switch */
+
+	return p - Dest;
+}				/* end encodePresentedNumberUnscreened_Full() */
+
+/* ******************************************************************* */
+/*!
+ * \brief Parse the PresentedNumberUnscreened argument parameters.
+ *
+ * \param pc Complete component message storage data.
+ * \param p Starting buffer position to parse arguments
+ * \param end End buffer position that must not go past.
+ * \param Presented Parameter storage to fill.
+ *
+ * \retval length of buffer consumed
+ * \retval -1 on error.
+ */
+int ParsePresentedNumberUnscreened_Full(struct asn1_parm *pc, u_char * p, u_char * end,
+					struct FacPresentedNumberUnscreened *Presented)
+{
+	INIT;
+
+	Presented->Type = 0;
+	XCHOICE_1(ParsePartyNumber_Full, ASN1_TAG_EXPLICIT | ASN1_TAG_CONTEXT_SPECIFIC, 0, &Presented->Unscreened);
+	Presented->Type = 1;
+	XCHOICE(ParseNull, ASN1_TAG_CONTEXT_SPECIFIC, 1);
+	Presented->Type = 2;
+	XCHOICE(ParseNull, ASN1_TAG_CONTEXT_SPECIFIC, 2);
+	Presented->Type = 3;
+	XCHOICE_1(ParsePartyNumber_Full, ASN1_TAG_EXPLICIT | ASN1_TAG_CONTEXT_SPECIFIC, 3, &Presented->Unscreened);
+
+	XCHOICE_DEFAULT;
+}				/* end ParsePresentedNumberUnscreened_Full() */
+
+/* ******************************************************************* */
+/*!
+ * \internal
+ * \brief Encode the AddressScreened type.
+ *
+ * \param Dest Where to put the encoding
+ * \param Address Address information to encode.
+ *
+ * \retval length
+ */
+static int encodeAddressScreened_Full(__u8 * Dest, const struct FacAddressScreened *Address)
+{
+	__u8 *p;
+
+	Dest[0] = ASN1_TAG_SEQUENCE;
+	p = &Dest[2];
+
+	p += encodePartyNumber_Full(p, &Address->Party);
+	p += encodeEnum(p, ASN1_TAG_ENUM, Address->ScreeningIndicator);
+	if (Address->Subaddress.Length) {
+		p += encodePartySubaddress_Full(p, &Address->Subaddress);
+	}
+
+	/* length */
+	Dest[1] = p - &Dest[2];
+
+	return p - Dest;
+}				/* end encodeAddressScreened_Full() */
+
+/* ******************************************************************* */
+/*!
+ * \internal
+ * \brief Parse the AddressScreened argument parameters.
+ *
+ * \param pc Complete component message storage data.
+ * \param p Starting buffer position to parse arguments
+ * \param end End buffer position that must not go past.
+ * \param Address Parameter storage to fill.
+ *
+ * \retval length of buffer consumed
+ * \retval -1 on error.
+ */
+static int ParseAddressScreened_Full(struct asn1_parm *pc, u_char * p, u_char * end, struct FacAddressScreened *Address)
+{
+	int Value;
+	INIT;
+
+	XSEQUENCE_1(ParsePartyNumber_Full, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &Address->Party);
+	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &Value);
+	Address->ScreeningIndicator = Value;
+	if (p < end) {
+		/* The optional subaddress must be present since there is something left. */
+		XSEQUENCE_1(ParsePartySubaddress_Full, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &Address->Subaddress);
+	} else {
+		Address->Subaddress.Length = 0;	/* Subaddress not present */
+	}
+
+	return p - beg;
+}				/* end ParseAddressScreened_Full() */
+
+/* ******************************************************************* */
+/*!
+ * \brief Encode the PresentedAddressScreened type.
+ *
+ * \param Dest Where to put the encoding
+ * \param Presented Address information to encode.
+ *
+ * \retval length
+ */
+int encodePresentedAddressScreened_Full(__u8 * Dest, const struct FacPresentedAddressScreened *Presented)
+{
+	__u8 *p;
+	__u8 *TagStart;
+
+	p = Dest;
+	switch (Presented->Type) {
+	case 0:		/* presentationAllowedAddress */
+		TagStart = p;
+		p += encodeAddressScreened_Full(p, &Presented->Address);
+		TagStart[0] = ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED | 0;
+		break;
+	case 1:		/* presentationRestricted */
+		p += encodeNull(p, ASN1_TAG_CONTEXT_SPECIFIC | 1);
+		break;
+	case 2:		/* numberNotAvailableDueToInterworking */
+		p += encodeNull(p, ASN1_TAG_CONTEXT_SPECIFIC | 2);
+		break;
+	case 3:		/* presentationRestrictedAddress */
+		TagStart = p;
+		p += encodeAddressScreened_Full(p, &Presented->Address);
+		TagStart[0] = ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED | 3;
+		break;
+	default:
+		break;
+	}			/* end switch */
+
+	return p - Dest;
+}				/* end encodePresentedAddressScreened_Full() */
+
+/* ******************************************************************* */
+/*!
+ * \brief Parse the PresentedAddressScreened argument parameters.
+ *
+ * \param pc Complete component message storage data.
+ * \param p Starting buffer position to parse arguments
+ * \param end End buffer position that must not go past.
+ * \param Presented Parameter storage to fill.
+ *
+ * \retval length of buffer consumed
+ * \retval -1 on error.
+ */
+int ParsePresentedAddressScreened_Full(struct asn1_parm *pc, u_char * p, u_char * end,
+				       struct FacPresentedAddressScreened *Presented)
+{
+	INIT;
+
+	Presented->Type = 0;
+	XCHOICE_1(ParseAddressScreened_Full, ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED, 0, &Presented->Address);
+	Presented->Type = 1;
+	XCHOICE(ParseNull, ASN1_TAG_CONTEXT_SPECIFIC, 1);
+	Presented->Type = 2;
+	XCHOICE(ParseNull, ASN1_TAG_CONTEXT_SPECIFIC, 2);
+	Presented->Type = 3;
+	XCHOICE_1(ParseAddressScreened_Full, ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED, 3, &Presented->Address);
+
+	XCHOICE_DEFAULT;
+}				/* end ParsePresentedAddressScreened_Full() */
+
+/* ------------------------------------------------------------------- */
+/* end asn1_address.c */
