@@ -312,12 +312,14 @@ release_l3_process(l3_process_t *pc)
 	list_del(&pc->list);
 	StopAllL3Timer(pc);
 	free(pc);
-//	pc = get_first_l3process4ces(l3, ces);
-//	if ((!pc) && !test_bit(MISDN_FLG_L2_HOLD, &l3->ml3.options)) {
+	pc = get_first_l3process4ces(l3, ces);
+	if ((!pc) && !test_bit(MISDN_FLG_L2_HOLD, &l3->ml3.options)) {
+		dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s: tei %d idle\n", __func__, l2i->l2addr.tei);
+		l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2IDLE, l2i->l2addr.tei, NULL);
 //		if (!mqueue_len(&l2i->squeue)) {
 //			FsmEvent(&l2i->l3m, EV_RELEASE_REQ, NULL);
 //		}
-//	}
+	}
 }
 
 static void
@@ -386,7 +388,7 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 	struct l2l3if *l2i = fi->userdata;
 	struct mbuffer	*mb;
 	int dequeued = 0;
-	//l3_process_t	*pc;
+	l3_process_t	*pc;
 
 	FsmChangeState(fi, ST_L3_LC_ESTAB);
 	while ((mb = mdequeue(&l2i->squeue))) {
@@ -408,7 +410,7 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 	struct l2l3if *l2i = fi->userdata;
 	struct mbuffer	*mb;
 	int dequeued = 0;
-	//l3_process_t	*pc;
+	l3_process_t	*pc;
 
 	FsmDelTimer(&l2i->l3m_timer, 51);
 	FsmChangeState(fi, ST_L3_LC_ESTAB);
@@ -525,10 +527,12 @@ to_layer3(struct mlayer3 *ml3, unsigned int prim, unsigned int pid, struct l3_ms
 	int		ret, id;
 	l3_process_t	*proc;
 	struct mbuffer	*mb;
+	struct mqueue	*q = NULL;
 
 	l3 = container_of(ml3, layer3_t, ml3);
 	switch(prim) {
 	case MT_ASSIGN:
+		eprint("%s: MT_ASSIGN via %s is depreciated - use new request_new_pid(struct mlayer3 *)\n", __func__, __func__);
 		proc = create_new_process(l3, MISDN_CES_MASTER, 0, NULL);
 		if (!proc)
 			return -EBUSY;
@@ -538,6 +542,8 @@ to_layer3(struct mlayer3 *ml3, unsigned int prim, unsigned int pid, struct l3_ms
 		break;
 	case MT_L2ESTABLISH:
 	case MT_L2RELEASE:
+		q = &l3->mgr_queue;
+		break;
 	case MT_ALERTING:
 	case MT_CALL_PROCEEDING:
 	case MT_CONNECT:
@@ -570,6 +576,12 @@ to_layer3(struct mlayer3 *ml3, unsigned int prim, unsigned int pid, struct l3_ms
 	case MT_RESUME: /* RESUME only in user->net */
 	case MT_SUSPEND: /* SUSPEND only in user->net */
 	case MT_REGISTER: /* REGISTER only in user->net */
+		q = &l3->app_queue;
+		break;
+	default:
+		return -EINVAL;
+	}
+	if (q) {
 		if (!l3m) {
 			l3m = alloc_l3_msg();
 			if (!l3m)
@@ -578,15 +590,12 @@ to_layer3(struct mlayer3 *ml3, unsigned int prim, unsigned int pid, struct l3_ms
 		mb = container_of(l3m, struct mbuffer, l3);
 		l3m->type = prim;
 		l3m->pid = pid;
-		mqueue_tail(&l3->app_queue, mb);
+		mqueue_tail(q, mb);
 		id = 0;
 		/* wake up worker */
 		ret = ioctl(l3->mdev, IMADDTIMER, &id);
 		if (ret)
 			eprint("%s wake up worker error %s\n", __FUNCTION__, strerror(errno));
-		break;
-	default:
-		return -EINVAL;
 	}
 	return 0;
 }
@@ -657,6 +666,7 @@ init_l3(layer3_t *l3)
 	if (!test_bit(MISDN_FLG_PTP, &l3->ml3.options))
 		l3->l2master.l3m.state = ST_L3_LC_ESTAB;
 	mqueue_init(&l3->app_queue);
+	mqueue_init(&l3->mgr_queue);
 	INIT_LIST_HEAD(&l3->pending_timer);
 	l3->ml3.to_layer3 = to_layer3;
 	pthread_mutex_init(&l3->run, NULL);
@@ -682,6 +692,7 @@ release_l3(layer3_t *l3)
 	StopAllL3Timer(&l3->dummy);
 	release_if(&l3->l2master);
 	mqueue_purge(&l3->app_queue);
+	mqueue_purge(&l3->mgr_queue);
 	list_for_each_entry_safe(l2i, nl2i, &l3->l2master.list, list) {
 		release_if(l2i);
 		list_del(&l2i->list);
@@ -852,13 +863,9 @@ layer3_thread(void *arg)
 			}
 		}
 		while ((mb = mdequeue(&l3->app_queue))) {
-			if (mb->l3.type == MT_L2ESTABLISH || mb->l3.type == MT_L2RELEASE)
-				to_l2(l3, &mb->l3);
-			else {
-				ret = l3->to_l3(l3, &mb->l3);
-				if (ret < 0)
-					free_mbuffer(mb);
-			}
+			ret = l3->to_l3(l3, &mb->l3);
+			if (ret < 0)
+				free_mbuffer(mb);
 		}
 		if (l3->l2master.l3m.state == ST_L3_LC_ESTAB) {
 			while ((mb = mdequeue(&l3->l2master.squeue))) {
@@ -871,12 +878,27 @@ layer3_thread(void *arg)
 		list_for_each_entry(l2i, &l3->l2master.list, list) {
 			if (l2i->l3m.state == ST_L3_LC_ESTAB) {
 				while ((mb = mdequeue(&l2i->squeue))) {
+					dprint(DBGM_L2, mb->addr.dev, "send msg len=%d to L2\n", mb->len);
 					ret = sendto(l3->l2sock, mb->head, mb->len, 0, (struct sockaddr *)&mb->addr, sizeof(mb->addr));
 					if (ret < 0)
 						eprint("%s write socket error %s\n", __FUNCTION__, strerror(errno));
 					free_mbuffer(mb);
 				}
 			}
+		}
+		while ((mb = mdequeue(&l3->mgr_queue))) {
+			ret = 0;
+			switch(mb->l3.type) {
+			case MT_L2ESTABLISH:
+			case MT_L2RELEASE:
+				to_l2(l3, &mb->l3);
+				break;
+			default:
+				wprint("mgr_queue: msg type %x not handled\n", mb->l3.type);
+				ret = -EINVAL;
+			}
+			if (ret)
+				free_mbuffer(mb);
 		}
 		if (test_bit(FLG_RUN_WAIT, &l3->ml3.options)) {
 			test_and_clear_bit(FLG_RUN_WAIT, &l3->ml3.options);

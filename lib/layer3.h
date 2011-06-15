@@ -99,6 +99,7 @@ typedef struct _layer3 {
 	int			(*to_l3)(struct _layer3 *, struct l3_msg *);
 	int			debug;
 	struct mqueue		app_queue;
+	struct mqueue		mgr_queue;
 	pthread_mutex_t		run;
 } layer3_t;
 

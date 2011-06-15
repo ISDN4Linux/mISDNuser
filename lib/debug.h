@@ -31,6 +31,7 @@
 #define DBGM_L3		0x00000040
 #define DBGM_L3DATA	0x00000080
 #define DBGM_L3BUFFER	0x00000100
+#define DBGM_L2		0x00000200
 #define DBGM_ALL	0xffffffff
 
 extern	int		dprint(unsigned int mask, int port, const char *fmt, ...);
