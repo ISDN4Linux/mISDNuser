@@ -364,10 +364,17 @@ static void
 l3ml3p(layer3_t *l3, int pr, unsigned int ces)
 {
 	l3_process_t *p, *np;
+	unsigned int p_ces;
 
-	list_for_each_entry_safe(p, np, &l3->plist, list)
-		if ((p->pid >> 16) == ces)
+	list_for_each_entry_safe(p, np, &l3->plist, list) {
+		p_ces = (p->pid >> 16) & 0xffff;
+		dprint(DBGM_L2, l3->l2master.l2addr.dev, "%s: pr %s tei:%d pid %x ces %x/%x\n", __func__,
+			_mi_msg_type2str(pr), l3->l2master.l2addr.tei, p->pid, ces, p_ces);
+		if ((p_ces == ces) || (p_ces == MISDN_CES_MASTER)) {
+			dprint(L3_DEB_PROC, l3->l2master.l2addr.dev, "%s: send to l3proc pid=%x\n", __func__, p->pid);
 			l3->p_mgr(p, pr, NULL);
+		}
+	}
 }
 
 void
