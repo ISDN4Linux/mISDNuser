@@ -38,7 +38,7 @@
  */
 #define	MISDN_MAJOR_VERSION	1
 #define	MISDN_MINOR_VERSION	1
-#define MISDN_RELEASE		24
+#define MISDN_RELEASE		26
 
 /* primitives for information exchange
  * generell format
@@ -105,7 +105,7 @@
 #define DL_UNITDATA_IND		0x3108
 #define DL_INFORMATION_IND	0x0008
 
-/* intern layer 2 managment */
+/* intern layer 2 management */
 #define MDL_ASSIGN_REQ		0x1804
 #define MDL_ASSIGN_IND		0x1904
 #define MDL_REMOVE_REQ		0x1A04
@@ -115,6 +115,11 @@
 #define MDL_STATUS_UI_IND	0x1E04
 #define MDL_ERROR_IND		0x1F04
 #define MDL_ERROR_RSP		0x5F04
+
+/* intern layer 2 */
+#define DL_TIMER200_IND		0x7004
+#define DL_TIMER203_IND		0x7304
+#define DL_INTERN_MSG		0x7804
 
 /* DL_INFORMATION_IND types */
 #define DL_INFO_L2_CONNECT	0x0001

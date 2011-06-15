@@ -1100,6 +1100,11 @@ static const struct _cmdtab {
 	{MDL_ERROR_IND		, "MDL_ERROR_IND"},
 	{MDL_ERROR_RSP		, "MDL_ERROR_RSP"},
 
+/* intern layer 2 */
+	{DL_TIMER200_IND	, "DL_TIMER200_IND"},
+	{DL_TIMER203_IND	, "DL_TIMER203_IND"},
+	{DL_INTERN_MSG		, "DL_INTERN_MSG"},
+
 /* L3 timer */
 	{CC_T301		, "Timer 301"},
 	{CC_T302		, "Timer 302"},
