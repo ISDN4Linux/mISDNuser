@@ -149,6 +149,7 @@
 #define CAUSE_NORMALUNSPECIFIED	31
 #define CAUSE_NO_CHANNEL	34
 #define CAUSE_TEMPORARY_FAILURE	41
+#define CAUSE_REQUESTED_CHANNEL	44
 #define CAUSE_RESOURCES_UNAVAIL	47
 #define CAUSE_INVALID_CALLREF	81
 #define CAUSE_INCOMPATIBLE_DEST	88
@@ -163,15 +164,6 @@
 #define NO_CAUSE		254
 
 /*
- * Progress values
- */
-#define PROGRESS_NOT_E2E_ISDN	1
-#define PROGRESS_DEST_NOT_ISDN	2
-#define PROGRESS_ORIG_NOT_ISDN	3
-#define PROGRESS_RET_TO_ISDN	4
-#define PROGRESS_TONE		8
-
-/*
  * Parser error codes
  */
 #define	Q931_ERROR_LEN		0x010000
@@ -181,6 +173,118 @@
 #define Q931_ERROR_IELEN	0x100000
 #define Q931_ERROR_UNKNOWN	0x200000
 #define Q931_ERROR_COMPREH	0x400000
-#define Q931_ERROR_IESEQ	0x800000	/* do not carein our implementation */
+#define Q931_ERROR_IESEQ	0x800000	/* do not care in our implementation */
 
+/* Bearer capability */
+#define Q931_CAP_SPEECH		0x00
+#define Q931_CAP_UNRES_DIGITAL	0x08
+#define Q931_CAP_RES_DIGITAL	0x09
+#define Q931_CAP_3KHZ_AUDIO	0x10
+#define Q931_CAP_7KHZ_AUDIO	0x11
+#define Q931_CAP_VIDEO		0x18
+
+/* Bearer L1 user info */
+#define Q931_L1INFO_V110	0x01
+#define Q931_L1INFO_ULAW	0x02
+#define Q931_L1INFO_ALAW	0x03
+#define Q931_L1INFO_G721	0x04
+#define Q931_L1INFO_G722_5	0x05
+#define Q931_L1INFO_G7XX_VIDEO	0x06
+#define Q931_L1INFO_NONE_CCITT	0x07
+#define Q931_L1INFO_V120	0x08
+#define Q931_L1INFO_X31		0x09
+
+struct misdn_channel_info {
+	unsigned char	nr;	/* channel number/slot or special */
+	unsigned char	flags;	/* exclusiv, not Basic, ANY, NONE */
+	unsigned char	type;   /* B-channel, D-channel, H0, H11, H12 */
+	unsigned char	ctrl;	/* Allocated, updated, needsend, sent */
+} __attribute__((packed));
+
+/*
+ * special channel number defines
+ */
+#define MI_CHAN_ANY		0xff
+#define MI_CHAN_NONE		0xfe
+#define MI_CHAN_DCHANNEL	0xfd
+
+#define MI_CHAN_FLG_NONE	0x01
+#define MI_CHAN_FLG_ANY		0x02
+#define MI_CHAN_FLG_DCHANNEL	0x04
+#define MI_CHAN_FLG_EXCLUSIVE	0x08
+#define MI_CHAN_FLG_OTHER_IF	0x20
+
+#define MI_CHAN_TYP_NONE	0
+#define MI_CHAN_TYP_B		1
+#define MI_CHAN_TYP_D		2
+#define MI_CHAN_TYP_H0		3
+#define MI_CHAN_TYP_H11		4
+#define MI_CHAN_TYP_H12		5
+
+#define MI_CHAN_CTRL_UPDATED	0x01
+#define MI_CHAN_CTRL_NEEDSEND	0x02
+#define MI_CHAN_CTRL_SENT	0x04
+#define MI_CHAN_CTRL_ALLOCATED	0x10
+#define MI_CHAN_CTRL_DOWN	0x20
+
+/* progress info */
+struct misdn_progress_info {
+	unsigned char	loc;	/* location, octet 3 */
+	unsigned char	desc;	/* description, octet 3 */
+	unsigned char	resv;	/* reserved */
+	unsigned char	ctrl;	/* ctrl info flags */
+} __attribute__((packed));
+
+/*
+ * Q931 location
+ */
+#define Q931_LOC_USER		0
+#define Q931_LOC_PRVN_LOCUSER	1
+#define Q931_LOC_PUBN_LOCUSER	2
+#define Q931_LOC_PUBN_RMTUSER	4
+#define Q931_LOC_PRVN_RMTUSER	5
+#define Q931_LOC_INTERNATIONAL	7
+
+/*
+ * Progress values
+ */
+#define PROGRESS_NOT_E2E_ISDN	1
+#define PROGRESS_DEST_NOT_ISDN	2
+#define PROGRESS_ORIG_NOT_ISDN	3
+#define PROGRESS_RET_TO_ISDN	4
+#define PROGRESS_INBAND		8
+
+/* Progress control flags */
+#define MI_PROG_CTRL_UPDATED	0x01
+#define MI_PROG_CTRL_NEEDSEND	0x02
+#define MI_PROG_CTRL_SENT	0x04
+
+
+/* Common IE encode helpers */
+struct l3_msg;
+
+extern int mi_encode_bearer(struct l3_msg *, unsigned int, unsigned int, unsigned int, unsigned int);
+extern int mi_encode_channel_id(struct l3_msg *, struct misdn_channel_info *);
+extern int mi_encode_calling_nr(struct l3_msg *, char *, int, unsigned int, unsigned int, unsigned int);
+extern int mi_encode_called_nr(struct l3_msg *, char *, unsigned int, unsigned int);
+extern int mi_encode_redir_nr(struct l3_msg *, char *, int, unsigned int, unsigned int, unsigned int, int);
+extern int mi_encode_useruser(struct l3_msg *, int, int, char *);
+extern int mi_encode_cause(struct l3_msg *l, int cause, int, int, unsigned char *);
+extern int mi_encode_progress(struct l3_msg *, struct misdn_progress_info *);
+extern int mi_encode_date(struct l3_msg *, time_t);
+
+/* Common IE decode helpers */
+extern int mi_decode_progress(struct l3_msg *, struct misdn_progress_info *);
+extern int mi_decode_bearer_capability(struct l3_msg *, int *, int *, int *, int *, int *,
+	int *, int *, int *, int *, int *, int *, int *, int *, int *);
+extern int mi_decode_cause(struct l3_msg *, int *, int *, int *, int *, int *, unsigned char *);
+extern int mi_decode_channel_id(struct l3_msg *, struct misdn_channel_info *);
+extern int mi_decode_calling_nr(struct l3_msg *, int *, int *, int *, int *, char *);
+extern int mi_decode_called_nr(struct l3_msg *, int *, int *, char *);
+extern int mi_decode_display(struct l3_msg *, char *, int);
+extern int mi_decode_useruser(struct l3_msg *, int *, int *, char *, int);
+
+/* some print helpers */
+extern const char *mi_bearer2str(int);
+extern const char *mi_msg_type2str(unsigned int);
 #endif
