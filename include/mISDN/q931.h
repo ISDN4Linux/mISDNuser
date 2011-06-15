@@ -144,11 +144,14 @@
 #define CAUSE_NOUSER_RESPONDING	18
 #define CAUSE_CALL_REJECTED	21
 #define CAUSE_NONSELECTED_USER	26
+#define CAUSE_DEST_OUT_OF_ORDER	27
 #define CAUSE_INVALID_NUMBER	28
 #define CAUSE_STATUS_RESPONSE	30
 #define CAUSE_NORMALUNSPECIFIED	31
 #define CAUSE_NO_CHANNEL	34
+#define CAUSE_NET_OUT_OF_ORDER 	28
 #define CAUSE_TEMPORARY_FAILURE	41
+#define CAUSE_SEQ_CONGESTION 	42
 #define CAUSE_REQUESTED_CHANNEL	44
 #define CAUSE_RESOURCES_UNAVAIL	47
 #define CAUSE_INVALID_CALLREF	81
@@ -162,6 +165,13 @@
 #define CAUSE_PROTOCOL_ERROR	111
 
 #define NO_CAUSE		254
+
+/*
+ * Restart indication class values
+ */
+#define RESTART_CLASS_CHANNEL	0
+#define RESTART_CLASS_SINGLE	6
+#define RESTART_CLASS_ALL	7
 
 /*
  * Parser error codes
@@ -273,6 +283,7 @@ extern int mi_encode_useruser(struct l3_msg *, int, int, char *);
 extern int mi_encode_cause(struct l3_msg *l, int cause, int, int, unsigned char *);
 extern int mi_encode_progress(struct l3_msg *, struct misdn_progress_info *);
 extern int mi_encode_date(struct l3_msg *, time_t);
+extern int mi_encode_restart_ind(struct l3_msg *, unsigned char);
 
 /* Common IE decode helpers */
 extern int mi_decode_progress(struct l3_msg *, struct misdn_progress_info *);
@@ -286,6 +297,7 @@ extern int mi_decode_called_nr(struct l3_msg *, int *, int *, char *);
 extern int mi_decode_redir_nr(struct l3_msg *, int *, int *, int *, int *, int *, char *);
 extern int mi_decode_display(struct l3_msg *, char *, int);
 extern int mi_decode_useruser(struct l3_msg *, int *, int *, char *, int);
+extern int mi_decode_restart_ind(struct l3_msg *, unsigned char *);
 
 /* some print helpers */
 extern const char *mi_bearer2str(int);

@@ -355,7 +355,8 @@ mi_encode_channel_id(struct l3_msg *l3m, struct misdn_channel_info *ci)
 		return 0;
 
 	if (ci->nr == MI_CHAN_ANY || ci->nr == MI_CHAN_NONE ||
-		(ci->flags & MI_CHAN_FLG_NONE) || (ci->flags & MI_CHAN_FLG_ANY))
+		(ci->flags & MI_CHAN_FLG_NONE) || (ci->flags & MI_CHAN_FLG_ANY) ||
+		(!(ci->flags & MI_CHAN_FLG_EXCLUSIVE)))
 		excl = 0;
 
 	if (ci->flags & MI_CHAN_FLG_OTHER_IF) { /* PRI */
@@ -579,6 +580,21 @@ mi_encode_date(struct l3_msg *l3m, time_t ti)
 	ie[3] = tm.tm_hour;
 	ie[4] = tm.tm_min;
 	return add_layer3_ie(l3m, IE_DATE, 5, ie);
+}
+
+int
+mi_encode_restart_ind(struct l3_msg *l3m, unsigned char _class)
+{
+	switch(_class) {
+	case RESTART_CLASS_CHANNEL:
+	case RESTART_CLASS_SINGLE:
+	case RESTART_CLASS_ALL:
+		break;
+	default:
+		return -EINVAL;
+	}
+	_class |= 0x80;
+	return add_layer3_ie(l3m, IE_RESTART_IND, 1, &_class);
 }
 
 /* helper functions to decode common IE */
@@ -914,6 +930,19 @@ mi_decode_useruser(struct l3_msg *l3m, int *pd, int *uulen, char *uu, int maxlen
 		memcpy(uu, &l3m->useruser[2], l);
 	_ASSIGN_PVAL(uulen, l);
 	_ASSIGN_PVAL(pd, l3m->useruser[1]);
+	return 0;
+}
+
+int
+mi_decode_restart_ind(struct l3_msg *l3m, unsigned char *_class)
+{
+	if (l3m == NULL || !l3m->restart_ind)
+		return 0;
+	if (!_class)
+		return 0;
+	if (*l3m->restart_ind < 1)
+		return 0;
+	_ASSIGN_PVAL(_class, 0x7f & l3m->restart_ind[1]);
 	return 0;
 }
 
