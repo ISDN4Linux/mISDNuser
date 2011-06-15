@@ -159,12 +159,18 @@ struct mlayer3 {
 #define MISDN_PID_CR_FLAG	0x00008000
 #define MISDN_CES_MASTER	0x0000FF00
 
+#define MISDN_LIB_VERSION	2
+#define MISDN_LIB_RELEASE	5
+
+#define MISDN_LIB_INTERFACE	((MISDN_LIB_VERSION << 16) | MISDN_LIB_RELEASE)
+
 /*
- * init layer3 statemachines and chaches
+ * init layer3 statemachines and caches
  * must be called before first open
  * @parameter count of cached mbuffers
+ * @return: interface version
  */
-extern void             init_layer3(int);
+extern unsigned int	init_layer3(int);
 
 /*
  * cleanup layer3 statemachines and chaches

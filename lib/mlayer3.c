@@ -32,13 +32,14 @@
 
 static	int	__init_done = 0;
 
-void
+unsigned int
 init_layer3(int nr)
 {
 	init_mbuffer(nr);
 	mISDNl3New();
 	__init_done = 1;
 	mISDN_debug_init(0, NULL, NULL, NULL);
+	return MISDN_LIB_INTERFACE;
 }
 
 void
@@ -86,6 +87,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	}
 	iprint("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
 	iprint("mISDN user   version %d.%02d.%d found\n", MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
+	iprint("mISDN library interface version %d release %d\n", MISDN_LIB_VERSION, MISDN_LIB_RELEASE);
 	
 	if (ver.major != MISDN_MAJOR_VERSION) {
 		fprintf(stderr, "VERSION incompatible please update\n");

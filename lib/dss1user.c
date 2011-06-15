@@ -2260,7 +2260,7 @@ static int
 dss1man(l3_process_t *proc, u_int pr, struct l3_msg *l3m)
 {
 	u_int	i;
-// #warning	hier kommt an dsl_estab und dl_release
+/* handles dl_estab und dl_release messages */
 
 	if (!proc) {
 		eprint("mISDN dss1man without proc pr=%04x\n", pr);
