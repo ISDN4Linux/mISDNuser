@@ -508,6 +508,16 @@ l3_manager(struct l2l3if *l2i, unsigned int pr)
 	}
 }
 
+unsigned int
+request_new_pid(struct mlayer3 *ml3)
+{
+	layer3_t	*l3 = container_of(ml3, layer3_t, ml3);
+	l3_process_t	*proc;
+
+	proc = create_new_process(l3, MISDN_CES_MASTER, 0, NULL);
+	return proc ? proc->pid : MISDN_PID_NONE;
+}
+
 static int
 to_layer3(struct mlayer3 *ml3, unsigned int prim, unsigned int pid, struct l3_msg *l3m)
 {

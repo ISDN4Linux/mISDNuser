@@ -176,6 +176,7 @@ extern struct mlayer3	*open_layer3(unsigned int, unsigned int, unsigned int, mla
  */
 extern void		close_layer3(struct mlayer3 *);
 
+extern unsigned int	request_new_pid(struct mlayer3 *);
 extern struct l3_msg	*alloc_l3_msg(void);
 extern void		free_l3_msg(struct l3_msg *);
 extern int		add_layer3_ie(struct l3_msg *, unsigned char, int, unsigned char *);

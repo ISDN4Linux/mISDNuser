@@ -38,7 +38,7 @@
  */
 #define	MISDN_MAJOR_VERSION	1
 #define	MISDN_MINOR_VERSION	1
-#define MISDN_RELEASE		21
+#define MISDN_RELEASE		22
 
 /* primitives for information exchange
  * generell format
