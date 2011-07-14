@@ -427,13 +427,14 @@ l3dss1_disconnect_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 			c[0] = 0x80 | CAUSE_LOC_USER;
 			c[1] = 0x80 | CAUSE_NORMALUNSPECIFIED;
 			add_layer3_ie(l3m, IE_CAUSE, 2, c);
-		} else
-			pc->cause = *(l3m->cause + 3) & 0x7f;
+			pc->cause = CAUSE_NORMALUNSPECIFIED;
+		} else  /* we do not handle 3a here - not used in mISDN */
+			pc->cause = l3m->cause[2] & 0x7f;
 		SendMsg(pc, l3m, 11);
 	} else {
 		newl3state(pc, 11);
 		l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_NORMALUNSPECIFIED);
-		pc->cause=CAUSE_NORMALUNSPECIFIED;
+		pc->cause = CAUSE_NORMALUNSPECIFIED;
 	}
 	L3AddTimer(&pc->timer1, T305, CC_T305);
 }
