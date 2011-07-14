@@ -1,14 +1,25 @@
 /*
- * $Id$
  *
  * CCBS Supplementary Services ETS 300 359-1
  * CCNR Supplementary Services ETS 301 065-1
  *
  * CCBS/CCNR Facility ie encode/decode
+ *
+ * Copyright 2009,2010  by Karsten Keil <kkeil@linux-pingi.de>
+ *
+ * This code is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
+ * version 2.1 as published by the Free Software Foundation.
+ *
+ * This code is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU LESSER GENERAL PUBLIC LICENSE for more details.
+ *
  */
 
 #include "asn1.h"
-#include "asn1_ccbs.h"
+#include "ccbs.h"
 #include <string.h>
 
 /* ------------------------------------------------------------------- */
@@ -250,31 +261,31 @@ static int ParseCallDetails(struct asn1_parm *pc, u_char * p, u_char * end, stru
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacStatusRequest(__u8 * Dest, const struct FacStatusRequest *StatusRequest)
+int encodeFacStatusRequest(__u8 * Dest, const struct asn1_parm *pc, const struct FacStatusRequest *StatusRequest)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	switch (StatusRequest->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head(Dest, StatusRequest->InvokeID, Fac_StatusRequest);
+	switch (pc->comp) {
+	case CompInvoke:
+		p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_StatusRequest);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
 
 		p = &SeqStart[2];
-		p += encodeEnum(p, ASN1_TAG_ENUM, StatusRequest->Component.Invoke.CompatibilityMode);
-		p += encodeQ931ie_CCBS(p, &StatusRequest->Component.Invoke.Q931ie);
+		p += encodeEnum(p, ASN1_TAG_ENUM, StatusRequest->CompatibilityMode);
+		p += encodeQ931ie_CCBS(p, &StatusRequest->Q931ie);
 
 		/* sequence Length */
 		SeqStart[1] = p - &SeqStart[2];
 
 		Length = encodeComponent_Length(Dest, p);
 		break;
-	case FacComponent_Result:
+	case CompReturnResult:
 		p = encodeComponent_Head(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, StatusRequest->InvokeID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -282,7 +293,7 @@ int encodeFacStatusRequest(__u8 * Dest, const struct FacStatusRequest *StatusReq
 
 		p += encodeOperationValue(p, Fac_StatusRequest);
 
-		p += encodeEnum(p, ASN1_TAG_ENUM, StatusRequest->Component.Result.Status);
+		p += encodeEnum(p, ASN1_TAG_ENUM, pc->u.retResult.o.StatusRequest.Status);
 
 		/* sequence Length */
 		SeqStart[1] = p - &SeqStart[2];
@@ -309,7 +320,7 @@ int encodeFacStatusRequest(__u8 * Dest, const struct FacStatusRequest *StatusReq
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseStatusRequest_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacStatusRequest_ARG *StatusRequest)
+int ParseStatusRequest(struct asn1_parm *pc, u_char * p, u_char * end, struct FacStatusRequest *StatusRequest)
 {
 	int CompatibilityMode;
 	INIT;
@@ -319,7 +330,7 @@ int ParseStatusRequest_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struc
 	XSEQUENCE_1(ParseQ931ie_CCBS, ASN1_TAG_APPLICATION_WIDE, 0, &StatusRequest->Q931ie);
 
 	return p - beg;
-}				/* end ParseStatusRequest_ARG() */
+}				/* end ParseStatusRequest() */
 
 /* ******************************************************************* */
 /*!
@@ -339,7 +350,6 @@ int ParseStatusRequest_RES(struct asn1_parm *pc, u_char * p, u_char * end, struc
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &Status);
 	StatusRequest->Status = Status;
@@ -357,12 +367,12 @@ int ParseStatusRequest_RES(struct asn1_parm *pc, u_char * p, u_char * end, struc
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCallInfoRetain(__u8 * Dest, const struct FacCallInfoRetain *CallInfoRetain)
+int encodeFacCallInfoRetain(__u8 * Dest, const struct asn1_parm *pc, const struct FacCallInfoRetain *CallInfoRetain)
 {
 	int Length;
 	__u8 *p;
 
-	p = encodeComponentInvoke_Head(Dest, CallInfoRetain->InvokeID, Fac_CallInfoRetain);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_CallInfoRetain);
 	p += encodeInt(p, ASN1_TAG_INTEGER, CallInfoRetain->CallLinkageID);
 	Length = encodeComponent_Length(Dest, p);
 
@@ -381,20 +391,18 @@ int encodeFacCallInfoRetain(__u8 * Dest, const struct FacCallInfoRetain *CallInf
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCallInfoRetain_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCallInfoRetain *CallInfoRetain)
+int ParseCallInfoRetain(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCallInfoRetain *CallInfoRetain)
 {
 	unsigned int CallLinkageID;
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParseUnsignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &CallLinkageID);
 	CallInfoRetain->CallLinkageID = CallLinkageID;
-	CallInfoRetain->InvokeID = pc->u.inv.invokeId;
 
 	return p - beg;
-}				/* end ParseCallInfoRetain_ARG() */
+}				/* end ParseCallInfoRetain() */
 
 /* ******************************************************************* */
 /*!
@@ -406,12 +414,12 @@ int ParseCallInfoRetain_ARG(struct asn1_parm *pc, u_char * p, u_char * end, stru
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacEraseCallLinkageID(__u8 * Dest, const struct FacEraseCallLinkageID *EraseCallLinkageID)
+int encodeFacEraseCallLinkageID(__u8 * Dest, const struct asn1_parm *pc, const struct FacEraseCallLinkageID *EraseCallLinkageID)
 {
 	int Length;
 	__u8 *p;
 
-	p = encodeComponentInvoke_Head(Dest, EraseCallLinkageID->InvokeID, Fac_EraseCallLinkageID);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_EraseCallLinkageID);
 	p += encodeInt(p, ASN1_TAG_INTEGER, EraseCallLinkageID->CallLinkageID);
 	Length = encodeComponent_Length(Dest, p);
 
@@ -430,20 +438,18 @@ int encodeFacEraseCallLinkageID(__u8 * Dest, const struct FacEraseCallLinkageID 
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseEraseCallLinkageID_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacEraseCallLinkageID *EraseCallLinkageID)
+int ParseEraseCallLinkageID(struct asn1_parm *pc, u_char * p, u_char * end, struct FacEraseCallLinkageID *EraseCallLinkageID)
 {
 	unsigned int CallLinkageID;
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParseUnsignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &CallLinkageID);
 	EraseCallLinkageID->CallLinkageID = CallLinkageID;
-	EraseCallLinkageID->InvokeID = pc->u.inv.invokeId;
 
 	return p - beg;
-}				/* end ParseEraseCallLinkageID_ARG() */
+}				/* end ParseEraseCallLinkageID() */
 
 /* ******************************************************************* */
 /*!
@@ -455,21 +461,21 @@ int ParseEraseCallLinkageID_ARG(struct asn1_parm *pc, u_char * p, u_char * end, 
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBSDeactivate(__u8 * Dest, const struct FacCCBSDeactivate *CCBSDeactivate)
+int encodeFacCCBSDeactivate(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSDeactivate *CCBSDeactivate)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	switch (CCBSDeactivate->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head(Dest, CCBSDeactivate->InvokeID, Fac_CCBSDeactivate);
-		p += encodeInt(p, ASN1_TAG_INTEGER, CCBSDeactivate->Component.Invoke.CCBSReference);
+	switch (pc->comp) {
+	case CompInvoke:
+		p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_CCBSDeactivate);
+		p += encodeInt(p, ASN1_TAG_INTEGER, CCBSDeactivate->CCBSReference);
 		Length = encodeComponent_Length(Dest, p);
 		break;
-	case FacComponent_Result:
+	case CompReturnResult:
 		p = encodeComponent_Head(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, CCBSDeactivate->InvokeID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -502,19 +508,18 @@ int encodeFacCCBSDeactivate(__u8 * Dest, const struct FacCCBSDeactivate *CCBSDea
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCCBSDeactivate_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSDeactivate_ARG *CCBSDeactivate)
+int ParseCCBSDeactivate(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSDeactivate *CCBSDeactivate)
 {
 	unsigned int CCBSReference;
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParseUnsignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &CCBSReference);
 	CCBSDeactivate->CCBSReference = CCBSReference;
 
 	return p - beg;
-}				/* end ParseCCBSDeactivate_ARG() */
+}				/* end ParseCCBSDeactivate() */
 
 /* ******************************************************************* */
 /*!
@@ -526,13 +531,13 @@ int ParseCCBSDeactivate_ARG(struct asn1_parm *pc, u_char * p, u_char * end, stru
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBSErase(__u8 * Dest, const struct FacCCBSErase *CCBSErase)
+int encodeFacCCBSErase(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSErase *CCBSErase)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	p = encodeComponentInvoke_Head(Dest, CCBSErase->InvokeID, Fac_CCBSErase);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_CCBSErase);
 
 	SeqStart = p;
 	SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -564,7 +569,7 @@ int encodeFacCCBSErase(__u8 * Dest, const struct FacCCBSErase *CCBSErase)
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCCBSErase_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSErase *CCBSErase)
+int ParseCCBSErase(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSErase *CCBSErase)
 {
 	int RecallMode;
 	unsigned int CCBSReference;
@@ -579,10 +584,9 @@ int ParseCCBSErase_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct Fa
 	XSEQUENCE_1(ParseQ931ie_CCBS, ASN1_TAG_APPLICATION_WIDE, 0, &CCBSErase->Q931ie);
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &EraseReason);
 	CCBSErase->Reason = EraseReason;
-	CCBSErase->InvokeID = pc->u.inv.invokeId;
 
 	return p - beg;
-}				/* end ParseCCBSErase_ARG() */
+}				/* end ParseCCBSErase() */
 
 /* ******************************************************************* */
 /*!
@@ -594,13 +598,13 @@ int ParseCCBSErase_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct Fa
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBSRemoteUserFree(__u8 * Dest, const struct FacCCBSRemoteUserFree *CCBSRemoteUserFree)
+int encodeFacCCBSRemoteUserFree(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSRemoteUserFree *CCBSRemoteUserFree)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	p = encodeComponentInvoke_Head(Dest, CCBSRemoteUserFree->InvokeID, Fac_CCBSRemoteUserFree);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_CCBSRemoteUserFree);
 
 	SeqStart = p;
 	SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -631,7 +635,7 @@ int encodeFacCCBSRemoteUserFree(__u8 * Dest, const struct FacCCBSRemoteUserFree 
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCCBSRemoteUserFree_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSRemoteUserFree *CCBSRemoteUserFree)
+int ParseCCBSRemoteUserFree(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSRemoteUserFree *CCBSRemoteUserFree)
 {
 	int RecallMode;
 	unsigned int CCBSReference;
@@ -643,10 +647,9 @@ int ParseCCBSRemoteUserFree_ARG(struct asn1_parm *pc, u_char * p, u_char * end, 
 	CCBSRemoteUserFree->CCBSReference = CCBSReference;
 	XSEQUENCE_1(ParseAddress_Full, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &CCBSRemoteUserFree->AddressOfB);
 	XSEQUENCE_1(ParseQ931ie_CCBS, ASN1_TAG_APPLICATION_WIDE, 0, &CCBSRemoteUserFree->Q931ie);
-	CCBSRemoteUserFree->InvokeID = pc->u.inv.invokeId;
 
 	return p - beg;
-}				/* end ParseCCBSRemoteUserFree_ARG() */
+}				/* end ParseCCBSRemoteUserFree() */
 
 /* ******************************************************************* */
 /*!
@@ -658,12 +661,12 @@ int ParseCCBSRemoteUserFree_ARG(struct asn1_parm *pc, u_char * p, u_char * end, 
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBSCall(__u8 * Dest, const struct FacCCBSCall *CCBSCall)
+int encodeFacCCBSCall(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSCall *CCBSCall)
 {
 	int Length;
 	__u8 *p;
 
-	p = encodeComponentInvoke_Head(Dest, CCBSCall->InvokeID, Fac_CCBSCall);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_CCBSCall);
 	p += encodeInt(p, ASN1_TAG_INTEGER, CCBSCall->CCBSReference);
 	Length = encodeComponent_Length(Dest, p);
 
@@ -682,20 +685,18 @@ int encodeFacCCBSCall(__u8 * Dest, const struct FacCCBSCall *CCBSCall)
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCCBSCall_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSCall *CCBSCall)
+int ParseCCBSCall(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSCall *CCBSCall)
 {
 	unsigned int CCBSReference;
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParseUnsignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &CCBSReference);
 	CCBSCall->CCBSReference = CCBSReference;
-	CCBSCall->InvokeID = pc->u.inv.invokeId;
 
 	return p - beg;
-}				/* end ParseCCBSCall_ARG() */
+}				/* end ParseCCBSCall() */
 
 /* ******************************************************************* */
 /*!
@@ -707,13 +708,13 @@ int ParseCCBSCall_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct Fac
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBSBFree(__u8 * Dest, const struct FacCCBSBFree *CCBSBFree)
+int encodeFacCCBSBFree(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSBFree *CCBSBFree)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	p = encodeComponentInvoke_Head(Dest, CCBSBFree->InvokeID, Fac_CCBSBFree);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_CCBSBFree);
 
 	SeqStart = p;
 	SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -744,7 +745,7 @@ int encodeFacCCBSBFree(__u8 * Dest, const struct FacCCBSBFree *CCBSBFree)
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCCBSBFree_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSBFree *CCBSBFree)
+int ParseCCBSBFree(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSBFree *CCBSBFree)
 {
 	int RecallMode;
 	unsigned int CCBSReference;
@@ -756,10 +757,9 @@ int ParseCCBSBFree_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct Fa
 	CCBSBFree->CCBSReference = CCBSReference;
 	XSEQUENCE_1(ParseAddress_Full, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &CCBSBFree->AddressOfB);
 	XSEQUENCE_1(ParseQ931ie_CCBS, ASN1_TAG_APPLICATION_WIDE, 0, &CCBSBFree->Q931ie);
-	CCBSBFree->InvokeID = pc->u.inv.invokeId;
 
 	return p - beg;
-}				/* end ParseCCBSBFree_ARG() */
+}				/* end ParseCCBSBFree() */
 
 /* ******************************************************************* */
 /*!
@@ -771,12 +771,12 @@ int ParseCCBSBFree_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct Fa
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBSStopAlerting(__u8 * Dest, const struct FacCCBSStopAlerting *CCBSStopAlerting)
+int encodeFacCCBSStopAlerting(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSStopAlerting *CCBSStopAlerting)
 {
 	int Length;
 	__u8 *p;
 
-	p = encodeComponentInvoke_Head(Dest, CCBSStopAlerting->InvokeID, Fac_CCBSStopAlerting);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_CCBSStopAlerting);
 	p += encodeInt(p, ASN1_TAG_INTEGER, CCBSStopAlerting->CCBSReference);
 	Length = encodeComponent_Length(Dest, p);
 
@@ -795,20 +795,18 @@ int encodeFacCCBSStopAlerting(__u8 * Dest, const struct FacCCBSStopAlerting *CCB
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCCBSStopAlerting_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSStopAlerting *CCBSStopAlerting)
+int ParseCCBSStopAlerting(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSStopAlerting *CCBSStopAlerting)
 {
 	unsigned int CCBSReference;
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParseUnsignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &CCBSReference);
 	CCBSStopAlerting->CCBSReference = CCBSReference;
-	CCBSStopAlerting->InvokeID = pc->u.inv.invokeId;
 
 	return p - beg;
-}				/* end ParseCCBSStopAlerting_ARG() */
+}				/* end ParseCCBSStopAlerting() */
 
 /* ******************************************************************* */
 /*!
@@ -820,32 +818,32 @@ int ParseCCBSStopAlerting_ARG(struct asn1_parm *pc, u_char * p, u_char * end, st
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBSStatusRequest(__u8 * Dest, const struct FacCCBSStatusRequest *CCBSStatusRequest)
+int encodeFacCCBSStatusRequest(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSStatusRequest *CCBSStatusRequest)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	switch (CCBSStatusRequest->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head(Dest, CCBSStatusRequest->InvokeID, Fac_CCBSStatusRequest);
+	switch (pc->comp) {
+	case CompInvoke:
+		p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_CCBSStatusRequest);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
 		p = &SeqStart[2];
 
-		p += encodeEnum(p, ASN1_TAG_ENUM, CCBSStatusRequest->Component.Invoke.RecallMode);
-		p += encodeInt(p, ASN1_TAG_INTEGER, CCBSStatusRequest->Component.Invoke.CCBSReference);
-		p += encodeQ931ie_CCBS(p, &CCBSStatusRequest->Component.Invoke.Q931ie);
+		p += encodeEnum(p, ASN1_TAG_ENUM, CCBSStatusRequest->RecallMode);
+		p += encodeInt(p, ASN1_TAG_INTEGER, CCBSStatusRequest->CCBSReference);
+		p += encodeQ931ie_CCBS(p, &CCBSStatusRequest->Q931ie);
 
 		/* sequence Length */
 		SeqStart[1] = p - &SeqStart[2];
 
 		Length = encodeComponent_Length(Dest, p);
 		break;
-	case FacComponent_Result:
+	case CompReturnResult:
 		p = encodeComponent_Head(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, CCBSStatusRequest->InvokeID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -853,7 +851,7 @@ int encodeFacCCBSStatusRequest(__u8 * Dest, const struct FacCCBSStatusRequest *C
 
 		p += encodeOperationValue(p, Fac_CCBSStatusRequest);
 
-		p += encodeBoolean(p, ASN1_TAG_BOOLEAN, CCBSStatusRequest->Component.Result.Free);
+		p += encodeBoolean(p, ASN1_TAG_BOOLEAN, pc->u.retResult.o.CCBSStatusRequest.Free);
 
 		/* sequence Length */
 		SeqStart[1] = p - &SeqStart[2];
@@ -880,7 +878,7 @@ int encodeFacCCBSStatusRequest(__u8 * Dest, const struct FacCCBSStatusRequest *C
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCCBSStatusRequest_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSStatusRequest_ARG *CCBSStatusRequest)
+int ParseCCBSStatusRequest(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSStatusRequest *CCBSStatusRequest)
 {
 	int RecallMode;
 	unsigned int CCBSReference;
@@ -893,7 +891,7 @@ int ParseCCBSStatusRequest_ARG(struct asn1_parm *pc, u_char * p, u_char * end, s
 	XSEQUENCE_1(ParseQ931ie_CCBS, ASN1_TAG_APPLICATION_WIDE, 0, &CCBSStatusRequest->Q931ie);
 
 	return p - beg;
-}				/* end ParseCCBSStatusRequest_ARG() */
+}				/* end ParseCCBSStatusRequest() */
 
 /* ******************************************************************* */
 /*!
@@ -913,7 +911,6 @@ int ParseCCBSStatusRequest_RES(struct asn1_parm *pc, u_char * p, u_char * end, s
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParseBoolean, ASN1_TAG_BOOLEAN, ASN1_NOT_TAGGED, &Free);
 	CCBSStatusRequest->Free = Free;
@@ -924,7 +921,7 @@ int ParseCCBSStatusRequest_RES(struct asn1_parm *pc, u_char * p, u_char * end, s
 /* ******************************************************************* */
 /*!
  * \internal
- * \brief Encode the CCBS/CCNR-Request facility ie backend.
+ * \brief Encode the CCBS/CCNR-Request facility invoke ie
  *
  * \param Dest Where to put the encoding
  * \param CCBSRequest Information needed to encode in ie.
@@ -933,51 +930,62 @@ int ParseCCBSStatusRequest_RES(struct asn1_parm *pc, u_char * p, u_char * end, s
  * \retval length on success.
  * \retval -1 on error.
  */
-static int encodeFacCCBSRequest_Backend(__u8 * Dest, const struct FacCCBSRequest *CCBSRequest, enum FacFunction MsgType)
+static int encodeFacCCBSRequest_Invoke(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSRequest *CCBSRequest, enum Operation MsgType)
+{
+	int Length;
+	__u8 *p;
+
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, MsgType);
+	p += encodeInt(p, ASN1_TAG_INTEGER, CCBSRequest->CallLinkageID);
+	Length = encodeComponent_Length(Dest, p);
+	return Length;
+}				/* end encodeFacCCBSRequest_Invoke() */
+
+/* ******************************************************************* */
+/*!
+ * \internal
+ * \brief Encode the CCBS/CCNR-Request facility result ie.
+ *
+ * \param Dest Where to put the encoding
+ * \param CCBSRequest Information needed to encode in ie.
+ * \param MsgType Which facility type to generate
+ *
+ * \retval length on success.
+ * \retval -1 on error.
+ */
+static int encodeFacCCBSRequest_Result(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSRequest_RES *CCBSRequest, enum Operation MsgType)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 	__u8 *ResultSeqStart;
 
-	switch (CCBSRequest->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head(Dest, CCBSRequest->InvokeID, MsgType);
-		p += encodeInt(p, ASN1_TAG_INTEGER, CCBSRequest->Component.Invoke.CallLinkageID);
-		Length = encodeComponent_Length(Dest, p);
-		break;
-	case FacComponent_Result:
-		p = encodeComponent_Head(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, CCBSRequest->InvokeID);
+	p = encodeComponent_Head(Dest, asn1ComponentTag_Result);
+	p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
-		SeqStart = p;
-		SeqStart[0] = ASN1_TAG_SEQUENCE;
-		p = &SeqStart[2];
+	SeqStart = p;
+	SeqStart[0] = ASN1_TAG_SEQUENCE;
+	p = &SeqStart[2];
 
-		p += encodeOperationValue(p, MsgType);
+	p += encodeOperationValue(p, MsgType);
 
-		ResultSeqStart = p;
-		ResultSeqStart[0] = ASN1_TAG_SEQUENCE;
-		p = &ResultSeqStart[2];
+	ResultSeqStart = p;
+	ResultSeqStart[0] = ASN1_TAG_SEQUENCE;
+	p = &ResultSeqStart[2];
 
-		p += encodeEnum(p, ASN1_TAG_ENUM, CCBSRequest->Component.Result.RecallMode);
-		p += encodeInt(p, ASN1_TAG_INTEGER, CCBSRequest->Component.Result.CCBSReference);
+	p += encodeEnum(p, ASN1_TAG_ENUM, CCBSRequest->RecallMode);
+	p += encodeInt(p, ASN1_TAG_INTEGER, CCBSRequest->CCBSReference);
 
-		/* sequence Length */
-		ResultSeqStart[1] = p - &ResultSeqStart[2];
+	/* sequence Length */
+	ResultSeqStart[1] = p - &ResultSeqStart[2];
 
-		/* sequence Length */
-		SeqStart[1] = p - &SeqStart[2];
+	/* sequence Length */
+	SeqStart[1] = p - &SeqStart[2];
 
-		Length = encodeComponent_Length(Dest, p);
-		break;
-	default:
-		Length = -1;
-		break;
-	}			/* end switch */
+	Length = encodeComponent_Length(Dest, p);
 
 	return Length;
-}				/* end encodeFacCCBSRequest_Backend() */
+}				/* end encodeFacCCBSRequest_Result() */
 
 /* ******************************************************************* */
 /*!
@@ -989,9 +997,23 @@ static int encodeFacCCBSRequest_Backend(__u8 * Dest, const struct FacCCBSRequest
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBSRequest(__u8 * Dest, const struct FacCCBSRequest *CCBSRequest)
+int encodeFacCCBSRequest(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSRequest *CCBSRequest)
 {
-	return encodeFacCCBSRequest_Backend(Dest, CCBSRequest, Fac_CCBSRequest);
+	int Length;
+
+	switch (pc->comp) {
+	case CompInvoke:
+		Length = encodeFacCCBSRequest_Invoke(Dest, pc, CCBSRequest, Fac_CCBSRequest);
+		break;
+	case CompReturnResult:
+		Length = encodeFacCCBSRequest_Result(Dest, pc, &pc->u.retResult.o.CCBSRequest, Fac_CCBSRequest);
+		break;
+	default:
+		Length = -1;
+		break;
+	}			/* end switch */
+
+	return Length;
 }				/* end encodeFacCCBSRequest() */
 
 /* ******************************************************************* */
@@ -1004,9 +1026,23 @@ int encodeFacCCBSRequest(__u8 * Dest, const struct FacCCBSRequest *CCBSRequest)
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCNRRequest(__u8 * Dest, const struct FacCCBSRequest *CCNRRequest)
+int encodeFacCCNRRequest(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSRequest *CCNRRequest)
 {
-	return encodeFacCCBSRequest_Backend(Dest, CCNRRequest, Fac_CCNRRequest);
+	int Length;
+
+	switch (pc->comp) {
+	case CompInvoke:
+		Length = encodeFacCCBSRequest_Invoke(Dest, pc, CCNRRequest, Fac_CCNRRequest);
+		break;
+	case CompReturnResult:
+		Length = encodeFacCCBSRequest_Result(Dest, pc, &pc->u.retResult.o.CCNRRequest, Fac_CCNRRequest);
+		break;
+	default:
+		Length = -1;
+		break;
+	}			/* end switch */
+
+	return Length;
 }				/* end encodeFacCCNRRequest() */
 
 /* ******************************************************************* */
@@ -1021,19 +1057,18 @@ int encodeFacCCNRRequest(__u8 * Dest, const struct FacCCBSRequest *CCNRRequest)
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCCBSRequest_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSRequest_ARG *CCBSRequest)
+int ParseCCBSRequest(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSRequest *CCBSRequest)
 {
 	unsigned int CallLinkageID;
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParseUnsignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &CallLinkageID);
 	CCBSRequest->CallLinkageID = CallLinkageID;
 
 	return p - beg;
-}				/* end ParseCCBSRequest_ARG() */
+}				/* end ParseCCBSRequest() */
 
 /* ******************************************************************* */
 /*!
@@ -1047,10 +1082,10 @@ int ParseCCBSRequest_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct 
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCCNRRequest_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSRequest_ARG *CCNRRequest)
+int ParseCCNRRequest(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSRequest *CCNRRequest)
 {
-	return ParseCCBSRequest_ARG(pc, p, end, CCNRRequest);
-}				/* end ParseCCNRRequest_ARG() */
+	return ParseCCBSRequest(pc, p, end, CCNRRequest);
+}				/* end ParseCCNRRequest() */
 
 /* ******************************************************************* */
 /*!
@@ -1098,7 +1133,7 @@ int ParseCCNRRequest_RES(struct asn1_parm *pc, u_char * p, u_char * end, struct 
 /* ******************************************************************* */
 /*!
  * \internal
- * \brief Encode the CCBS/CCNR-Interrogate facility ie backend.
+ * \brief Encode the CCBS/CCNR-Interrogate facility invoke ie.
  *
  * \param Dest Where to put the encoding
  * \param CCBSInterrogate Information needed to encode in ie.
@@ -1107,65 +1142,78 @@ int ParseCCNRRequest_RES(struct asn1_parm *pc, u_char * p, u_char * end, struct 
  * \retval length on success.
  * \retval -1 on error.
  */
-static int encodeFacCCBSInterrogate_Backend(__u8 * Dest, const struct FacCCBSInterrogate *CCBSInterrogate, enum FacFunction MsgType)
+static int encodeFacCCBSInterrogate_Invoke(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSInterrogate *CCBSInterrogate, enum Operation MsgType)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 	__u8 *ResultSeqStart;
 
-	switch (CCBSInterrogate->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head(Dest, CCBSInterrogate->InvokeID, MsgType);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, MsgType);
 
-		SeqStart = p;
-		SeqStart[0] = ASN1_TAG_SEQUENCE;
-		p = &SeqStart[2];
+	SeqStart = p;
+	SeqStart[0] = ASN1_TAG_SEQUENCE;
+	p = &SeqStart[2];
 
-		if (CCBSInterrogate->Component.Invoke.CCBSReferencePresent) {
-			p += encodeInt(p, ASN1_TAG_INTEGER, CCBSInterrogate->Component.Invoke.CCBSReference);
-		}
-		if (CCBSInterrogate->Component.Invoke.AParty.LengthOfNumber) {
-			p += encodePartyNumber_Full(p, &CCBSInterrogate->Component.Invoke.AParty);
-		}
+	if (CCBSInterrogate->CCBSReferencePresent) {
+		p += encodeInt(p, ASN1_TAG_INTEGER, CCBSInterrogate->CCBSReference);
+	}
+	if (CCBSInterrogate->AParty.LengthOfNumber) {
+		p += encodePartyNumber_Full(p, &CCBSInterrogate->AParty);
+	}
 
-		/* sequence Length */
-		SeqStart[1] = p - &SeqStart[2];
+	/* sequence Length */
+	SeqStart[1] = p - &SeqStart[2];
 
-		Length = encodeComponent_Length(Dest, p);
-		break;
-	case FacComponent_Result:
-		p = encodeComponent_Head_Long_u8(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, CCBSInterrogate->InvokeID);
+	Length = encodeComponent_Length(Dest, p);
 
-		SeqStart = p;
-		SeqStart[0] = ASN1_TAG_SEQUENCE;
-		p = &SeqStart[1 + ASN1_NUM_OCTETS_LONG_LENGTH_u8];
+	return Length;
+}				/* end encodeFacCCBSInterrogate_Backend() */
 
-		p += encodeOperationValue(p, MsgType);
+/* ******************************************************************* */
+/*!
+ * \internal
+ * \brief Encode the CCBS/CCNR-Interrogate facility result ie.
+ *
+ * \param Dest Where to put the encoding
+ * \param CCBSInterrogate Information needed to encode in ie.
+ * \param MsgType Which facility type to generate
+ *
+ * \retval length on success.
+ * \retval -1 on error.
+ */
+static int encodeFacCCBSInterrogate_Result(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSInterrogate_RES *CCBSInterrogate, enum Operation MsgType)
+{
+	int Length;
+	__u8 *p;
+	__u8 *SeqStart;
+	__u8 *ResultSeqStart;
 
-		ResultSeqStart = p;
-		ResultSeqStart[0] = ASN1_TAG_SEQUENCE;
-		p = &ResultSeqStart[1 + ASN1_NUM_OCTETS_LONG_LENGTH_u8];
+	p = encodeComponent_Head_Long_u8(Dest, asn1ComponentTag_Result);
+	p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
-		p += encodeEnum(p, ASN1_TAG_ENUM, CCBSInterrogate->Component.Result.RecallMode);
-		if (CCBSInterrogate->Component.Result.NumRecords) {
-			p += encodeCallDetails(p, CCBSInterrogate->Component.Result.NumRecords,
-					       CCBSInterrogate->Component.Result.CallDetails);
-		}
+	SeqStart = p;
+	SeqStart[0] = ASN1_TAG_SEQUENCE;
+	p = &SeqStart[1 + ASN1_NUM_OCTETS_LONG_LENGTH_u8];
 
-		/* sequence Length */
-		encodeLen_Long_u8(&ResultSeqStart[1], p - &ResultSeqStart[1 + ASN1_NUM_OCTETS_LONG_LENGTH_u8]);
+	p += encodeOperationValue(p, MsgType);
 
-		/* sequence Length */
-		encodeLen_Long_u8(&SeqStart[1], p - &SeqStart[1 + ASN1_NUM_OCTETS_LONG_LENGTH_u8]);
+	ResultSeqStart = p;
+	ResultSeqStart[0] = ASN1_TAG_SEQUENCE;
+	p = &ResultSeqStart[1 + ASN1_NUM_OCTETS_LONG_LENGTH_u8];
 
-		Length = encodeComponent_Length_Long_u8(Dest, p);
-		break;
-	default:
-		Length = -1;
-		break;
-	}			/* end switch */
+	p += encodeEnum(p, ASN1_TAG_ENUM, CCBSInterrogate->RecallMode);
+	if (CCBSInterrogate->NumRecords) {
+		p += encodeCallDetails(p, CCBSInterrogate->NumRecords, CCBSInterrogate->CallDetails);
+	}
+
+	/* sequence Length */
+	encodeLen_Long_u8(&ResultSeqStart[1], p - &ResultSeqStart[1 + ASN1_NUM_OCTETS_LONG_LENGTH_u8]);
+
+	/* sequence Length */
+	encodeLen_Long_u8(&SeqStart[1], p - &SeqStart[1 + ASN1_NUM_OCTETS_LONG_LENGTH_u8]);
+
+	Length = encodeComponent_Length_Long_u8(Dest, p);
 
 	return Length;
 }				/* end encodeFacCCBSInterrogate_Backend() */
@@ -1180,9 +1228,22 @@ static int encodeFacCCBSInterrogate_Backend(__u8 * Dest, const struct FacCCBSInt
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBSInterrogate(__u8 * Dest, const struct FacCCBSInterrogate *CCBSInterrogate)
+int encodeFacCCBSInterrogate(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSInterrogate *CCBSInterrogate)
 {
-	return encodeFacCCBSInterrogate_Backend(Dest, CCBSInterrogate, Fac_CCBSInterrogate);
+	int Length;
+
+	switch (pc->comp) {
+	case CompInvoke:
+		Length = encodeFacCCBSInterrogate_Invoke(Dest, pc, CCBSInterrogate, Fac_CCBSInterrogate);
+		break;
+	case CompReturnResult:
+		Length = encodeFacCCBSInterrogate_Result(Dest, pc, &pc->u.retResult.o.CCBSInterrogate, Fac_CCBSInterrogate);
+		break;
+	default:
+		Length = -1;
+		break;
+	}			/* end switch */
+	return Length;
 }				/* end encodeFacCCBSInterrogate() */
 
 /* ******************************************************************* */
@@ -1195,9 +1256,22 @@ int encodeFacCCBSInterrogate(__u8 * Dest, const struct FacCCBSInterrogate *CCBSI
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCNRInterrogate(__u8 * Dest, const struct FacCCBSInterrogate *CCNRInterrogate)
+int encodeFacCCNRInterrogate(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBSInterrogate *CCNRInterrogate)
 {
-	return encodeFacCCBSInterrogate_Backend(Dest, CCNRInterrogate, Fac_CCNRInterrogate);
+	int Length;
+
+	switch (pc->comp) {
+	case CompInvoke:
+		Length = encodeFacCCBSInterrogate_Invoke(Dest, pc, CCNRInterrogate, Fac_CCNRInterrogate);
+		break;
+	case CompReturnResult:
+		Length = encodeFacCCBSInterrogate_Result(Dest, pc, &pc->u.retResult.o.CCNRInterrogate, Fac_CCNRInterrogate);
+		break;
+	default:
+		Length = -1;
+		break;
+	}			/* end switch */
+	return Length;
 }				/* end encodeFacCCNRInterrogate() */
 
 /* ******************************************************************* */
@@ -1212,7 +1286,7 @@ int encodeFacCCNRInterrogate(__u8 * Dest, const struct FacCCBSInterrogate *CCNRI
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCCBSInterrogate_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSInterrogate_ARG *CCBSInterrogate)
+int ParseCCBSInterrogate(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSInterrogate *CCBSInterrogate)
 {
 	unsigned int CCBSReference;
 	INIT;
@@ -1229,7 +1303,7 @@ int ParseCCBSInterrogate_ARG(struct asn1_parm *pc, u_char * p, u_char * end, str
 	XSEQUENCE_OPT_1(ParsePartyNumber_Full, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &CCBSInterrogate->AParty);
 
 	return p - beg;
-}				/* end ParseCCBSInterrogate_ARG() */
+}				/* end ParseCCBSInterrogate() */
 
 /* ******************************************************************* */
 /*!
@@ -1243,10 +1317,10 @@ int ParseCCBSInterrogate_ARG(struct asn1_parm *pc, u_char * p, u_char * end, str
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCCNRInterrogate_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSInterrogate_ARG *CCNRInterrogate)
+int ParseCCNRInterrogate(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSInterrogate *CCNRInterrogate)
 {
-	return ParseCCBSInterrogate_ARG(pc, p, end, CCNRInterrogate);
-}				/* end ParseCCNRInterrogate_ARG() */
+	return ParseCCBSInterrogate(pc, p, end, CCNRInterrogate);
+}				/* end ParseCCNRInterrogate() */
 
 /* ******************************************************************* */
 /*!
@@ -1302,7 +1376,7 @@ int ParseCCNRInterrogate_RES(struct asn1_parm *pc, u_char * p, u_char * end, str
  * \retval length on success.
  * \retval -1 on error.
  */
-static int encodeFacCCBS_T_Event(__u8 * Dest, int InvokeID, enum FacFunction OperationValue)
+static int encodeFacCCBS_T_Event(__u8 * Dest, int InvokeID, enum Operation OperationValue)
 {
 	int Length;
 	__u8 *p;
@@ -1324,9 +1398,9 @@ static int encodeFacCCBS_T_Event(__u8 * Dest, int InvokeID, enum FacFunction Ope
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBS_T_Call(__u8 * Dest, const struct FacCCBS_T_Event *CCBS_T_Call)
+int encodeFacCCBS_T_Call(__u8 * Dest, const struct asn1_parm *pc, const void *val)
 {
-	return encodeFacCCBS_T_Event(Dest, CCBS_T_Call->InvokeID, Fac_CCBS_T_Call);
+	return encodeFacCCBS_T_Event(Dest, pc->u.inv.invokeId, Fac_CCBS_T_Call);
 }				/* end encodeFacCCBS_T_Call() */
 
 /* ******************************************************************* */
@@ -1339,9 +1413,9 @@ int encodeFacCCBS_T_Call(__u8 * Dest, const struct FacCCBS_T_Event *CCBS_T_Call)
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBS_T_Suspend(__u8 * Dest, const struct FacCCBS_T_Event *CCBS_T_Suspend)
+int encodeFacCCBS_T_Suspend(__u8 * Dest, const struct asn1_parm *pc, const void *val)
 {
-	return encodeFacCCBS_T_Event(Dest, CCBS_T_Suspend->InvokeID, Fac_CCBS_T_Suspend);
+	return encodeFacCCBS_T_Event(Dest, pc->u.inv.invokeId, Fac_CCBS_T_Suspend);
 }				/* end encodeFacCCBS_T_Suspend() */
 
 /* ******************************************************************* */
@@ -1354,9 +1428,9 @@ int encodeFacCCBS_T_Suspend(__u8 * Dest, const struct FacCCBS_T_Event *CCBS_T_Su
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBS_T_Resume(__u8 * Dest, const struct FacCCBS_T_Event *CCBS_T_Resume)
+int encodeFacCCBS_T_Resume(__u8 * Dest, const struct asn1_parm *pc, const void *val)
 {
-	return encodeFacCCBS_T_Event(Dest, CCBS_T_Resume->InvokeID, Fac_CCBS_T_Resume);
+	return encodeFacCCBS_T_Event(Dest, pc->u.inv.invokeId, Fac_CCBS_T_Resume);
 }				/* end encodeFacCCBS_T_Resume() */
 
 /* ******************************************************************* */
@@ -1369,9 +1443,9 @@ int encodeFacCCBS_T_Resume(__u8 * Dest, const struct FacCCBS_T_Event *CCBS_T_Res
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBS_T_RemoteUserFree(__u8 * Dest, const struct FacCCBS_T_Event *CCBS_T_RemoteUserFree)
+int encodeFacCCBS_T_RemoteUserFree(__u8 * Dest, const struct asn1_parm *pc, const void *val)
 {
-	return encodeFacCCBS_T_Event(Dest, CCBS_T_RemoteUserFree->InvokeID, Fac_CCBS_T_RemoteUserFree);
+	return encodeFacCCBS_T_Event(Dest, pc->u.inv.invokeId, Fac_CCBS_T_RemoteUserFree);
 }				/* end encodeFacCCBS_T_RemoteUserFree() */
 
 /* ******************************************************************* */
@@ -1384,9 +1458,9 @@ int encodeFacCCBS_T_RemoteUserFree(__u8 * Dest, const struct FacCCBS_T_Event *CC
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBS_T_Available(__u8 * Dest, const struct FacCCBS_T_Event *CCBS_T_Available)
+int encodeFacCCBS_T_Available(__u8 * Dest, const struct asn1_parm *pc, const void *val)
 {
-	return encodeFacCCBS_T_Event(Dest, CCBS_T_Available->InvokeID, Fac_CCBS_T_Available);
+	return encodeFacCCBS_T_Event(Dest, pc->u.inv.invokeId, Fac_CCBS_T_Available);
 }				/* end encodeFacCCBS_T_Available() */
 
 /* ******************************************************************* */
@@ -1401,32 +1475,32 @@ int encodeFacCCBS_T_Available(__u8 * Dest, const struct FacCCBS_T_Event *CCBS_T_
  * \retval length on success.
  * \retval -1 on error.
  */
-static int encodeFacCCBS_T_Request_Backend(__u8 * Dest, const struct FacCCBS_T_Request *CCBS_T_Request, enum FacFunction MsgType)
+static int encodeFacCCBS_T_Request_Backend(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBS_T_Request *CCBS_T_Request, __u8 RetentionSupported, enum Operation MsgType)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	switch (CCBS_T_Request->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head(Dest, CCBS_T_Request->InvokeID, MsgType);
+	switch (pc->comp) {
+	case CompInvoke:
+		p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, MsgType);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
 		p = &SeqStart[2];
 
-		p += encodeAddress_Full(p, &CCBS_T_Request->Component.Invoke.Destination);
-		p += encodeQ931ie_CCBS(p, &CCBS_T_Request->Component.Invoke.Q931ie);
-		if (CCBS_T_Request->Component.Invoke.RetentionSupported) {
+		p += encodeAddress_Full(p, &CCBS_T_Request->Destination);
+		p += encodeQ931ie_CCBS(p, &CCBS_T_Request->Q931ie);
+		if (CCBS_T_Request->RetentionSupported) {
 			/* Not the DEFAULT value */
-			p += encodeBoolean(p, ASN1_TAG_CONTEXT_SPECIFIC | 1, CCBS_T_Request->Component.Invoke.RetentionSupported);
+			p += encodeBoolean(p, ASN1_TAG_CONTEXT_SPECIFIC | 1, CCBS_T_Request->RetentionSupported);
 		}
-		if (CCBS_T_Request->Component.Invoke.PresentationAllowedIndicatorPresent) {
+		if (CCBS_T_Request->PresentationAllowedIndicatorPresent) {
 			p += encodeBoolean(p, ASN1_TAG_CONTEXT_SPECIFIC | 2,
-					   CCBS_T_Request->Component.Invoke.PresentationAllowedIndicator);
+					   CCBS_T_Request->PresentationAllowedIndicator);
 		}
-		if (CCBS_T_Request->Component.Invoke.Originating.Party.LengthOfNumber) {
-			p += encodeAddress_Full(p, &CCBS_T_Request->Component.Invoke.Originating);
+		if (CCBS_T_Request->Originating.Party.LengthOfNumber) {
+			p += encodeAddress_Full(p, &CCBS_T_Request->Originating);
 		}
 
 		/* sequence Length */
@@ -1434,9 +1508,9 @@ static int encodeFacCCBS_T_Request_Backend(__u8 * Dest, const struct FacCCBS_T_R
 
 		Length = encodeComponent_Length(Dest, p);
 		break;
-	case FacComponent_Result:
+	case CompReturnResult:
 		p = encodeComponent_Head(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, CCBS_T_Request->InvokeID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -1444,7 +1518,7 @@ static int encodeFacCCBS_T_Request_Backend(__u8 * Dest, const struct FacCCBS_T_R
 
 		p += encodeOperationValue(p, MsgType);
 
-		p += encodeBoolean(p, ASN1_TAG_BOOLEAN, CCBS_T_Request->Component.Result.RetentionSupported);
+		p += encodeBoolean(p, ASN1_TAG_BOOLEAN, RetentionSupported);
 
 		/* sequence Length */
 		SeqStart[1] = p - &SeqStart[2];
@@ -1469,9 +1543,10 @@ static int encodeFacCCBS_T_Request_Backend(__u8 * Dest, const struct FacCCBS_T_R
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCBS_T_Request(__u8 * Dest, const struct FacCCBS_T_Request *CCBS_T_Request)
+int encodeFacCCBS_T_Request(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBS_T_Request *CCBS_T_Request)
 {
-	return encodeFacCCBS_T_Request_Backend(Dest, CCBS_T_Request, Fac_CCBS_T_Request);
+	return encodeFacCCBS_T_Request_Backend(Dest, pc, CCBS_T_Request,
+		pc->u.retResult.o.CCBS_T_Request.RetentionSupported, Fac_CCBS_T_Request);
 }				/* end encodeFacCCBS_T_Request() */
 
 /* ******************************************************************* */
@@ -1484,9 +1559,10 @@ int encodeFacCCBS_T_Request(__u8 * Dest, const struct FacCCBS_T_Request *CCBS_T_
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCCNR_T_Request(__u8 * Dest, const struct FacCCBS_T_Request *CCNR_T_Request)
+int encodeFacCCNR_T_Request(__u8 * Dest, const struct asn1_parm *pc, const struct FacCCBS_T_Request *CCNR_T_Request)
 {
-	return encodeFacCCBS_T_Request_Backend(Dest, CCNR_T_Request, Fac_CCNR_T_Request);
+	return encodeFacCCBS_T_Request_Backend(Dest, pc, CCNR_T_Request,
+		pc->u.retResult.o.CCNR_T_Request.RetentionSupported, Fac_CCNR_T_Request);
 }				/* end encodeFacCCNR_T_Request() */
 
 /* ******************************************************************* */
@@ -1501,7 +1577,7 @@ int encodeFacCCNR_T_Request(__u8 * Dest, const struct FacCCBS_T_Request *CCNR_T_
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCCBS_T_Request_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBS_T_Request_ARG *CCBS_T_Request)
+int ParseCCBS_T_Request(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBS_T_Request *CCBS_T_Request)
 {
 	int Value;
 	INIT;
@@ -1526,7 +1602,7 @@ int ParseCCBS_T_Request_ARG(struct asn1_parm *pc, u_char * p, u_char * end, stru
 	XSEQUENCE_OPT_1(ParseAddress_Full, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &CCBS_T_Request->Originating);
 
 	return p - beg;
-}				/* end ParseCCBS_T_Request_ARG() */
+}				/* end ParseCCBS_T_Request() */
 
 /* ******************************************************************* */
 /*!
@@ -1540,10 +1616,10 @@ int ParseCCBS_T_Request_ARG(struct asn1_parm *pc, u_char * p, u_char * end, stru
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCCNR_T_Request_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBS_T_Request_ARG *CCNR_T_Request)
+int ParseCCNR_T_Request(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBS_T_Request *CCNR_T_Request)
 {
-	return ParseCCBS_T_Request_ARG(pc, p, end, CCNR_T_Request);
-}				/* end ParseCCNR_T_Request_ARG() */
+	return ParseCCBS_T_Request(pc, p, end, CCNR_T_Request);
+}				/* end ParseCCNR_T_Request() */
 
 /* ******************************************************************* */
 /*!
@@ -1563,7 +1639,6 @@ int ParseCCBS_T_Request_RES(struct asn1_parm *pc, u_char * p, u_char * end, stru
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParseBoolean, ASN1_TAG_BOOLEAN, ASN1_NOT_TAGGED, &RetentionSupported);
 	CCBS_T_Request->RetentionSupported = RetentionSupported;

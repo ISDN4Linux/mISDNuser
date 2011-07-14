@@ -12,8 +12,6 @@ int ParseAOCDCurrency(struct asn1_parm *pc, u_char * p, u_char * end, struct Fac
 {
 	INIT;
 
-	cur->InvokeID = pc->u.inv.invokeId;
-
 	cur->chargeNotAvailable = 1;
 	cur->freeOfCharge = 0;
 	memset(cur->currency, 0, sizeof(cur->currency));
@@ -30,8 +28,6 @@ int ParseAOCDCurrency(struct asn1_parm *pc, u_char * p, u_char * end, struct Fac
 int ParseAOCDChargingUnit(struct asn1_parm *pc, u_char * p, u_char * end, struct FacAOCChargingUnit *chu)
 {
 	INIT;
-
-	chu->InvokeID = pc->u.inv.invokeId;
 
 	chu->chargeNotAvailable = 1;
 	chu->freeOfCharge = 0;
@@ -50,8 +46,6 @@ int ParseAOCDChargingUnit(struct asn1_parm *pc, u_char * p, u_char * end, struct
 int ParseAOCECurrency(struct asn1_parm *pc, u_char * p, u_char * end, struct FacAOCCurrency *cur)
 {
 	INIT;
-
-	cur->InvokeID = pc->u.inv.invokeId;
 
 	cur->chargeNotAvailable = 1;
 	cur->freeOfCharge = 0;
@@ -72,8 +66,6 @@ int ParseAOCECurrency(struct asn1_parm *pc, u_char * p, u_char * end, struct Fac
 int ParseAOCEChargingUnit(struct asn1_parm *pc, u_char * p, u_char * end, struct FacAOCChargingUnit *chu)
 {
 	INIT;
-
-	chu->InvokeID = pc->u.inv.invokeId;
 
 	chu->chargeNotAvailable = 1;
 	chu->freeOfCharge = 0;

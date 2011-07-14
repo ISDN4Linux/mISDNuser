@@ -1,12 +1,24 @@
-/* $Id$
+/*
  *
  * Diversion Supplementary Services ETS 300 207-1 Table 3
  *
  * Diversion Facility ie encode/decode
+ *
+ * Copyright 2009,2010  by Karsten Keil <kkeil@linux-pingi.de>
+ *
+ * This code is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
+ * version 2.1 as published by the Free Software Foundation.
+ *
+ * This code is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU LESSER GENERAL PUBLIC LICENSE for more details.
+ *
  */
 
 #include "asn1.h"
-#include "asn1_diversion.h"
+#include "diversion.h"
 #include <string.h>
 
 /* ------------------------------------------------------------------- */
@@ -473,33 +485,33 @@ int ParseServedUserNumberList(struct asn1_parm *pc, u_char * p, u_char * end, st
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacActivationDiversion(__u8 * Dest, const struct FacActivationDiversion *ActivationDiversion)
+int encodeFacActivationDiversion(__u8 * Dest, const struct asn1_parm *pc, const struct FacActivationDiversion *ActivationDiversion)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	switch (ActivationDiversion->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head(Dest, ActivationDiversion->InvokeID, Fac_ActivationDiversion);
+	switch (pc->comp) {
+	case CompInvoke:
+		p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_ActivationDiversion);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
 		p = &SeqStart[2];
 
-		p += encodeEnum(p, ASN1_TAG_ENUM, ActivationDiversion->Component.Invoke.Procedure);
-		p += encodeEnum(p, ASN1_TAG_ENUM, ActivationDiversion->Component.Invoke.BasicService);
-		p += encodeAddress_Full(p, &ActivationDiversion->Component.Invoke.ForwardedTo);
-		p += encodeServedUserNumber_Full(p, &ActivationDiversion->Component.Invoke.ServedUser);
+		p += encodeEnum(p, ASN1_TAG_ENUM, ActivationDiversion->Procedure);
+		p += encodeEnum(p, ASN1_TAG_ENUM, ActivationDiversion->BasicService);
+		p += encodeAddress_Full(p, &ActivationDiversion->ForwardedTo);
+		p += encodeServedUserNumber_Full(p, &ActivationDiversion->ServedUser);
 
 		/* sequence Length */
 		SeqStart[1] = p - &SeqStart[2];
 
 		Length = encodeComponent_Length(Dest, p);
 		break;
-	case FacComponent_Result:
+	case CompReturnResult:
 		p = encodeComponent_Head(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, ActivationDiversion->InvokeID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -534,8 +546,8 @@ int encodeFacActivationDiversion(__u8 * Dest, const struct FacActivationDiversio
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseActivationDiversion_ARG(struct asn1_parm *pc, u_char * p, u_char * end,
-				 struct FacActivationDiversion_ARG *ActivationDiversion)
+int ParseActivationDiversion(struct asn1_parm *pc, u_char * p, u_char * end,
+				 struct FacActivationDiversion *ActivationDiversion)
 {
 	int Value;
 	INIT;
@@ -548,7 +560,7 @@ int ParseActivationDiversion_ARG(struct asn1_parm *pc, u_char * p, u_char * end,
 	XSEQUENCE_1(ParseServedUserNumber_Full, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &ActivationDiversion->ServedUser);
 
 	return p - beg;
-}				/* end ParseActivationDiversion_ARG() */
+}				/* end ParseActivationDiversion() */
 
 /* ******************************************************************* */
 /*!
@@ -560,32 +572,32 @@ int ParseActivationDiversion_ARG(struct asn1_parm *pc, u_char * p, u_char * end,
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacDeactivationDiversion(__u8 * Dest, const struct FacDeactivationDiversion *DeactivationDiversion)
+int encodeFacDeactivationDiversion(__u8 * Dest, const struct asn1_parm *pc, const struct FacDeactivationDiversion *DeactivationDiversion)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	switch (DeactivationDiversion->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head(Dest, DeactivationDiversion->InvokeID, Fac_DeactivationDiversion);
+	switch (pc->comp) {
+	case CompInvoke:
+		p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_DeactivationDiversion);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
 		p = &SeqStart[2];
 
-		p += encodeEnum(p, ASN1_TAG_ENUM, DeactivationDiversion->Component.Invoke.Procedure);
-		p += encodeEnum(p, ASN1_TAG_ENUM, DeactivationDiversion->Component.Invoke.BasicService);
-		p += encodeServedUserNumber_Full(p, &DeactivationDiversion->Component.Invoke.ServedUser);
+		p += encodeEnum(p, ASN1_TAG_ENUM, DeactivationDiversion->Procedure);
+		p += encodeEnum(p, ASN1_TAG_ENUM, DeactivationDiversion->BasicService);
+		p += encodeServedUserNumber_Full(p, &DeactivationDiversion->ServedUser);
 
 		/* sequence Length */
 		SeqStart[1] = p - &SeqStart[2];
 
 		Length = encodeComponent_Length(Dest, p);
 		break;
-	case FacComponent_Result:
+	case CompReturnResult:
 		p = encodeComponent_Head(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, DeactivationDiversion->InvokeID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -620,8 +632,7 @@ int encodeFacDeactivationDiversion(__u8 * Dest, const struct FacDeactivationDive
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseDeactivationDiversion_ARG(struct asn1_parm *pc, u_char * p, u_char * end,
-				   struct FacDeactivationDiversion_ARG *DeactivationDiversion)
+int ParseDeactivationDiversion(struct asn1_parm *pc, u_char * p, u_char * end, struct FacDeactivationDiversion *DeactivationDiversion)
 {
 	int Value;
 	INIT;
@@ -633,7 +644,7 @@ int ParseDeactivationDiversion_ARG(struct asn1_parm *pc, u_char * p, u_char * en
 	XSEQUENCE_1(ParseServedUserNumber_Full, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &DeactivationDiversion->ServedUser);
 
 	return p - beg;
-}				/* end ParseDeactivationDiversion_ARG() */
+}				/* end ParseDeactivationDiversion() */
 
 /* ******************************************************************* */
 /*!
@@ -645,14 +656,14 @@ int ParseDeactivationDiversion_ARG(struct asn1_parm *pc, u_char * p, u_char * en
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacActivationStatusNotificationDiv(__u8 * Dest,
+int encodeFacActivationStatusNotificationDiv(__u8 * Dest, const struct asn1_parm *pc,
 					     const struct FacActivationStatusNotificationDiv *ActivationStatusNotificationDiv)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	p = encodeComponentInvoke_Head(Dest, ActivationStatusNotificationDiv->InvokeID, Fac_ActivationStatusNotificationDiv);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_ActivationStatusNotificationDiv);
 
 	SeqStart = p;
 	SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -683,7 +694,7 @@ int encodeFacActivationStatusNotificationDiv(__u8 * Dest,
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseActivationStatusNotificationDiv_ARG(struct asn1_parm *pc, u_char * p, u_char * end,
+int ParseActivationStatusNotificationDiv(struct asn1_parm *pc, u_char * p, u_char * end,
 					     struct FacActivationStatusNotificationDiv *ActivationStatusNotificationDiv)
 {
 	int Value;
@@ -696,10 +707,8 @@ int ParseActivationStatusNotificationDiv_ARG(struct asn1_parm *pc, u_char * p, u
 	XSEQUENCE_1(ParseAddress_Full, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &ActivationStatusNotificationDiv->ForwardedTo);
 	XSEQUENCE_1(ParseServedUserNumber_Full, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &ActivationStatusNotificationDiv->ServedUser);
 
-	ActivationStatusNotificationDiv->InvokeID = pc->u.inv.invokeId;
-
 	return p - beg;
-}				/* end ParseActivationStatusNotificationDiv_ARG() */
+}				/* end ParseActivationStatusNotificationDiv() */
 
 /* ******************************************************************* */
 /*!
@@ -711,14 +720,15 @@ int ParseActivationStatusNotificationDiv_ARG(struct asn1_parm *pc, u_char * p, u
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacDeactivationStatusNotificationDiv(__u8 * Dest,
-					       const struct FacDeactivationStatusNotificationDiv *DeactivationStatusNotificationDiv)
+int encodeFacDeactivationStatusNotificationDiv(__u8 * Dest, const struct asn1_parm *pc,
+					       const struct FacDeactivationStatusNotificationDiv
+					       *DeactivationStatusNotificationDiv)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	p = encodeComponentInvoke_Head(Dest, DeactivationStatusNotificationDiv->InvokeID, Fac_DeactivationStatusNotificationDiv);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_DeactivationStatusNotificationDiv);
 
 	SeqStart = p;
 	SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -748,7 +758,7 @@ int encodeFacDeactivationStatusNotificationDiv(__u8 * Dest,
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseDeactivationStatusNotificationDiv_ARG(struct asn1_parm *pc, u_char * p, u_char * end,
+int ParseDeactivationStatusNotificationDiv(struct asn1_parm *pc, u_char * p, u_char * end,
 					       struct FacDeactivationStatusNotificationDiv *DeactivationStatusNotificationDiv)
 {
 	int Value;
@@ -760,10 +770,9 @@ int ParseDeactivationStatusNotificationDiv_ARG(struct asn1_parm *pc, u_char * p,
 	DeactivationStatusNotificationDiv->BasicService = Value;
 	XSEQUENCE_1(ParseServedUserNumber_Full, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &DeactivationStatusNotificationDiv->ServedUser);
 
-	DeactivationStatusNotificationDiv->InvokeID = pc->u.inv.invokeId;
 
 	return p - beg;
-}				/* end ParseDeactivationStatusNotificationDiv_ARG() */
+}				/* end ParseDeactivationStatusNotificationDiv() */
 
 /* ******************************************************************* */
 /*!
@@ -775,35 +784,35 @@ int ParseDeactivationStatusNotificationDiv_ARG(struct asn1_parm *pc, u_char * p,
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacInterrogationDiversion(__u8 * Dest, const struct FacInterrogationDiversion *InterrogationDiversion)
+int encodeFacInterrogationDiversion(__u8 * Dest, const const struct asn1_parm *pc, const struct FacInterrogationDiversion *InterrogationDiversion)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	switch (InterrogationDiversion->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head(Dest, InterrogationDiversion->InvokeID, Fac_InterrogationDiversion);
+	switch (pc->comp) {
+	case CompInvoke:
+		p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_InterrogationDiversion);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
 		p = &SeqStart[2];
 
-		p += encodeEnum(p, ASN1_TAG_ENUM, InterrogationDiversion->Component.Invoke.Procedure);
-		if (InterrogationDiversion->Component.Invoke.BasicService) {
+		p += encodeEnum(p, ASN1_TAG_ENUM, InterrogationDiversion->Procedure);
+		if (InterrogationDiversion->BasicService) {
 			/* Not the DEFAULT value */
-			p += encodeEnum(p, ASN1_TAG_ENUM, InterrogationDiversion->Component.Invoke.BasicService);
+			p += encodeEnum(p, ASN1_TAG_ENUM, InterrogationDiversion->BasicService);
 		}
-		p += encodeServedUserNumber_Full(p, &InterrogationDiversion->Component.Invoke.ServedUser);
+		p += encodeServedUserNumber_Full(p, &InterrogationDiversion->ServedUser);
 
 		/* sequence Length */
 		SeqStart[1] = p - &SeqStart[2];
 
 		Length = encodeComponent_Length(Dest, p);
 		break;
-	case FacComponent_Result:
+	case CompReturnResult:
 		p = encodeComponent_Head_Long_u8(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, InterrogationDiversion->InvokeID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -811,7 +820,7 @@ int encodeFacInterrogationDiversion(__u8 * Dest, const struct FacInterrogationDi
 
 		p += encodeOperationValue(p, Fac_InterrogationDiversion);
 
-		p += encodeIntResultList(p, &InterrogationDiversion->Component.Result);
+		p += encodeIntResultList(p, &pc->u.retResult.o.InterrogationDiversion);
 
 		/* sequence Length */
 		encodeLen_Long_u8(&SeqStart[1], p - &SeqStart[1 + ASN1_NUM_OCTETS_LONG_LENGTH_u8]);
@@ -838,8 +847,8 @@ int encodeFacInterrogationDiversion(__u8 * Dest, const struct FacInterrogationDi
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseInterrogationDiversion_ARG(struct asn1_parm *pc, u_char * p, u_char * end,
-				    struct FacInterrogationDiversion_ARG *InterrogationDiversion)
+int ParseInterrogationDiversion(struct asn1_parm *pc, u_char * p, u_char * end,
+				    struct FacInterrogationDiversion *InterrogationDiversion)
 {
 	int Value;
 	INIT;
@@ -852,7 +861,7 @@ int ParseInterrogationDiversion_ARG(struct asn1_parm *pc, u_char * p, u_char * e
 	XSEQUENCE_1(ParseServedUserNumber_Full, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &InterrogationDiversion->ServedUser);
 
 	return p - beg;
-}				/* end ParseInterrogationDiversion_ARG() */
+}				/* end ParseInterrogationDiversion() */
 
 /* ******************************************************************* */
 #if 0
@@ -884,14 +893,14 @@ int ParseInterrogationDiversion_RES(struct asn1_parm *pc, u_char * p, u_char * e
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacDiversionInformation(__u8 * Dest, const struct FacDiversionInformation *DiversionInformation)
+int encodeFacDiversionInformation(__u8 * Dest, const const struct asn1_parm *pc, const struct FacDiversionInformation *DiversionInformation)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 	__u8 *TagStart;
 
-	p = encodeComponentInvoke_Head_Long_u8(Dest, DiversionInformation->InvokeID, Fac_DiversionInformation);
+	p = encodeComponentInvoke_Head_Long_u8(Dest, pc->u.inv.invokeId, Fac_DiversionInformation);
 
 	SeqStart = p;
 	SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -966,7 +975,7 @@ int encodeFacDiversionInformation(__u8 * Dest, const struct FacDiversionInformat
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseDiversionInformation_ARG(struct asn1_parm *pc, u_char * p, u_char * end,
+int ParseDiversionInformation(struct asn1_parm *pc, u_char * p, u_char * end,
 				  struct FacDiversionInformation *DiversionInformation)
 {
 	int xtag;
@@ -1030,10 +1039,8 @@ int ParseDiversionInformation_ARG(struct asn1_parm *pc, u_char * p, u_char * end
 	DiversionInformation->UserInfo.Length = 0;
 	XSEQUENCE_OPT_1(ParseQ931_Div_UserInfo, ASN1_TAG_APPLICATION_WIDE, 0, &DiversionInformation->UserInfo);
 
-	DiversionInformation->InvokeID = pc->u.inv.invokeId;
-
 	return p - beg;
-}				/* end ParseDiversionInformation_ARG() */
+}				/* end ParseDiversionInformation() */
 
 /* ******************************************************************* */
 /*!
@@ -1045,24 +1052,24 @@ int ParseDiversionInformation_ARG(struct asn1_parm *pc, u_char * p, u_char * end
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCallDeflection(__u8 * Dest, const struct FacCallDeflection *CallDeflection)
+int encodeFacCallDeflection(__u8 * Dest, const const struct asn1_parm *pc, const struct FacCallDeflection *CallDeflection)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	switch (CallDeflection->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head(Dest, CallDeflection->InvokeID, Fac_CallDeflection);
+	switch (pc->comp) {
+	case CompInvoke:
+		p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_CallDeflection);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
 		p = &SeqStart[2];
 
-		p += encodeAddress_Full(p, &CallDeflection->Component.Invoke.Deflection);
-		if (CallDeflection->Component.Invoke.PresentationAllowedToDivertedToUserPresent) {
+		p += encodeAddress_Full(p, &CallDeflection->Deflection);
+		if (CallDeflection->PresentationAllowedToDivertedToUserPresent) {
 			p += encodeBoolean(p, ASN1_TAG_BOOLEAN,
-					   CallDeflection->Component.Invoke.PresentationAllowedToDivertedToUser);
+					   CallDeflection->PresentationAllowedToDivertedToUser);
 		}
 
 		/* sequence Length */
@@ -1070,9 +1077,9 @@ int encodeFacCallDeflection(__u8 * Dest, const struct FacCallDeflection *CallDef
 
 		Length = encodeComponent_Length(Dest, p);
 		break;
-	case FacComponent_Result:
+	case CompReturnResult:
 		p = encodeComponent_Head(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, CallDeflection->InvokeID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -1107,7 +1114,7 @@ int encodeFacCallDeflection(__u8 * Dest, const struct FacCallDeflection *CallDef
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCallDeflection_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCallDeflection_ARG *CallDeflection)
+int ParseCallDeflection(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCallDeflection *CallDeflection)
 {
 	int Value;
 	INIT;
@@ -1123,7 +1130,7 @@ int ParseCallDeflection_ARG(struct asn1_parm *pc, u_char * p, u_char * end, stru
 	}
 
 	return p - beg;
-}				/* end ParseCallDeflection_ARG() */
+}				/* end ParseCallDeflection() */
 
 /* ******************************************************************* */
 /*!
@@ -1135,66 +1142,81 @@ int ParseCallDeflection_ARG(struct asn1_parm *pc, u_char * p, u_char * end, stru
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCallRerouteing(__u8 * Dest, const struct FacCallRerouteing *CallRerouteing)
+int encodeFacCallRerouteing(__u8 * Dest, const const struct asn1_parm *pc, const struct FacCallRerouteing *CallRerouteing)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 	__u8 *TagStart;
+	__u8 big = 0;
 
-	switch (CallRerouteing->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head_Long_u8(Dest, CallRerouteing->InvokeID, Fac_CallRerouteing);
+start:
+	switch (pc->comp) {
+	case CompInvoke:
+		if (big)
+			p = encodeComponentInvoke_Head_Long_u8(Dest, pc->u.inv.invokeId, Fac_CallRerouteing);
+		else
+			p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_CallRerouteing);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
-		p = &SeqStart[1 + ASN1_NUM_OCTETS_LONG_LENGTH_u8];
+		p = &SeqStart[2 + big];
 
-		p += encodeEnum(p, ASN1_TAG_ENUM, CallRerouteing->Component.Invoke.ReroutingReason);
-		p += encodeAddress_Full(p, &CallRerouteing->Component.Invoke.CalledAddress);
-		p += encodeInt(p, ASN1_TAG_INTEGER, CallRerouteing->Component.Invoke.ReroutingCounter);
-		p += encodeQ931_Div(p, &CallRerouteing->Component.Invoke.Q931ie);
+		p += encodeEnum(p, ASN1_TAG_ENUM, CallRerouteing->ReroutingReason);
+		p += encodeAddress_Full(p, &CallRerouteing->CalledAddress);
+		p += encodeInt(p, ASN1_TAG_INTEGER, CallRerouteing->ReroutingCounter);
+		p += encodeQ931_Div(p, &CallRerouteing->Q931ie);
 
 		TagStart = p;
 		TagStart[0] = ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED | 1;
 		p = &TagStart[2];
 
-		p += encodePresentedNumberUnscreened_Full(p, &CallRerouteing->Component.Invoke.LastRerouting);
+		p += encodePresentedNumberUnscreened_Full(p, &CallRerouteing->LastRerouting);
 
 		/* Tag Length */
 		TagStart[1] = p - &TagStart[2];
 
-		if (CallRerouteing->Component.Invoke.SubscriptionOption) {
+		if (CallRerouteing->SubscriptionOption) {
 			/* Not the DEFAULT value */
 			TagStart = p;
 			TagStart[0] = ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED | 2;
 			p = &TagStart[2];
 
-			p += encodeEnum(p, ASN1_TAG_ENUM, CallRerouteing->Component.Invoke.SubscriptionOption);
+			p += encodeEnum(p, ASN1_TAG_ENUM, CallRerouteing->SubscriptionOption);
 
 			/* Tag Length */
 			TagStart[1] = p - &TagStart[2];
 		}
 
-		if (CallRerouteing->Component.Invoke.CallingPartySubaddress.Length) {
+		if (CallRerouteing->CallingPartySubaddress.Length) {
 			TagStart = p;
 			TagStart[0] = ASN1_TAG_CONTEXT_SPECIFIC | ASN1_TAG_CONSTRUCTED | 3;
 			p = &TagStart[2];
 
-			p += encodePartySubaddress_Full(p, &CallRerouteing->Component.Invoke.CallingPartySubaddress);
+			p += encodePartySubaddress_Full(p, &CallRerouteing->CallingPartySubaddress);
 
 			/* Tag Length */
 			TagStart[1] = p - &TagStart[2];
 		}
 
 		/* sequence Length */
-		encodeLen_Long_u8(&SeqStart[1], p - &SeqStart[1 + ASN1_NUM_OCTETS_LONG_LENGTH_u8]);
-
-		Length = encodeComponent_Length_Long_u8(Dest, p);
+		if (big) {
+			encodeLen_Long_u8(&SeqStart[1], p - &SeqStart[1 + ASN1_NUM_OCTETS_LONG_LENGTH_u8]);
+			Length = encodeComponent_Length_Long_u8(Dest, p);
+		} else {
+			Length = p - &SeqStart[2];
+			if (Length > 127) {
+				big = 1; /* == ASN1_NUM_OCTETS_LONG_LENGTH_u8 - 1 */
+				/* start again with full byte length element */
+				goto start;
+			}
+			SeqStart[1] = Length & 0x7f;
+			Length = encodeComponent_Length(Dest, p);
+		}
 		break;
-	case FacComponent_Result:
+	case CompReturnResult:
 		p = encodeComponent_Head(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, CallRerouteing->InvokeID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -1229,7 +1251,7 @@ int encodeFacCallRerouteing(__u8 * Dest, const struct FacCallRerouteing *CallRer
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseCallRerouteing_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCallRerouteing_ARG *CallRerouteing)
+int ParseCallRerouteing(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCallRerouteing *CallRerouteing)
 {
 	unsigned int Value;
 	INIT;
@@ -1250,7 +1272,7 @@ int ParseCallRerouteing_ARG(struct asn1_parm *pc, u_char * p, u_char * end, stru
 			&CallRerouteing->CallingPartySubaddress);
 
 	return p - beg;
-}				/* end ParseCallRerouteing_ARG() */
+}				/* end ParseCallRerouteing() */
 
 /* ******************************************************************* */
 /*!
@@ -1262,23 +1284,23 @@ int ParseCallRerouteing_ARG(struct asn1_parm *pc, u_char * p, u_char * end, stru
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacInterrogateServedUserNumbers(__u8 * Dest, const struct FacInterrogateServedUserNumbers *InterrogateServedUserNumbers)
+int encodeFacInterrogateServedUserNumbers(__u8 * Dest, const const struct asn1_parm *pc, const struct FacServedUserNumberList *InterrogateServedUserNumbers)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	switch (InterrogateServedUserNumbers->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head(Dest, InterrogateServedUserNumbers->InvokeID, Fac_InterrogateServedUserNumbers);
+	switch (pc->comp) {
+	case CompInvoke:
+		p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_InterrogateServedUserNumbers);
 
 		/* No arguments */
 
 		Length = encodeComponent_Length(Dest, p);
 		break;
-	case FacComponent_Result:
+	case CompReturnResult:
 		p = encodeComponent_Head_Long_u8(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, InterrogateServedUserNumbers->InvokeID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -1286,7 +1308,7 @@ int encodeFacInterrogateServedUserNumbers(__u8 * Dest, const struct FacInterroga
 
 		p += encodeOperationValue(p, Fac_InterrogateServedUserNumbers);
 
-		p += encodeServedUserNumberList(p, &InterrogateServedUserNumbers->Component.Result);
+		p += encodeServedUserNumberList(p, InterrogateServedUserNumbers);
 
 		/* sequence Length */
 		encodeLen_Long_u8(&SeqStart[1], p - &SeqStart[1 + ASN1_NUM_OCTETS_LONG_LENGTH_u8]);
@@ -1331,13 +1353,13 @@ int ParseInterrogateServedUserNumbers_RES(struct asn1_parm *pc, u_char * p, u_ch
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacDivertingLegInformation1(__u8 * Dest, const struct FacDivertingLegInformation1 *DivertingLegInformation1)
+int encodeFacDivertingLegInformation1(__u8 * Dest, const const struct asn1_parm *pc, const struct FacDivertingLegInformation1 *DivertingLegInformation1)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	p = encodeComponentInvoke_Head(Dest, DivertingLegInformation1->InvokeID, Fac_DivertingLegInformation1);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_DivertingLegInformation1);
 
 	SeqStart = p;
 	SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -1369,7 +1391,7 @@ int encodeFacDivertingLegInformation1(__u8 * Dest, const struct FacDivertingLegI
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseDivertingLegInformation1_ARG(struct asn1_parm *pc, u_char * p, u_char * end,
+int ParseDivertingLegInformation1(struct asn1_parm *pc, u_char * p, u_char * end,
 				      struct FacDivertingLegInformation1 *DivertingLegInformation1)
 {
 	int Value;
@@ -1387,10 +1409,8 @@ int ParseDivertingLegInformation1_ARG(struct asn1_parm *pc, u_char * p, u_char *
 		DivertingLegInformation1->DivertedToPresent = 0;
 	}
 
-	DivertingLegInformation1->InvokeID = pc->u.inv.invokeId;
-
 	return p - beg;
-}				/* end ParseDivertingLegInformation1_ARG() */
+}				/* end ParseDivertingLegInformation1() */
 
 /* ******************************************************************* */
 /*!
@@ -1402,14 +1422,14 @@ int ParseDivertingLegInformation1_ARG(struct asn1_parm *pc, u_char * p, u_char *
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacDivertingLegInformation2(__u8 * Dest, const struct FacDivertingLegInformation2 *DivertingLegInformation2)
+int encodeFacDivertingLegInformation2(__u8 * Dest, const const struct asn1_parm *pc, const struct FacDivertingLegInformation2 *DivertingLegInformation2)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 	__u8 *TagStart;
 
-	p = encodeComponentInvoke_Head(Dest, DivertingLegInformation2->InvokeID, Fac_DivertingLegInformation2);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_DivertingLegInformation2);
 
 	SeqStart = p;
 	SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -1460,7 +1480,7 @@ int encodeFacDivertingLegInformation2(__u8 * Dest, const struct FacDivertingLegI
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseDivertingLegInformation2_ARG(struct asn1_parm *pc, u_char * p, u_char * end,
+int ParseDivertingLegInformation2(struct asn1_parm *pc, u_char * p, u_char * end,
 				      struct FacDivertingLegInformation2 *DivertingLegInformation2)
 {
 	int xtag;
@@ -1491,10 +1511,8 @@ int ParseDivertingLegInformation2_ARG(struct asn1_parm *pc, u_char * p, u_char *
 		DivertingLegInformation2->OriginalCalledPresent = 0;
 	}
 
-	DivertingLegInformation2->InvokeID = pc->u.inv.invokeId;
-
 	return p - beg;
-}				/* end ParseDivertingLegInformation2_ARG() */
+}				/* end ParseDivertingLegInformation2() */
 
 /* ******************************************************************* */
 /*!
@@ -1506,12 +1524,12 @@ int ParseDivertingLegInformation2_ARG(struct asn1_parm *pc, u_char * p, u_char *
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacDivertingLegInformation3(__u8 * Dest, const struct FacDivertingLegInformation3 *DivertingLegInformation3)
+int encodeFacDivertingLegInformation3(__u8 * Dest, const const struct asn1_parm *pc, const struct FacDivertingLegInformation3 *DivertingLegInformation3)
 {
 	int Length;
 	__u8 *p;
 
-	p = encodeComponentInvoke_Head(Dest, DivertingLegInformation3->InvokeID, Fac_DivertingLegInformation3);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_DivertingLegInformation3);
 
 	p += encodeBoolean(p, ASN1_TAG_BOOLEAN, DivertingLegInformation3->PresentationAllowedIndicator);
 
@@ -1532,23 +1550,20 @@ int encodeFacDivertingLegInformation3(__u8 * Dest, const struct FacDivertingLegI
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseDivertingLegInformation3_ARG(struct asn1_parm *pc, u_char * p, u_char * end,
+int ParseDivertingLegInformation3(struct asn1_parm *pc, u_char * p, u_char * end,
 				      struct FacDivertingLegInformation3 *DivertingLegInformation3)
 {
 	int Value;
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 
 	XSEQUENCE_1(ParseBoolean, ASN1_TAG_BOOLEAN, ASN1_NOT_TAGGED, &Value);
 	DivertingLegInformation3->PresentationAllowedIndicator = Value;
 
-	DivertingLegInformation3->InvokeID = pc->u.inv.invokeId;
-
 	return p - beg;
-}				/* end ParseDivertingLegInformation3_ARG() */
+}				/* end ParseDivertingLegInformation3() */
 
 /* ------------------------------------------------------------------- */
 /* end asn1_diversion.c */

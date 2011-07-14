@@ -1,4 +1,16 @@
-/* $Id$
+/*
+ * Basic ASN1 parser functions
+ *
+ * Copyright 2009,2010  by Karsten Keil <kkeil@linux-pingi.de>
+ *
+ * This code is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
+ * version 2.1 as published by the Free Software Foundation.
+ *
+ * This code is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU LESSER GENERAL PUBLIC LICENSE for more details.
  *
  */
 
@@ -6,6 +18,10 @@
 
 int ParseTag(u_char * p, u_char * end, int *tag)
 {
+	if (p >= end) {
+		eprint("ParseTag underflow %p/%p\n", p, end);
+		return -1;
+	}
 	*tag = *p;
 	return 1;
 }
@@ -14,6 +30,10 @@ int ParseLen(u_char * p, u_char * end, int *len)
 {
 	int l, i;
 
+	if (p >= end) {
+		eprint("ParseLen underflow %p/%p\n", p, end);
+		return -1;
+	}
 	if (*p == 0x80) {	// indefinite
 		*len = -1;
 		return 1;
@@ -25,56 +45,13 @@ int ParseLen(u_char * p, u_char * end, int *len)
 	*len = 0;
 	l = *p & ~0x80;
 	p++;
+	if (p + l >= end) {
+		eprint("ParseLen underflow %p/%p\n", p, end);
+		return -1;
+	}
 	for (i = 0; i < l; i++) {
 		*len = (*len << 8) + *p;
 		p++;
 	}
 	return l + 1;
 }
-
-#ifdef ASN1_DEBUG
-int ParseASN1(u_char * p, u_char * end, int level)
-{
-	int tag, len;
-	int ret;
-	int j;
-	u_char *tag_end, *beg;
-
-	beg = p;
-
-	CallASN1(ret, p, end, ParseTag(p, end, &tag));
-	CallASN1(ret, p, end, ParseLen(p, end, &len));
-	for (j = 0; j < level * 5; j++)
-		print_asn1msg(PRT_DEBUG_DECODE, " ");
-	print_asn1msg(PRT_DEBUG_DECODE, "TAG 0x%02x LEN %3d\n", tag, len);
-
-	if (tag & ASN1_TAG_CONSTRUCTED) {
-		if (len == -1) {	// indefinite
-			while (*p) {
-				CallASN1(ret, p, end, ParseASN1(p, end, level + 1));
-			}
-			p++;
-			if (*p)
-				return -1;
-			p++;
-		} else {
-			tag_end = p + len;
-			while (p < tag_end) {
-				CallASN1(ret, p, end, ParseASN1(p, end, level + 1));
-			}
-		}
-	} else {
-		for (j = 0; j < level * 5; j++)
-			print_asn1msg(PRT_DEBUG_DECODE, " ");
-		while (len--) {
-			print_asn1msg(PRT_DEBUG_DECODE, "%02x ", *p);
-			p++;
-		}
-		print_asn1msg(PRT_DEBUG_DECODE, "\n");
-	}
-	for (j = 0; j < level * 5; j++)
-		print_asn1msg(PRT_DEBUG_DECODE, " ");
-	print_asn1msg(PRT_DEBUG_DECODE, "END (%ld)\n", p - beg - 2);
-	return p - beg;
-}
-#endif

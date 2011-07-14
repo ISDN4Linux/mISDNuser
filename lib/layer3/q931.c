@@ -22,6 +22,7 @@
 #include <string.h>
 #include <mISDN/mbuffer.h>
 #include <mISDN/q931.h>
+#include <mISDN/suppserv.h>
 #include "layer3.h"
 #include "dss1.h"
 
@@ -474,20 +475,20 @@ mi_encode_called_nr(struct l3_msg *l3m, char *nr, unsigned int type, unsigned in
 
 
 int
-mi_encode_redir_nr(struct l3_msg *l3m, char *nr, int pres, unsigned int screen, unsigned int type, unsigned int plan, int reason)
+mi_encode_redirecting_nr(struct l3_msg *l3m, char *nr, int pres, unsigned int type, unsigned int plan, int reason)
 {
-	unsigned char ie[34];
+	unsigned char ie[24];
 	int l;
 
 	if (nr == NULL || *nr == 0) /* not provided */
 		return 0;
-	if (nr && strlen(nr) > 30)
+	if (nr && strlen(nr) > 20)
 		return -EINVAL;
 
 	if (pres >= 0) {
 		l = 2;
 		ie[0] = (type << 4) | plan;
-		ie[1] = (pres << 5) | screen;
+		ie[1] = (pres << 5);
 		if (reason >= 0) {
 			l++;
 			ie[2] = 0x80 | reason;
@@ -501,7 +502,33 @@ mi_encode_redir_nr(struct l3_msg *l3m, char *nr, int pres, unsigned int screen, 
 		strncpy((char *)&ie[l], nr, 30);
 		l += strlen(nr);
 	}
-	return add_layer3_ie(l3m, IE_REDIR_NR, l, ie);
+	return add_layer3_ie(l3m, IE_REDIRECTING_NR, l, ie);
+}
+
+int
+mi_encode_redirection_nr(struct l3_msg *l3m, char *nr, int pres, unsigned int type, unsigned int plan)
+{
+	unsigned char ie[24];
+	int l;
+
+	if (nr == NULL || *nr == 0) /* not provided */
+		return 0;
+	if (nr && strlen(nr) > 20)
+		return -EINVAL;
+
+	if (pres >= 0) {
+		l = 2;
+		ie[0] = (type << 4) | plan;
+		ie[1] = 0x80 | (pres << 5);
+	} else {
+		l = 1;
+		ie[0] = 0x80 | (type << 4) | plan;
+	}
+	if (nr && *nr) {
+		strncpy((char *)&ie[l], nr, 30);
+		l += strlen(nr);
+	}
+	return add_layer3_ie(l3m, IE_REDIRECTION_NR, l, ie);
 }
 
 int
@@ -593,6 +620,33 @@ mi_encode_restart_ind(struct l3_msg *l3m, unsigned char _class)
 	}
 	_class |= 0x80;
 	return add_layer3_ie(l3m, IE_RESTART_IND, 1, &_class);
+}
+
+int
+mi_encode_facility(struct l3_msg *l3m, struct asn1_parm *fac)
+{
+	struct mbuffer  *mb = container_of(l3m, struct mbuffer, l3);
+	int i, len;
+
+	len = encodeFac(mb->ctail, fac);
+	if (len <= 0)
+		return -EINVAL;
+	if (mb->ctail + len >= mb->cend) {
+		eprint("Msg buffer overflow %d needed %ld available\n", len + 1, mb->cend - mb->ctail);
+		return Q931_ERROR_OVERFLOW;
+	}
+	if (l3m->facility) {
+		i = __get_free_extra(l3m);
+		if (i < 0) {
+			eprint("To many Facility IEs\n");
+			return Q931_ERROR_OVERFLOW;
+		}
+		l3m->extra[i].ie = IE_FACILITY;
+		l3m->extra[i].val = mb->ctail + 1;
+	} else
+		l3m->facility = mb->ctail + 1;
+	mb->ctail += len + 1;
+	return 0;
 }
 
 /* helper functions to decode common IE */
@@ -863,35 +917,73 @@ mi_decode_called_nr(struct l3_msg *l3m, int *type, int *plan, char *nr)
 }
 
 int
-mi_decode_redir_nr(struct l3_msg *l3m, int *type, int *plan, int *pres, int *screen, int *reason, char *nr)
+mi_decode_redirecting_nr(struct l3_msg *l3m, int *count, int *type, int *plan, int *pres, int *reason, char *nr)
 {
-	int _pres = 0, _screen = 0, _reason = 0, i = 2, l;
+	int _pres = 0, _count = 0, _reason = 0, i, l;
+	unsigned char *rdnr;
 
-	if (l3m == NULL || !l3m->redirect_nr)
+	_ASSIGN_PVAL(count, _count);
+	if (l3m == NULL || !l3m->redirecting_nr)
 		return 0;
-	if (*l3m->redirect_nr < 2)
+	rdnr = l3m->redirecting_nr;
+	_count++;
+	/* IE could be repeated, use the last one and calculate the number of redirects */
+	for (i = 0; i < 8; i++) {
+		if (!l3m->extra[i].val)
+			break;
+		if (l3m->extra[i].ie == IE_REDIRECTING_NR) {
+			_count++;
+			rdnr = l3m->extra[i].val;
+		}
+	}
+	_ASSIGN_PVAL(count, _count);
+	if (*rdnr < 2)
 		return -EINVAL;
-	if (*l3m->redirect_nr > 32)
+	if (*rdnr > 23)
 		return -EINVAL;
-	_ASSIGN_PVAL(type, (l3m->redirect_nr[1] & 0x70) >> 4);
-	_ASSIGN_PVAL(plan, l3m->redirect_nr[1] & 0x0f);
-	if ((l3m->redirect_nr[1] & 0x80) == 0 && *l3m->redirect_nr >= 2) {
-		_pres = (l3m->redirect_nr[2] & 0x60) >> 5;
-		_screen = l3m->redirect_nr[2] & 0x03;
+	i = 2;
+	_ASSIGN_PVAL(type, (rdnr[1] & 0x70) >> 4);
+	_ASSIGN_PVAL(plan, rdnr[1] & 0x0f);
+	if ((rdnr[1] & 0x80) == 0 && *rdnr >= 2) {
+		_pres = (rdnr[2] & 0x60) >> 5;
 		i++;
-		if ((l3m->redirect_nr[2] & 0x80) == 0 && *l3m->redirect_nr >= 3) {
-			_reason = l3m->redirect_nr[3] & 0x0f;
+		if ((rdnr[2] & 0x80) == 0 && *rdnr >= 3) {
+			_reason = rdnr[3] & 0x0f;
 			i++;
 		}
 	}
-	l = *l3m->redirect_nr + 1 - i;
+	l = *rdnr + 1 - i;
 	if (nr) {
-		memcpy(nr, &l3m->redirect_nr[i], l);
+		memcpy(nr, &rdnr[i], l);
 		nr[l] = 0;
 	}
 	_ASSIGN_PVAL(pres, _pres);
-	_ASSIGN_PVAL(screen, _screen);
 	_ASSIGN_PVAL(reason, _reason);
+	return 0;
+}
+
+mi_decode_redirection_nr(struct l3_msg *l3m, int *type, int *plan, int *pres, char *nr)
+{
+	int _pres = 0, i = 2, l;
+
+	if (l3m == NULL || !l3m->redirection_nr)
+		return 0;
+	if (*l3m->redirection_nr < 2)
+		return -EINVAL;
+	if (*l3m->redirection_nr > 23)
+		return -EINVAL;
+	_ASSIGN_PVAL(type, (l3m->redirection_nr[1] & 0x70) >> 4);
+	_ASSIGN_PVAL(plan, l3m->redirection_nr[1] & 0x0f);
+	if ((l3m->redirection_nr[1] & 0x80) == 0 && *l3m->redirection_nr >= 2) {
+		_pres = (l3m->redirection_nr[2] & 0x60) >> 5;
+		i++;
+	}
+	l = *l3m->redirection_nr + 1 - i;
+	if (nr) {
+		memcpy(nr, &l3m->redirection_nr[i], l);
+		nr[l] = 0;
+	}
+	_ASSIGN_PVAL(pres, _pres);
 	return 0;
 }
 
@@ -968,6 +1060,16 @@ mi_decode_restart_ind(struct l3_msg *l3m, unsigned char *_class)
 		return 0;
 	_ASSIGN_PVAL(_class, 0x7f & l3m->restart_ind[1]);
 	return 0;
+}
+
+int
+mi_decode_facility(struct l3_msg *l3m, struct asn1_parm *fac)
+{
+	if (l3m == NULL || !l3m->facility)
+		return 0;
+	if (!fac)
+		return 0;
+	return decodeFac(l3m->facility, fac);
 }
 
 const char *

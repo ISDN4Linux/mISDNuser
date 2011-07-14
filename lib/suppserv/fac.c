@@ -24,16 +24,15 @@
  */
 
 #include "asn1.h"
-#include "asn1_diversion.h"
+#include "diversion.h"
 #include <mISDN/q931.h>
-#include "asn1_ccbs.h"
-#include "asn1_ect.h"
+#include "ccbs.h"
+#include "ect.h"
 #include <string.h>
 
 #define AOC_MAX_NUM_CHARGE_UNITS   0xFFFFFF
 #define AOCE_CHARGE_UNIT_IE_LENGTH 17
 #define AOCD_CHARGE_UNIT_IE_LENGTH 20
-#define MISDN_FACILITY_DEBUG       1
 
 enum {
 	SUPPLEMENTARY_SERVICE = 0x91,	/* remote operations protocol */
@@ -158,7 +157,7 @@ int encodeErrorValue(__u8 * dest, int errorValue)
  *
  * \return Position for the next octet in the message
  */
-__u8 *encodeComponentInvoke_Head(__u8 * Dest, int InvokeID, enum FacFunction OperationValue)
+__u8 *encodeComponentInvoke_Head(__u8 * Dest, int InvokeID, enum Operation OperationValue)
 {
 	__u8 *p;
 
@@ -180,7 +179,7 @@ __u8 *encodeComponentInvoke_Head(__u8 * Dest, int InvokeID, enum FacFunction Ope
  *
  * \return Position for the next octet in the message
  */
-__u8 *encodeComponentInvoke_Head_Long_u8(__u8 * Dest, int InvokeID, enum FacFunction OperationValue)
+__u8 *encodeComponentInvoke_Head_Long_u8(__u8 * Dest, int InvokeID, enum Operation OperationValue)
 {
 	__u8 *p;
 
@@ -191,98 +190,7 @@ __u8 *encodeComponentInvoke_Head_Long_u8(__u8 * Dest, int InvokeID, enum FacFunc
 	return p;
 }				/* end encodeComponentInvoke_Head_Long_u8() */
 
-/* ******************************************************************* */
-/*!
- * \internal
- * \brief Encode the anonymous RESULT response.
- *
- * \param dest Where to put the encoding
- * \param result RESULT parameters
- *
- * \return Length of the encoding
- */
-static int encodeFacRESULT(__u8 * dest, const struct FacRESULT *result)
-{
-	__u8 *p;
-
-	p = encodeComponent_Head(dest, asn1ComponentTag_Result);
-	p += encodeInt(p, ASN1_TAG_INTEGER, result->InvokeID);
-	return encodeComponent_Length(dest, p);
-}				/* end encodeFacRESULT() */
-
-/* ******************************************************************* */
-/*!
- * \internal
- * \brief Encode the ERROR response.
- *
- * \param dest Where to put the encoding
- * \param error ERROR parameters
- *
- * \return Length of the encoding
- */
-static int encodeFacERROR(__u8 * dest, const struct FacERROR *error)
-{
-	__u8 *p;
-
-	p = encodeComponent_Head(dest, asn1ComponentTag_Error);
-	p += encodeInt(p, ASN1_TAG_INTEGER, error->InvokeID);
-	p += encodeErrorValue(p, error->errorValue);
-	return encodeComponent_Length(dest, p);
-}				/* end encodeFacERROR() */
-
-/* ******************************************************************* */
-/*!
- * \internal
- * \brief Encode the REJECT response.
- *
- * \param dest Where to put the encoding
- * \param error REJECT parameters
- *
- * \return Length of the encoding
- */
-static int encodeFacREJECT(__u8 * dest, const struct FacREJECT *reject)
-{
-	int code;
-	enum FacRejectBase base;
-	__u8 *p;
-
-	p = encodeComponent_Head(dest, asn1ComponentTag_Reject);
-
-	if (reject->InvokeIDPresent) {
-		p += encodeInt(p, ASN1_TAG_INTEGER, reject->InvokeID);
-	} else {
-		p += encodeNull(p, ASN1_TAG_NULL);
-	}
-
-	for (base = (enum FacRejectBase)0; base < FacRejectBase_Last; ++base) {
-		if (FAC_REJECT_BASE(base) <= reject->Code && reject->Code < FAC_REJECT_BASE(base + 1)) {
-			break;
-		}
-	}			/* end for */
-	if (base == FacRejectBase_Last) {
-		/* We were given a bad reject code */
-		code = -1;
-		base = FacRejectBase_General;
-	} else {
-		code = reject->Code - FAC_REJECT_BASE(base);
-	}
-	p += encodeInt(p, ASN1_TAG_CONTEXT_SPECIFIC | base, code);
-
-	return encodeComponent_Length(dest, p);
-}				/* end encodeFacREJECT() */
-
-unsigned char encode_invoke_id(void)
-{
-	static int id = 1;
-	int max_id = 255;
-
-	if ((id > max_id) || (id == 0)) {
-		id = 1;
-	}
-	return (unsigned char)id++;
-}
-
-static int encodeAOCDChargingUnitOperation(__u8 * dest, int numberOfUnits)
+static int encodeAOCDChargingUnitOperation(__u8 * dest, const struct asn1_parm *pc, int numberOfUnits)
 {
 	/* Manually encoded ASN.1 */
 
@@ -307,7 +215,7 @@ static int encodeAOCDChargingUnitOperation(__u8 * dest, int numberOfUnits)
 		p[i++] = 0x00;	// length -- not known yet
 		p[i++] = 0x02;	// Invoke ID
 		p[i++] = 0x01;	// InvokeId Length
-		p[i++] = encode_invoke_id();	// Invoke value
+		p[i++] = pc->u.inv.invokeId;
 		p[i++] = 0x02;	// Operation Tag
 		p[i++] = 0x01;	// Tag Length
 		p[i++] = Fac_AOCDChargingUnit;	// Operation Value
@@ -321,7 +229,11 @@ static int encodeAOCDChargingUnitOperation(__u8 * dest, int numberOfUnits)
 		p[i++] = 0x01;	// AOC-D so Sub-Total
 
 		// Recorded units could take up as much as 3 bytes (0xFFFFFF)
-		p[i] = (unsigned char)numberOfUnits;
+		p[i] = numberOfUnits & 0xFF;
+		if (len > 1)
+			p[i+1] = (numberOfUnits >> 8) & 0xFF;
+		if (len > 2)
+			p[i+2] = (numberOfUnits >> 16) & 0xFF;
 		i += len;
 
 		p[i++] = 0x82;
@@ -335,7 +247,7 @@ static int encodeAOCDChargingUnitOperation(__u8 * dest, int numberOfUnits)
 	return result;
 }
 
-static int encodeAOCEChargingUnitOperation(__u8 * dest, int numberOfUnits)
+static int encodeAOCEChargingUnitOperation(__u8 * dest, const struct asn1_parm *pc, int numberOfUnits)
 {
 	/* Manually encoded ASN.1 */
 
@@ -361,7 +273,7 @@ static int encodeAOCEChargingUnitOperation(__u8 * dest, int numberOfUnits)
 		p[i++] = 0x00;	// length -- not known yet
 		p[i++] = 0x02;	// Invoke ID
 		p[i++] = 0x01;	// InvokeId Length
-		p[i++] = encode_invoke_id();	// Invoke value
+		p[i++] = pc->u.inv.invokeId;
 		p[i++] = 0x02;	// Operation Tag
 		p[i++] = 0x01;	// Tag Length
 		p[i++] = Fac_AOCEChargingUnit;	// Operation Value
@@ -371,12 +283,16 @@ static int encodeAOCEChargingUnitOperation(__u8 * dest, int numberOfUnits)
 		p[i++] = 0xa1;	// APDU
 		p[i++] = (0x04 + len);	// Length
 		p[i++] = 0x30;
-		p[i++] = (0x01 + len);
+		p[i++] = (0x02 + len);
 		p[i++] = 0x02;
 		p[i++] = 0x02;	// AOC-E so Total
 
 		// Recorded units could take up as much as 3 bytes (0xFFFFFF)
-		p[i] = (unsigned char)numberOfUnits;
+		p[i] = numberOfUnits & 0xFF;
+		if (len > 1)
+			p[i+1] = (numberOfUnits >> 8) & 0xFF;
+		if (len > 2)
+			p[i+2] = (numberOfUnits >> 16) & 0xFF;
 		i += len;
 
 		p[1] = (AOCE_CHARGE_UNIT_IE_LENGTH + len);	// IE Payload Length
@@ -387,7 +303,7 @@ static int encodeAOCEChargingUnitOperation(__u8 * dest, int numberOfUnits)
 	return result;
 }
 
-static int encodeFacMcidIvokeRequest(__u8 * dest, int *fac_invokeId)
+static int encodeFacMcidIvokeRequest(__u8 * dest, const struct asn1_parm *pc)
 {
 	int i = 0;
 	int result = -1;
@@ -395,8 +311,8 @@ static int encodeFacMcidIvokeRequest(__u8 * dest, int *fac_invokeId)
 
 	__u8 *p = dest;
 
-	if ((p != NULL) && (fac_invokeId)) {
-		invokeId = encode_invoke_id();
+	if (p != NULL) {
+		invokeId = pc->u.inv.invokeId;
 
 		p[i++] = IE_FACILITY;	// IE identifier
 		p[i++] = 0x09;	// length
@@ -405,88 +321,239 @@ static int encodeFacMcidIvokeRequest(__u8 * dest, int *fac_invokeId)
 		p[i++] = 0x06;	// Manually Encoding the MCID
 		p[i++] = 0x02;	// Invoke ID
 		p[i++] = 0x01;	// InvokeId Length
-		p[i++] = invokeId;	// Invoke value
+		p[i++] = pc->u.inv.invokeId;	// Invoke value
 		p[i++] = 0x02;	// Operation Tag
 		p[i++] = 0x01;	// Tag Length
 		p[i++] = Fac_MaliciousCallId;	// Operation Value
 
 		result = p[1] + 2;	// Total IE Length
-
-		*fac_invokeId = (int)invokeId;
 	}
 	return result;
 }
 
+#if 0
+	case Fac_RESULT:
+		len = encodeFacRESULT(dest, pc, &inv->o.RESULT);
+		break;
+	case Fac_ERROR:
+		len = encodeFacERROR(dest, pc, &inv->o.ERROR);
+		break;
+	case Fac_REJECT:
+		len = encodeFacREJECT(dest, pc, &inv->o.REJECT);
+		break;
+#endif
 /*
  * Facility IE Encoding
  */
-int encodeFac(__u8 * dest, struct FacParm *fac)
+static int encodeFacReturnResult(__u8 * dest, const struct asn1_parm *pc)
 {
+        const struct asn1ReturnResult *res = &pc->u.retResult;
+        int len = -1;
+        char ops[20];
+        __u8 *p;
+
+        if (res->operationValuePresent)
+                sprintf(ops,"operation 0x%04x", res->operationValue);
+        else
+                sprintf(ops, "no operation value");
+
+        dprint(DBGM_ASN1_ENC, "Return result %s Id:%d start encoding\n", ops, res->invokeId);
+        if (res->operationValuePresent) {
+                switch (res->operationValue) {
+                case Fac_StatusRequest:
+			len = encodeFacStatusRequest(dest, pc, NULL);
+			break;
+		case Fac_CCBSStatusRequest:
+			len = encodeFacCCBSStatusRequest(dest, pc, NULL);
+			break;
+		case Fac_CCBSRequest:
+			len = encodeFacCCBSRequest(dest, pc, NULL);
+			break;
+		case Fac_CCBSInterrogate:
+			len = encodeFacCCBSInterrogate(dest, pc, NULL);
+			break;
+		case Fac_CCNRRequest:
+			len = encodeFacCCNRRequest(dest, pc, NULL);
+			break;
+		case Fac_CCNRInterrogate:
+			len = encodeFacCCNRInterrogate(dest, pc, NULL);
+			break;
+                case Fac_CCBS_T_Request:
+			len = encodeFacCCBS_T_Request(dest, pc, NULL);
+			break;
+                case Fac_CCNR_T_Request:
+			len = encodeFacCCNR_T_Request(dest, pc, NULL);
+			break;
+                case Fac_EctLinkIdRequest:
+			len = encodeFacEctLinkIdRequest(dest, pc, NULL);
+			break;
+                case Fac_EctLoopTest:
+			len = encodeFacEctLoopTest(dest, pc, NULL);
+			break;
+                case Fac_InterrogationDiversion:
+			len = encodeFacInterrogationDiversion(dest, pc, NULL);
+			break;
+                case Fac_InterrogateServedUserNumbers:
+			len = encodeFacInterrogateServedUserNumbers(dest, pc, &res->o.InterrogateServedUserNumbers);
+			break;
+
+                default:
+		        eprint("ReturnResult Function %s not supported yet\n", ops);
+		        return -1;
+                }
+	} else {
+		p = encodeComponent_Head(dest, asn1ComponentTag_Result);
+		p += encodeInt(p, ASN1_TAG_INTEGER, res->invokeId);
+		len = encodeComponent_Length(dest, p);
+	}
+
+	if (len < 0)
+		eprint("Error on encoding ReturnResult %s\n", ops);
+	else {
+		dprint(DBGM_ASN1_ENC, "ReturnResult %s encoded in %d bytes\n", ops, len);
+		dhexprint(DBGM_ASN1_DATA, "Facility:", dest, len);
+	}
+	return len;
+}
+
+/* ******************************************************************* */
+/*!
+ * \internal
+ * \brief Encode the ERROR response.
+ *
+ * \param dest Where to put the encoding
+ * \param error ERROR parameters
+ *
+ * \return Length of the encoding
+ */
+static int encodeFacReturnError(__u8 * dest, const struct asn1_parm *pc)
+{
+        __u8 *p;
+        const struct asn1ReturnError *err = &pc->u.retError;
+        int len = -1;
+
+        dprint(DBGM_ASN1_ENC, "Return error Id:%d errorValue 0x%x start encoding\n", err->invokeId, err->errorValue);
+
+
+	p = encodeComponent_Head(dest, asn1ComponentTag_Error);
+	p += encodeInt(p, ASN1_TAG_INTEGER, err->invokeId);
+	p += encodeErrorValue(p, err->errorValue);
+	len = encodeComponent_Length(dest, p);
+
+	dprint(DBGM_ASN1_ENC, "ReturnError encoded in %d bytes\n", len);
+	dhexprint(DBGM_ASN1_DATA, "Facility:", dest, len);
+	return len;
+}
+
+/* ******************************************************************* */
+/*!
+ * \internal
+ * \brief Encode the REJECT response.
+ *
+ * \param dest Where to put the encoding
+ * \param error REJECT parameters
+ *
+ * \return Length of the encoding
+ */
+static int encodeFacReject(__u8 * dest, const struct asn1_parm *pc)
+{
+        struct asn1Reject *rej = &pc->u.reject;
+        int len = -1;
+        char ids[16];
+	__u8 *p;
+
+        if (rej->invokeIdPresent)
+                sprintf(ids,"ID 0x%04x", rej->invokeId);
+        else
+                sprintf(ids, "no invoke ID");
+
+        dprint(DBGM_ASN1_ENC, "Reject %s problem %d value 0x%x start encoding\n", ids, rej->problem, rej->problemValue);
+
+	p = encodeComponent_Head(dest, asn1ComponentTag_Reject);
+
+	if (rej->invokeIdPresent)
+		p += encodeInt(p, ASN1_TAG_INTEGER, rej->invokeId);
+	else
+		p += encodeNull(p, ASN1_TAG_NULL);
+
+	p += encodeInt(p, ASN1_TAG_CONTEXT_SPECIFIC | rej->problem, rej->problemValue);
+
+	len = encodeComponent_Length(dest, p);
+
+	dprint(DBGM_ASN1_ENC, "Reject encoded in %d bytes\n", len);
+	dhexprint(DBGM_ASN1_DATA, "Facility:", dest, len);
+	return len;
+}
+
+static int encodeFacInvoke(__u8 * dest, const struct asn1_parm *pc)
+{
+        const struct asn1Invoke *inv = &pc->u.inv;
 	int len = -1;
 
-	switch (fac->Function) {
+	dprint(DBGM_ASN1_ENC, "Invoke operation 0x%x Id:%d start encoding\n", inv->operationValue, inv->invokeId);
+	switch (inv->operationValue) {
 	case Fac_None:
 		break;
 
-		/* Diversion support */
+	/* Diversion support */
 	case Fac_ActivationDiversion:
-		len = encodeFacActivationDiversion(dest, &fac->u.ActivationDiversion);
+		len = encodeFacActivationDiversion(dest, pc, &inv->o.ActivationDiversion);
 		break;
 	case Fac_DeactivationDiversion:
-		len = encodeFacDeactivationDiversion(dest, &fac->u.DeactivationDiversion);
+		len = encodeFacDeactivationDiversion(dest, pc, &inv->o.DeactivationDiversion);
 		break;
 	case Fac_ActivationStatusNotificationDiv:
-		len = encodeFacActivationStatusNotificationDiv(dest, &fac->u.ActivationStatusNotificationDiv);
+		len = encodeFacActivationStatusNotificationDiv(dest, pc, &inv->o.ActivationStatusNotificationDiv);
 		break;
 	case Fac_DeactivationStatusNotificationDiv:
-		len = encodeFacDeactivationStatusNotificationDiv(dest, &fac->u.DeactivationStatusNotificationDiv);
+		len = encodeFacDeactivationStatusNotificationDiv(dest, pc, &inv->o.DeactivationStatusNotificationDiv);
 		break;
 	case Fac_InterrogationDiversion:
-		len = encodeFacInterrogationDiversion(dest, &fac->u.InterrogationDiversion);
+		len = encodeFacInterrogationDiversion(dest, pc, &inv->o.InterrogationDiversion);
 		break;
 	case Fac_DiversionInformation:
-		len = encodeFacDiversionInformation(dest, &fac->u.DiversionInformation);
+		len = encodeFacDiversionInformation(dest, pc, &inv->o.DiversionInformation);
 		break;
 	case Fac_CallDeflection:
-		len = encodeFacCallDeflection(dest, &fac->u.CallDeflection);
+		len = encodeFacCallDeflection(dest, pc, &inv->o.CallDeflection);
 		break;
 	case Fac_CallRerouteing:
-		len = encodeFacCallRerouteing(dest, &fac->u.CallRerouteing);
+		len = encodeFacCallRerouteing(dest, pc, &inv->o.CallRerouteing);
 		break;
 	case Fac_InterrogateServedUserNumbers:
-		len = encodeFacInterrogateServedUserNumbers(dest, &fac->u.InterrogateServedUserNumbers);
+		len = encodeFacInterrogateServedUserNumbers(dest, pc, NULL);
 		break;
 	case Fac_DivertingLegInformation1:
-		len = encodeFacDivertingLegInformation1(dest, &fac->u.DivertingLegInformation1);
+		len = encodeFacDivertingLegInformation1(dest, pc, &inv->o.DivertingLegInformation1);
 		break;
 	case Fac_DivertingLegInformation2:
-		len = encodeFacDivertingLegInformation2(dest, &fac->u.DivertingLegInformation2);
+		len = encodeFacDivertingLegInformation2(dest, pc, &inv->o.DivertingLegInformation2);
 		break;
 	case Fac_DivertingLegInformation3:
-		len = encodeFacDivertingLegInformation3(dest, &fac->u.DivertingLegInformation3);
+		len = encodeFacDivertingLegInformation3(dest, pc, &inv->o.DivertingLegInformation3);
 		break;
 
 		/* ECT support */
 	case Fac_EctExecute:
-		len = encodeFacEctExecute(dest, &fac->u.EctExecute);
+		len = encodeFacEctExecute(dest, pc, NULL);
 		break;
 	case Fac_ExplicitEctExecute:
-		len = encodeFacExplicitEctExecute(dest, &fac->u.ExplicitEctExecute);
+		len = encodeFacExplicitEctExecute(dest, pc, &inv->o.ExplicitEctExecute);
 		break;
 	case Fac_RequestSubaddress:
-		len = encodeFacRequestSubaddress(dest, &fac->u.RequestSubaddress);
+		len = encodeFacRequestSubaddress(dest, pc, NULL);
 		break;
 	case Fac_SubaddressTransfer:
-		len = encodeFacSubaddressTransfer(dest, &fac->u.SubaddressTransfer);
+		len = encodeFacSubaddressTransfer(dest, pc, &inv->o.SubaddressTransfer);
 		break;
 	case Fac_EctLinkIdRequest:
-		len = encodeFacEctLinkIdRequest(dest, &fac->u.EctLinkIdRequest);
+		len = encodeFacEctLinkIdRequest(dest, pc, NULL);
 		break;
 	case Fac_EctInform:
-		len = encodeFacEctInform(dest, &fac->u.EctInform);
+		len = encodeFacEctInform(dest, pc, &inv->o.EctInform);
 		break;
 	case Fac_EctLoopTest:
-		len = encodeFacEctLoopTest(dest, &fac->u.EctLoopTest);
+		len = encodeFacEctLoopTest(dest, pc, &inv->o.EctLoopTest);
 		break;
 
 		/* AOC support */
@@ -497,106 +564,128 @@ int encodeFac(__u8 * dest, struct FacParm *fac)
 	case Fac_AOCECurrency:
 		break;
 	case Fac_AOCDChargingUnit:
-		len = encodeAOCDChargingUnitOperation(dest, fac->u.AOCchu.recordedUnits);
+		len = encodeAOCDChargingUnitOperation(dest, pc, inv->o.AOCchu.recordedUnits);
 		break;
 	case Fac_AOCEChargingUnit:
-		len = encodeAOCEChargingUnitOperation(dest, fac->u.AOCchu.recordedUnits);
+		len = encodeAOCEChargingUnitOperation(dest, pc, inv->o.AOCchu.recordedUnits);
 		break;
 /* Malicious Call Tag Support */
 	case Fac_MaliciousCallId:
-		len = encodeFacMcidIvokeRequest(dest, &fac->InvokeID);
+		len = encodeFacMcidIvokeRequest(dest, pc);
 		break;
-
-	case Fac_RESULT:
-		len = encodeFacRESULT(dest, &fac->u.RESULT);
-		break;
-	case Fac_ERROR:
-		len = encodeFacERROR(dest, &fac->u.ERROR);
-		break;
-	case Fac_REJECT:
-		len = encodeFacREJECT(dest, &fac->u.REJECT);
-		break;
-
 	case Fac_StatusRequest:
-		len = encodeFacStatusRequest(dest, &fac->u.StatusRequest);
+		len = encodeFacStatusRequest(dest, pc, &inv->o.StatusRequest);
 		break;
 
 		/* CCBS/CCNR support */
 	case Fac_CallInfoRetain:
-		len = encodeFacCallInfoRetain(dest, &fac->u.CallInfoRetain);
+		len = encodeFacCallInfoRetain(dest, pc, &inv->o.CallInfoRetain);
 		break;
 	case Fac_EraseCallLinkageID:
-		len = encodeFacEraseCallLinkageID(dest, &fac->u.EraseCallLinkageID);
+		len = encodeFacEraseCallLinkageID(dest, pc, &inv->o.EraseCallLinkageID);
 		break;
 	case Fac_CCBSDeactivate:
-		len = encodeFacCCBSDeactivate(dest, &fac->u.CCBSDeactivate);
+		len = encodeFacCCBSDeactivate(dest, pc, &inv->o.CCBSDeactivate);
 		break;
 	case Fac_CCBSErase:
-		len = encodeFacCCBSErase(dest, &fac->u.CCBSErase);
+		len = encodeFacCCBSErase(dest, pc, &inv->o.CCBSErase);
 		break;
 	case Fac_CCBSRemoteUserFree:
-		len = encodeFacCCBSRemoteUserFree(dest, &fac->u.CCBSRemoteUserFree);
+		len = encodeFacCCBSRemoteUserFree(dest, pc, &inv->o.CCBSRemoteUserFree);
 		break;
 	case Fac_CCBSCall:
-		len = encodeFacCCBSCall(dest, &fac->u.CCBSCall);
+		len = encodeFacCCBSCall(dest, pc, &inv->o.CCBSCall);
 		break;
 	case Fac_CCBSStatusRequest:
-		len = encodeFacCCBSStatusRequest(dest, &fac->u.CCBSStatusRequest);
+		len = encodeFacCCBSStatusRequest(dest, pc, &inv->o.CCBSStatusRequest);
 		break;
 	case Fac_CCBSBFree:
-		len = encodeFacCCBSBFree(dest, &fac->u.CCBSBFree);
+		len = encodeFacCCBSBFree(dest, pc, &inv->o.CCBSBFree);
 		break;
 	case Fac_CCBSStopAlerting:
-		len = encodeFacCCBSStopAlerting(dest, &fac->u.CCBSStopAlerting);
+		len = encodeFacCCBSStopAlerting(dest, pc, &inv->o.CCBSStopAlerting);
 		break;
 	case Fac_CCBSRequest:
-		len = encodeFacCCBSRequest(dest, &fac->u.CCBSRequest);
+		len = encodeFacCCBSRequest(dest, pc, &inv->o.CCBSRequest);
 		break;
 	case Fac_CCBSInterrogate:
-		len = encodeFacCCBSInterrogate(dest, &fac->u.CCBSInterrogate);
+		len = encodeFacCCBSInterrogate(dest, pc, &inv->o.CCBSInterrogate);
 		break;
 	case Fac_CCNRRequest:
-		len = encodeFacCCNRRequest(dest, &fac->u.CCNRRequest);
+		len = encodeFacCCNRRequest(dest, pc, &inv->o.CCNRRequest);
 		break;
 	case Fac_CCNRInterrogate:
-		len = encodeFacCCNRInterrogate(dest, &fac->u.CCNRInterrogate);
+		len = encodeFacCCNRInterrogate(dest, pc, &inv->o.CCNRInterrogate);
 		break;
 
 		/* CCBS-T/CCNR-T support */
 	case Fac_CCBS_T_Call:
-		len = encodeFacCCBS_T_Call(dest, &fac->u.CCBS_T_Call);
+		len = encodeFacCCBS_T_Call(dest, pc, NULL);
 		break;
 	case Fac_CCBS_T_Suspend:
-		len = encodeFacCCBS_T_Suspend(dest, &fac->u.CCBS_T_Suspend);
+		len = encodeFacCCBS_T_Suspend(dest, pc, NULL);
 		break;
 	case Fac_CCBS_T_Resume:
-		len = encodeFacCCBS_T_Resume(dest, &fac->u.CCBS_T_Resume);
+		len = encodeFacCCBS_T_Resume(dest, pc, NULL);
 		break;
 	case Fac_CCBS_T_RemoteUserFree:
-		len = encodeFacCCBS_T_RemoteUserFree(dest, &fac->u.CCBS_T_RemoteUserFree);
+		len = encodeFacCCBS_T_RemoteUserFree(dest, pc, NULL);
 		break;
 	case Fac_CCBS_T_Available:
-		len = encodeFacCCBS_T_Available(dest, &fac->u.CCBS_T_Available);
+		len = encodeFacCCBS_T_Available(dest, pc, NULL);
 		break;
 	case Fac_CCBS_T_Request:
-		len = encodeFacCCBS_T_Request(dest, &fac->u.CCBS_T_Request);
+		len = encodeFacCCBS_T_Request(dest, pc, &inv->o.CCBS_T_Request);
 		break;
 	case Fac_CCNR_T_Request:
-		len = encodeFacCCNR_T_Request(dest, &fac->u.CCNR_T_Request);
+		len = encodeFacCCNR_T_Request(dest, pc, &inv->o.CCNR_T_Request);
 		break;
 
 	default:
-		break;
+		eprint("Function %d not supported yet\n", inv->operationValue);
+		return -1;
+	}
+	if (len < 0)
+		eprint("Error on encoding function 0x%x\n", inv->operationValue);
+	else {
+		dprint(DBGM_ASN1_ENC, "Function 0x%x encoded in %d bytes\n", inv->operationValue, len);
+		dhexprint(DBGM_ASN1_DATA, "Facility:", dest, len);
 	}
 	return len;
-}				/* end encodeFac() */
+}
+
+int encodeFac(__u8 * dest, struct asn1_parm *ap)
+{
+        int len = -1;
+
+        if (ap->Valid) {
+                switch (ap->comp) {
+                case CompInvoke:
+                        len = encodeFacInvoke(dest, ap);
+                        break;
+                case CompReturnResult:
+                        len = encodeFacReturnResult(dest, ap);
+                        break;
+                case CompReturnError:
+                        len = encodeFacReturnError(dest, ap);
+                        break;
+                case CompReject:
+                        len = encodeFacReject(dest, ap);
+                        break;
+                default:
+                        eprint("Unknown component 0x%x\n", ap->comp);
+                        break;
+                }
+        } else
+                eprint("Facility struct component(%d) not marked as valid\n", ap->comp);
+        return len;
+}
 
 /*
  * Facility IE Decoding
  */
-int decodeFac(__u8 * src, struct FacParm *fac)
+int decodeFac(__u8 * src, struct asn1_parm *ap)
 {
-	struct asn1_parm pc;
 	unsigned fac_len;
 	__u8 *end;
 	__u8 *p = src;
@@ -608,271 +697,113 @@ int decodeFac(__u8 * src, struct FacParm *fac)
 	fac_len = *p++;
 	end = p + fac_len;
 
-	ParseASN1(p + 1, end, 0);
-
 	if (*p++ != SUPPLEMENTARY_SERVICE) {
 		goto _dec_err;
 	}
 
-	if (ParseComponent(&pc, p, end) == -1) {
+	memset(ap, 0, sizeof(*ap));
+	if (ParseComponent(ap, p, end) == -1) {
 		goto _dec_err;
 	}
 
-	switch (pc.comp) {
-	case invoke:
-		fac->Function = pc.u.inv.operationValue;
-		switch (pc.u.inv.operationValue) {
-			/* Diversion support */
+	switch (ap->comp) {
+	case CompInvoke:
+		switch (ap->u.inv.operationValue) {
+                /* Diversion support */
 		case Fac_ActivationDiversion:
-			fac->u.ActivationDiversion.InvokeID = pc.u.inv.invokeId;
-			fac->u.ActivationDiversion.ComponentType = FacComponent_Invoke;
-			fac->u.ActivationDiversion.Component.Invoke = pc.u.inv.o.ActivationDiversion;
-			return 0;
 		case Fac_DeactivationDiversion:
-			fac->u.DeactivationDiversion.InvokeID = pc.u.inv.invokeId;
-			fac->u.DeactivationDiversion.ComponentType = FacComponent_Invoke;
-			fac->u.DeactivationDiversion.Component.Invoke = pc.u.inv.o.DeactivationDiversion;
-			return 0;
 		case Fac_ActivationStatusNotificationDiv:
-			fac->u.ActivationStatusNotificationDiv = pc.u.inv.o.ActivationStatusNotificationDiv;
-			return 0;
 		case Fac_DeactivationStatusNotificationDiv:
-			fac->u.DeactivationStatusNotificationDiv = pc.u.inv.o.DeactivationStatusNotificationDiv;
-			return 0;
 		case Fac_InterrogationDiversion:
-			fac->u.InterrogationDiversion.InvokeID = pc.u.inv.invokeId;
-			fac->u.InterrogationDiversion.ComponentType = FacComponent_Invoke;
-			fac->u.InterrogationDiversion.Component.Invoke = pc.u.inv.o.InterrogationDiversion;
-			return 0;
 		case Fac_DiversionInformation:
-			fac->u.DiversionInformation = pc.u.inv.o.DiversionInformation;
-			return 0;
 		case Fac_CallDeflection:
-			fac->u.CallDeflection.InvokeID = pc.u.inv.invokeId;
-			fac->u.CallDeflection.ComponentType = FacComponent_Invoke;
-			fac->u.CallDeflection.Component.Invoke = pc.u.inv.o.CallDeflection;
-			return 0;
 		case Fac_CallRerouteing:
-			fac->u.CallRerouteing.InvokeID = pc.u.inv.invokeId;
-			fac->u.CallRerouteing.ComponentType = FacComponent_Invoke;
-			fac->u.CallRerouteing.Component.Invoke = pc.u.inv.o.CallRerouteing;
-			return 0;
 		case Fac_InterrogateServedUserNumbers:
-			fac->u.InterrogateServedUserNumbers.InvokeID = pc.u.inv.invokeId;
-			fac->u.InterrogateServedUserNumbers.ComponentType = FacComponent_Invoke;
-			return 0;
 		case Fac_DivertingLegInformation1:
-			fac->u.DivertingLegInformation1 = pc.u.inv.o.DivertingLegInformation1;
-			return 0;
 		case Fac_DivertingLegInformation2:
-			fac->u.DivertingLegInformation2 = pc.u.inv.o.DivertingLegInformation2;
-			return 0;
 		case Fac_DivertingLegInformation3:
-			fac->u.DivertingLegInformation3 = pc.u.inv.o.DivertingLegInformation3;
-			return 0;
-
-			/* ECT support */
+		/* ECT support */
 		case Fac_EctExecute:
-			fac->u.EctExecute.InvokeID = pc.u.inv.invokeId;
-			return 0;
 		case Fac_ExplicitEctExecute:
-			fac->u.ExplicitEctExecute = pc.u.inv.o.ExplicitEctExecute;
-			return 0;
 		case Fac_RequestSubaddress:
-			fac->u.RequestSubaddress.InvokeID = pc.u.inv.invokeId;
-			return 0;
 		case Fac_SubaddressTransfer:
-			fac->u.SubaddressTransfer = pc.u.inv.o.SubaddressTransfer;
-			return 0;
 		case Fac_EctLinkIdRequest:
-			fac->u.EctLinkIdRequest.InvokeID = pc.u.inv.invokeId;
-			fac->u.EctLinkIdRequest.ComponentType = FacComponent_Invoke;
-			return 0;
 		case Fac_EctInform:
-			fac->u.EctInform = pc.u.inv.o.EctInform;
-			return 0;
 		case Fac_EctLoopTest:
-			fac->u.EctLoopTest.InvokeID = pc.u.inv.invokeId;
-			fac->u.EctLoopTest.ComponentType = FacComponent_Invoke;
-			fac->u.EctLoopTest.Component.Invoke = pc.u.inv.o.EctLoopTest;
-			return 0;
-
-			/* AOC support */
-		case Fac_ChargingRequest:
-		case Fac_AOCSCurrency:
-		case Fac_AOCSSpecialArr:
-			break;
+		/* AOC support */
 		case Fac_AOCDCurrency:
 		case Fac_AOCECurrency:
-			fac->Function = pc.u.inv.operationValue;
-			memcpy(&(fac->u.AOCcur), &(pc.u.inv.o.AOCcur), sizeof(struct FacAOCCurrency));
-			return 0;
 		case Fac_AOCDChargingUnit:
 		case Fac_AOCEChargingUnit:
-			fac->Function = pc.u.inv.operationValue;
-			memcpy(&(fac->u.AOCchu), &(pc.u.inv.o.AOCchu), sizeof(struct FacAOCChargingUnit));
-			return 0;
-
 		case Fac_StatusRequest:
-			fac->u.StatusRequest.InvokeID = pc.u.inv.invokeId;
-			fac->u.StatusRequest.ComponentType = FacComponent_Invoke;
-			fac->u.StatusRequest.Component.Invoke = pc.u.inv.o.StatusRequest;
-			return 0;
-
-			/* CCBS/CCNR support */
+		/* CCBS/CCNR support */
 		case Fac_CallInfoRetain:
-			fac->u.CallInfoRetain = pc.u.inv.o.CallInfoRetain;
-			return 0;
 		case Fac_EraseCallLinkageID:
-			fac->u.EraseCallLinkageID = pc.u.inv.o.EraseCallLinkageID;
-			return 0;
 		case Fac_CCBSDeactivate:
-			fac->u.CCBSDeactivate.InvokeID = pc.u.inv.invokeId;
-			fac->u.CCBSDeactivate.ComponentType = FacComponent_Invoke;
-			fac->u.CCBSDeactivate.Component.Invoke = pc.u.inv.o.CCBSDeactivate;
-			return 0;
 		case Fac_CCBSErase:
-			fac->u.CCBSErase = pc.u.inv.o.CCBSErase;
-			return 0;
 		case Fac_CCBSRemoteUserFree:
-			fac->u.CCBSRemoteUserFree = pc.u.inv.o.CCBSRemoteUserFree;
-			return 0;
 		case Fac_CCBSCall:
-			fac->u.CCBSCall = pc.u.inv.o.CCBSCall;
-			return 0;
 		case Fac_CCBSStatusRequest:
-			fac->u.CCBSStatusRequest.InvokeID = pc.u.inv.invokeId;
-			fac->u.CCBSStatusRequest.ComponentType = FacComponent_Invoke;
-			fac->u.CCBSStatusRequest.Component.Invoke = pc.u.inv.o.CCBSStatusRequest;
-			return 0;
 		case Fac_CCBSBFree:
-			fac->u.CCBSBFree = pc.u.inv.o.CCBSBFree;
-			return 0;
 		case Fac_CCBSStopAlerting:
-			fac->u.CCBSStopAlerting = pc.u.inv.o.CCBSStopAlerting;
-			return 0;
 		case Fac_CCBSRequest:
-			fac->u.CCBSRequest.InvokeID = pc.u.inv.invokeId;
-			fac->u.CCBSRequest.ComponentType = FacComponent_Invoke;
-			fac->u.CCBSRequest.Component.Invoke = pc.u.inv.o.CCBSRequest;
-			return 0;
 		case Fac_CCBSInterrogate:
-			fac->u.CCBSInterrogate.InvokeID = pc.u.inv.invokeId;
-			fac->u.CCBSInterrogate.ComponentType = FacComponent_Invoke;
-			fac->u.CCBSInterrogate.Component.Invoke = pc.u.inv.o.CCBSInterrogate;
-			return 0;
 		case Fac_CCNRRequest:
-			fac->u.CCNRRequest.InvokeID = pc.u.inv.invokeId;
-			fac->u.CCNRRequest.ComponentType = FacComponent_Invoke;
-			fac->u.CCNRRequest.Component.Invoke = pc.u.inv.o.CCNRRequest;
-			return 0;
 		case Fac_CCNRInterrogate:
-			fac->u.CCNRInterrogate.InvokeID = pc.u.inv.invokeId;
-			fac->u.CCNRInterrogate.ComponentType = FacComponent_Invoke;
-			fac->u.CCNRInterrogate.Component.Invoke = pc.u.inv.o.CCNRInterrogate;
-			return 0;
-
-			/* CCBS-T/CCNR-T support */
+		/* CCBS-T/CCNR-T support */
 		case Fac_CCBS_T_Call:
-			fac->u.CCBS_T_Call.InvokeID = pc.u.inv.invokeId;
-			return 0;
 		case Fac_CCBS_T_Suspend:
-			fac->u.CCBS_T_Suspend.InvokeID = pc.u.inv.invokeId;
-			return 0;
 		case Fac_CCBS_T_Resume:
-			fac->u.CCBS_T_Resume.InvokeID = pc.u.inv.invokeId;
-			return 0;
 		case Fac_CCBS_T_RemoteUserFree:
-			fac->u.CCBS_T_RemoteUserFree.InvokeID = pc.u.inv.invokeId;
-			return 0;
 		case Fac_CCBS_T_Available:
-			fac->u.CCBS_T_Available.InvokeID = pc.u.inv.invokeId;
-			return 0;
 		case Fac_CCBS_T_Request:
-			fac->u.CCBS_T_Request.InvokeID = pc.u.inv.invokeId;
-			fac->u.CCBS_T_Request.ComponentType = FacComponent_Invoke;
-			fac->u.CCBS_T_Request.Component.Invoke = pc.u.inv.o.CCBS_T_Request;
-			return 0;
 		case Fac_CCNR_T_Request:
-			fac->u.CCNR_T_Request.InvokeID = pc.u.inv.invokeId;
-			fac->u.CCNR_T_Request.ComponentType = FacComponent_Invoke;
-			fac->u.CCNR_T_Request.Component.Invoke = pc.u.inv.o.CCNR_T_Request;
-			return 0;
-
+		        ap->Valid = 1;
+		        return 0;
 		default:
-			fac->Function = pc.u.inv.operationValue;
-			break;
-		}		/* end switch */
+		        eprint("Unknown invoke operation %x\n", ap->u.inv.operationValue);
+		        break;
+		}
 		break;
 
 /* ------------------------------------------------------------------- */
 
-	case returnResult:
-		if (!pc.u.retResult.operationValuePresent) {
-			fac->Function = Fac_RESULT;
-			fac->u.RESULT.InvokeID = pc.u.retResult.invokeId;
+	case CompReturnResult:
+		if (!ap->u.retResult.operationValuePresent) {
 			return 0;
 		}
-		fac->Function = pc.u.retResult.operationValue;
-		switch (pc.u.retResult.operationValue) {
-			/* Diversion support */
+		switch (ap->u.retResult.operationValue) {
+		/* Diversion support */
 		case Fac_ActivationDiversion:
-			fac->u.ActivationDiversion.InvokeID = pc.u.retResult.invokeId;
-			fac->u.ActivationDiversion.ComponentType = FacComponent_Result;
-			return 0;
 		case Fac_DeactivationDiversion:
-			fac->u.DeactivationDiversion.InvokeID = pc.u.retResult.invokeId;
-			fac->u.DeactivationDiversion.ComponentType = FacComponent_Result;
+		case Fac_InterrogationDiversion:
+		case Fac_CallDeflection:
+		case Fac_CallRerouteing:
+		case Fac_InterrogateServedUserNumbers:
+		        ap->Valid = 1;
 			return 0;
 		case Fac_ActivationStatusNotificationDiv:
 		case Fac_DeactivationStatusNotificationDiv:
-			break;
-		case Fac_InterrogationDiversion:
-			fac->u.InterrogationDiversion.InvokeID = pc.u.retResult.invokeId;
-			fac->u.InterrogationDiversion.ComponentType = FacComponent_Result;
-			fac->u.InterrogationDiversion.Component.Result = pc.u.retResult.o.InterrogationDiversion;
-			return 0;
 		case Fac_DiversionInformation:
-			break;
-		case Fac_CallDeflection:
-			fac->u.CallDeflection.InvokeID = pc.u.retResult.invokeId;
-			fac->u.CallDeflection.ComponentType = FacComponent_Result;
-			return 0;
-		case Fac_CallRerouteing:
-			fac->u.CallRerouteing.InvokeID = pc.u.retResult.invokeId;
-			fac->u.CallRerouteing.ComponentType = FacComponent_Result;
-			return 0;
-		case Fac_InterrogateServedUserNumbers:
-			fac->u.InterrogateServedUserNumbers.InvokeID = pc.u.retResult.invokeId;
-			fac->u.InterrogateServedUserNumbers.ComponentType = FacComponent_Result;
-			fac->u.InterrogateServedUserNumbers.Component.Result = pc.u.retResult.o.InterrogateServedUserNumbers;
-			return 0;
 		case Fac_DivertingLegInformation1:
 		case Fac_DivertingLegInformation2:
 		case Fac_DivertingLegInformation3:
 			break;
 
-			/* ECT support */
+		/* ECT support */
 		case Fac_EctExecute:
 		case Fac_ExplicitEctExecute:
 		case Fac_RequestSubaddress:
 		case Fac_SubaddressTransfer:
-			fac->Function = pc.u.inv.operationValue;
 			break;
 		case Fac_EctLinkIdRequest:
-			fac->u.EctLinkIdRequest.InvokeID = pc.u.retResult.invokeId;
-			fac->u.EctLinkIdRequest.ComponentType = FacComponent_Result;
-			fac->u.EctLinkIdRequest.Component.Result = pc.u.retResult.o.EctLinkIdRequest;
 			return 0;
 		case Fac_EctInform:
 			break;
 		case Fac_EctLoopTest:
-			fac->u.EctLoopTest.InvokeID = pc.u.retResult.invokeId;
-			fac->u.EctLoopTest.ComponentType = FacComponent_Result;
-			fac->u.EctLoopTest.Component.Result = pc.u.retResult.o.EctLoopTest;
 			return 0;
 
-			/* AOC support */
+		/* AOC support */
 		case Fac_ChargingRequest:
 		case Fac_AOCSCurrency:
 		case Fac_AOCSSpecialArr:
@@ -881,11 +812,7 @@ int decodeFac(__u8 * src, struct FacParm *fac)
 		case Fac_AOCECurrency:
 		case Fac_AOCEChargingUnit:
 			break;
-
 		case Fac_StatusRequest:
-			fac->u.StatusRequest.InvokeID = pc.u.retResult.invokeId;
-			fac->u.StatusRequest.ComponentType = FacComponent_Result;
-			fac->u.StatusRequest.Component.Result = pc.u.retResult.o.StatusRequest;
 			return 0;
 
 			/* CCBS/CCNR support */
@@ -893,40 +820,20 @@ int decodeFac(__u8 * src, struct FacParm *fac)
 		case Fac_EraseCallLinkageID:
 			break;
 		case Fac_CCBSDeactivate:
-			fac->u.CCBSDeactivate.InvokeID = pc.u.retResult.invokeId;
-			fac->u.CCBSDeactivate.ComponentType = FacComponent_Result;
 			return 0;
 		case Fac_CCBSErase:
 		case Fac_CCBSRemoteUserFree:
 		case Fac_CCBSCall:
 			break;
 		case Fac_CCBSStatusRequest:
-			fac->u.CCBSStatusRequest.InvokeID = pc.u.retResult.invokeId;
-			fac->u.CCBSStatusRequest.ComponentType = FacComponent_Result;
-			fac->u.CCBSStatusRequest.Component.Result = pc.u.retResult.o.CCBSStatusRequest;
 			return 0;
 		case Fac_CCBSBFree:
 		case Fac_CCBSStopAlerting:
 			break;
 		case Fac_CCBSRequest:
-			fac->u.CCBSRequest.InvokeID = pc.u.retResult.invokeId;
-			fac->u.CCBSRequest.ComponentType = FacComponent_Result;
-			fac->u.CCBSRequest.Component.Result = pc.u.retResult.o.CCBSRequest;
-			return 0;
 		case Fac_CCBSInterrogate:
-			fac->u.CCBSInterrogate.InvokeID = pc.u.retResult.invokeId;
-			fac->u.CCBSInterrogate.ComponentType = FacComponent_Result;
-			fac->u.CCBSInterrogate.Component.Result = pc.u.retResult.o.CCBSInterrogate;
-			return 0;
 		case Fac_CCNRRequest:
-			fac->u.CCNRRequest.InvokeID = pc.u.retResult.invokeId;
-			fac->u.CCNRRequest.ComponentType = FacComponent_Result;
-			fac->u.CCNRRequest.Component.Result = pc.u.retResult.o.CCNRRequest;
-			return 0;
 		case Fac_CCNRInterrogate:
-			fac->u.CCNRInterrogate.InvokeID = pc.u.retResult.invokeId;
-			fac->u.CCNRInterrogate.ComponentType = FacComponent_Result;
-			fac->u.CCNRInterrogate.Component.Result = pc.u.retResult.o.CCNRInterrogate;
 			return 0;
 
 			/* CCBS-T/CCNR-T support */
@@ -937,14 +844,7 @@ int decodeFac(__u8 * src, struct FacParm *fac)
 		case Fac_CCBS_T_Available:
 			break;
 		case Fac_CCBS_T_Request:
-			fac->u.CCBS_T_Request.InvokeID = pc.u.inv.invokeId;
-			fac->u.CCBS_T_Request.ComponentType = FacComponent_Result;
-			fac->u.CCBS_T_Request.Component.Result = pc.u.retResult.o.CCBS_T_Request;
-			return 0;
 		case Fac_CCNR_T_Request:
-			fac->u.CCNR_T_Request.InvokeID = pc.u.inv.invokeId;
-			fac->u.CCNR_T_Request.ComponentType = FacComponent_Result;
-			fac->u.CCNR_T_Request.Component.Result = pc.u.retResult.o.CCNR_T_Request;
 			return 0;
 
 		default:
@@ -954,23 +854,17 @@ int decodeFac(__u8 * src, struct FacParm *fac)
 
 /* ------------------------------------------------------------------- */
 
-	case returnError:
-		fac->Function = Fac_ERROR;
-		fac->u.ERROR.InvokeID = pc.u.retError.invokeId;
-		fac->u.ERROR.errorValue = pc.u.retError.errorValue;
+	case CompReturnError:
+	        ap->Valid = 1;
 		return 0;
 
 /* ------------------------------------------------------------------- */
 
-	case reject:
-		fac->Function = Fac_REJECT;
-		fac->u.REJECT.InvokeIDPresent = pc.u.reject.invokeIdPresent;
-		fac->u.REJECT.InvokeID = pc.u.reject.invokeId;
-		fac->u.REJECT.Code = FAC_REJECT_BASE(pc.u.reject.problem) + pc.u.reject.problemValue;
+	case CompReject:
+	        ap->Valid = 1;
 		return 0;
 	}			/* end switch */
 
  _dec_err:
-	fac->Function = Fac_None;
 	return -1;
 }				/* end decodeFac() */

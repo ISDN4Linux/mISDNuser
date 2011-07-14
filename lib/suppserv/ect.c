@@ -1,13 +1,24 @@
 /*
- * $Id$
  *
  * Explicit Call Transfer (ECT) Supplementary Services ETS 300 369-1
  *
  * ECT Facility ie encode/decode
+ *
+ * Copyright 2009,2010  by Karsten Keil <kkeil@linux-pingi.de>
+ *
+ * This code is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
+ * version 2.1 as published by the Free Software Foundation.
+ *
+ * This code is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU LESSER GENERAL PUBLIC LICENSE for more details.
+ *
  */
 
 #include "asn1.h"
-#include "asn1_ect.h"
+#include "ect.h"
 
 /* ------------------------------------------------------------------- */
 
@@ -21,12 +32,12 @@
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacEctExecute(__u8 * Dest, const struct FacEctExecute *EctExecute)
+int encodeFacEctExecute(__u8 * Dest, const struct asn1_parm *pc, const void *val)
 {
 	int Length;
 	__u8 *p;
 
-	p = encodeComponentInvoke_Head(Dest, EctExecute->InvokeID, Fac_EctExecute);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_EctExecute);
 
 	Length = encodeComponent_Length(Dest, p);
 
@@ -43,12 +54,12 @@ int encodeFacEctExecute(__u8 * Dest, const struct FacEctExecute *EctExecute)
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacExplicitEctExecute(__u8 * Dest, const struct FacExplicitEctExecute *ExplicitEctExecute)
+int encodeFacExplicitEctExecute(__u8 * Dest, const struct asn1_parm *pc, const struct FacExplicitEctExecute *ExplicitEctExecute)
 {
 	int Length;
 	__u8 *p;
 
-	p = encodeComponentInvoke_Head(Dest, ExplicitEctExecute->InvokeID, Fac_ExplicitEctExecute);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_ExplicitEctExecute);
 
 	p += encodeInt(p, ASN1_TAG_INTEGER, ExplicitEctExecute->LinkID);
 
@@ -69,20 +80,18 @@ int encodeFacExplicitEctExecute(__u8 * Dest, const struct FacExplicitEctExecute 
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseExplicitEctExecute_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacExplicitEctExecute *ExplicitEctExecute)
+int ParseExplicitEctExecute(struct asn1_parm *pc, u_char * p, u_char * end, struct FacExplicitEctExecute *ExplicitEctExecute)
 {
 	int LinkID;
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParseSignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &LinkID);
 	ExplicitEctExecute->LinkID = LinkID;
-	ExplicitEctExecute->InvokeID = pc->u.inv.invokeId;
 
 	return p - beg;
-}				/* end ParseExplicitEctExecute_ARG() */
+}				/* end ParseExplicitEctExecute() */
 
 /* ******************************************************************* */
 /*!
@@ -94,12 +103,12 @@ int ParseExplicitEctExecute_ARG(struct asn1_parm *pc, u_char * p, u_char * end, 
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacRequestSubaddress(__u8 * Dest, const struct FacRequestSubaddress *RequestSubaddress)
+int encodeFacRequestSubaddress(__u8 * Dest, const struct asn1_parm *pc, const void *val)
 {
 	int Length;
 	__u8 *p;
 
-	p = encodeComponentInvoke_Head(Dest, RequestSubaddress->InvokeID, Fac_RequestSubaddress);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_RequestSubaddress);
 
 	Length = encodeComponent_Length(Dest, p);
 
@@ -116,12 +125,12 @@ int encodeFacRequestSubaddress(__u8 * Dest, const struct FacRequestSubaddress *R
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacSubaddressTransfer(__u8 * Dest, const struct FacSubaddressTransfer *SubaddressTransfer)
+int encodeFacSubaddressTransfer(__u8 * Dest, const struct asn1_parm *pc, const struct FacSubaddressTransfer *SubaddressTransfer)
 {
 	int Length;
 	__u8 *p;
 
-	p = encodeComponentInvoke_Head(Dest, SubaddressTransfer->InvokeID, Fac_SubaddressTransfer);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_SubaddressTransfer);
 
 	p += encodePartySubaddress_Full(p, &SubaddressTransfer->Subaddress);
 
@@ -142,18 +151,16 @@ int encodeFacSubaddressTransfer(__u8 * Dest, const struct FacSubaddressTransfer 
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseSubaddressTransfer_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacSubaddressTransfer *SubaddressTransfer)
+int ParseSubaddressTransfer(struct asn1_parm *pc, u_char * p, u_char * end, struct FacSubaddressTransfer *SubaddressTransfer)
 {
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParsePartySubaddress_Full, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &SubaddressTransfer->Subaddress);
-	SubaddressTransfer->InvokeID = pc->u.inv.invokeId;
 
 	return p - beg;
-}				/* end ParseSubaddressTransfer_ARG() */
+}				/* end ParseSubaddressTransfer() */
 
 /* ******************************************************************* */
 /*!
@@ -165,23 +172,23 @@ int ParseSubaddressTransfer_ARG(struct asn1_parm *pc, u_char * p, u_char * end, 
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacEctLinkIdRequest(__u8 * Dest, const struct FacEctLinkIdRequest *EctLinkIdRequest)
+int encodeFacEctLinkIdRequest(__u8 * Dest, const struct asn1_parm *pc, const struct FacEctLinkIdRequest_RES *EctLinkIdRequest)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	switch (EctLinkIdRequest->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head(Dest, EctLinkIdRequest->InvokeID, Fac_EctLinkIdRequest);
+	switch (pc->comp) {
+	case CompInvoke:
+		p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_EctLinkIdRequest);
 
 		/* No arguments */
 
 		Length = encodeComponent_Length(Dest, p);
 		break;
-	case FacComponent_Result:
+	case CompReturnResult:
 		p = encodeComponent_Head(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, EctLinkIdRequest->InvokeID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -189,7 +196,7 @@ int encodeFacEctLinkIdRequest(__u8 * Dest, const struct FacEctLinkIdRequest *Ect
 
 		p += encodeOperationValue(p, Fac_EctLinkIdRequest);
 
-		p += encodeInt(p, ASN1_TAG_INTEGER, EctLinkIdRequest->Component.Result.LinkID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.o.EctLinkIdRequest.LinkID);
 
 		/* sequence Length */
 		SeqStart[1] = p - &SeqStart[2];
@@ -222,7 +229,6 @@ int ParseEctLinkIdRequest_RES(struct asn1_parm *pc, u_char * p, u_char * end, st
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParseSignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &LinkID);
 	EctLinkIdRequest->LinkID = LinkID;
@@ -240,13 +246,13 @@ int ParseEctLinkIdRequest_RES(struct asn1_parm *pc, u_char * p, u_char * end, st
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacEctInform(__u8 * Dest, const struct FacEctInform *EctInform)
+int encodeFacEctInform(__u8 * Dest, const struct asn1_parm *pc, const struct FacEctInform *EctInform)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	p = encodeComponentInvoke_Head(Dest, EctInform->InvokeID, Fac_EctInform);
+	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_EctInform);
 
 	SeqStart = p;
 	SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -277,7 +283,7 @@ int encodeFacEctInform(__u8 * Dest, const struct FacEctInform *EctInform)
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseEctInform_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacEctInform *EctInform)
+int ParseEctInform(struct asn1_parm *pc, u_char * p, u_char * end, struct FacEctInform *EctInform)
 {
 	int Status;
 	INIT;
@@ -290,10 +296,9 @@ int ParseEctInform_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct Fa
 	} else {
 		EctInform->RedirectionPresent = 0;
 	}
-	EctInform->InvokeID = pc->u.inv.invokeId;
 
 	return p - beg;
-}				/* end ParseEctInform_ARG() */
+}				/* end ParseEctInform() */
 
 /* ******************************************************************* */
 /*!
@@ -305,23 +310,23 @@ int ParseEctInform_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct Fa
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacEctLoopTest(__u8 * Dest, const struct FacEctLoopTest *EctLoopTest)
+int encodeFacEctLoopTest(__u8 * Dest, const struct asn1_parm *pc, const struct FacEctLoopTest *EctLoopTest)
 {
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
 
-	switch (EctLoopTest->ComponentType) {
-	case FacComponent_Invoke:
-		p = encodeComponentInvoke_Head(Dest, EctLoopTest->InvokeID, Fac_EctLoopTest);
+	switch (pc->comp) {
+	case CompInvoke:
+		p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, Fac_EctLoopTest);
 
-		p += encodeInt(p, ASN1_TAG_INTEGER, EctLoopTest->Component.Invoke.CallTransferID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, EctLoopTest->CallTransferID);
 
 		Length = encodeComponent_Length(Dest, p);
 		break;
-	case FacComponent_Result:
+	case CompReturnResult:
 		p = encodeComponent_Head(Dest, asn1ComponentTag_Result);
-		p += encodeInt(p, ASN1_TAG_INTEGER, EctLoopTest->InvokeID);
+		p += encodeInt(p, ASN1_TAG_INTEGER, pc->u.retResult.invokeId);
 
 		SeqStart = p;
 		SeqStart[0] = ASN1_TAG_SEQUENCE;
@@ -329,7 +334,7 @@ int encodeFacEctLoopTest(__u8 * Dest, const struct FacEctLoopTest *EctLoopTest)
 
 		p += encodeOperationValue(p, Fac_EctLoopTest);
 
-		p += encodeEnum(p, ASN1_TAG_ENUM, EctLoopTest->Component.Result.LoopResult);
+		p += encodeEnum(p, ASN1_TAG_ENUM, pc->u.retResult.o.EctLoopTest.LoopResult);
 
 		/* sequence Length */
 		SeqStart[1] = p - &SeqStart[2];
@@ -356,19 +361,18 @@ int encodeFacEctLoopTest(__u8 * Dest, const struct FacEctLoopTest *EctLoopTest)
  * \retval length of buffer consumed
  * \retval -1 on error.
  */
-int ParseEctLoopTest_ARG(struct asn1_parm *pc, u_char * p, u_char * end, struct FacEctLoopTest_ARG *EctLoopTest)
+int ParseEctLoopTest(struct asn1_parm *pc, u_char * p, u_char * end, struct FacEctLoopTest *EctLoopTest)
 {
 	int CallTransferID;
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParseSignedInteger, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &CallTransferID);
 	EctLoopTest->CallTransferID = CallTransferID;
 
 	return p - beg;
-}				/* end ParseEctLoopTest_ARG() */
+}				/* end ParseEctLoopTest() */
 
 /* ******************************************************************* */
 /*!
@@ -388,7 +392,6 @@ int ParseEctLoopTest_RES(struct asn1_parm *pc, u_char * p, u_char * end, struct 
 	int ret;
 	u_char *beg;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__);
 	beg = p;
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &LoopResult);
 	EctLoopTest->LoopResult = LoopResult;

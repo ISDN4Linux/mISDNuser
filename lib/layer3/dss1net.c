@@ -56,7 +56,7 @@ static int
 l3dss1_message(l3_process_t *pc, u_char mt)
 {
 	struct l3_msg	*l3m;
-	int		ret = 0;
+	int		ret;
 
 	if (!(l3m = MsgStart(pc, mt)))
 		return -ENOMEM;
@@ -113,7 +113,6 @@ l3dss1_msg_without_setup(l3_process_t *pc, u_char cause)
 	send_proc(pc, IMSG_END_PROC, NULL);
 }
 
-#if 0
 static int
 l3dss1_check_messagetype_validity(l3_process_t *pc, int mt)
 {
@@ -157,9 +156,7 @@ l3dss1_check_messagetype_validity(l3_process_t *pc, int mt)
 	}
 	return 0;
 }
-#endif
 
-#if 0
 static void
 l3dss1_std_ie_err(l3_process_t *pc, int ret) {
 
@@ -179,7 +176,6 @@ l3dss1_std_ie_err(l3_process_t *pc, int ret) {
 			break;
 	}
 }
-#endif
 
 static int
 l3dss1_get_cid(l3_process_t *pc, struct l3_msg *l3m) {
@@ -187,39 +183,39 @@ l3dss1_get_cid(l3_process_t *pc, struct l3_msg *l3m) {
 	memset(pc->cid, 0, 4); /* clear cid */
 
 	if (!l3m->channel_id) {
-		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s no channel id\n", __FUNCTION__);
+		dprint(DBGM_L3, "port%d no channel id\n", pc->l2if->l2addr.dev);
 		return -1;
 	}
 	if (l3m->channel_id[0] < 1) {
-		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id short read\n", __FUNCTION__);
+		dprint(DBGM_L3, "port%d ERROR: channel id short read\n", pc->l2if->l2addr.dev);
 		return -2;
 	}
 	if (l3m->channel_id[0] > 3) {
-		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id too large\n", __FUNCTION__);
+		dprint(DBGM_L3, "port%d ERROR: channel id too large\n", pc->l2if->l2addr.dev);
 		return -3;
 	}
 	if (l3m->channel_id[1] & 0x40) {
-		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id for adjected channels not supported\n", __FUNCTION__);
+		dprint(DBGM_L3, "port%d ERROR: channel id for adjected channels not supported\n", pc->l2if->l2addr.dev);
 		return -4;
 	}
 	if (l3m->channel_id[1] & 0x04) {
-		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s channel id with dchannel\n", __FUNCTION__);
+		dprint(DBGM_L3, "port%d  channel id with dchannel\n", pc->l2if->l2addr.dev);
 		goto done;
 	}
 	if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
 		if (l3m->channel_id[1] & 0x20) {
-			dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id not for BRI interface\n", __FUNCTION__);
+			dprint(DBGM_L3, "%s ERROR: channel id not for BRI interface\n", pc->l2if->l2addr.dev);
 			return -11;
 		}
 	} else { /* primary rate */
 		if (!(l3m->channel_id[1] & 0x20)) {
-			dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id not for PRI interface\n", __FUNCTION__);
+			dprint(DBGM_L3, "%s ERROR: channel id not for PRI interface\n", pc->l2if->l2addr.dev);
 			return -11;
 		}
 		if (l3m->channel_id[0] < 3)
 			goto done;
 		if (l3m->channel_id[2] & 0x10) { /* map not allowed by ETSI */
-			dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id uses channel map\n", __FUNCTION__);
+			dprint(DBGM_L3, "port%d ERROR: channel id uses channel map\n", pc->l2if->l2addr.dev);
 			return -12;
 		}
 	}
@@ -326,7 +322,7 @@ l3dss1_setup(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	/* Now we are on none mandatory IEs */
 	newl3state(pc, 1);
 	L3DelTimer(&pc->timer2);
-//	dprint(DBGM_L3, pc->l3->nst->cardnr, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
+//	dprint(DBGM_L3, "port%d: pc=%p del timer2\n", pc->l2if->l2addr.dev, pc);
 	L3AddTimer(&pc->timer2, T_CTRL, CC_TCTRL);
 //	if (err) /* STATUS for none mandatory IE errors after actions are taken */
 //		l3dss1_std_ie_err(pc, err);
@@ -487,7 +483,7 @@ l3dss1_release_cmpl_i(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_setup_acknowledge_i(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, "port%d SETUP_ACKNOWLEDGE\n", pc->l2if->l2addr.dev);
 	if (!pc->master) {
 		L3DelTimer(&pc->timer1);
 		newl3state(pc, 25);
@@ -505,7 +501,7 @@ l3dss1_setup_acknowledge_i(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m
 static void
 l3dss1_proceeding_i(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, "port%d CALL_PROCEEDING\n", pc->l2if->l2addr.dev);
 	if (!pc->master) {
 		L3DelTimer(&pc->timer1);
 		newl3state(pc, 9);
@@ -520,7 +516,7 @@ l3dss1_proceeding_i(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_alerting_i(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, "port%d ALERTING\n", pc->l2if->l2addr.dev);
 	if (!pc->master) {
 		L3DelTimer(&pc->timer1);
 		newl3state(pc, 7);
@@ -612,7 +608,7 @@ l3dss1_hold(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 		l3dss1_message_cause(pc, MT_HOLD_REJECT, CAUSE_MT_NOTIMPLEMENTED);
 		return;
 	}
-	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, "port%d HOLD\n", pc->l2if->l2addr.dev);
 	if (pc->aux_state == AUX_HOLD_IND)
 		return;
 	if (pc->aux_state != AUX_IDLE) {
@@ -631,7 +627,7 @@ l3dss1_retrieve(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 		l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_MT_NOTIMPLEMENTED);
 		return;
 	}
-	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, "port%d RETRIEVE\n", pc->l2if->l2addr.dev);
 	if (pc->aux_state == AUX_RETRIEVE_IND)
 		return;
 	if (pc->aux_state != AUX_CALL_HELD) {
@@ -646,7 +642,7 @@ l3dss1_retrieve(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_suspend(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s\n", __FUNCTION__);
+	dprint(DBGM_L3, "port%d SUSPEND\n", pc->l2if->l2addr.dev);
 	newl3state(pc, 15);
 	mISDN_l3up(pc, MT_SUSPEND, l3m);
 }
@@ -654,7 +650,7 @@ l3dss1_suspend(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_resume(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s\n", __FUNCTION__);
+	dprint(DBGM_L3, "port%d RESUME\n", pc->l2if->l2addr.dev);
 	newl3state(pc, 17);
 	mISDN_l3up(pc, MT_RESUME, l3m);
 }
@@ -662,7 +658,7 @@ l3dss1_resume(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_register(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s\n", __FUNCTION__);
+	dprint(DBGM_L3, "port%d REGISTER\n", pc->l2if->l2addr.dev);
 	newl3state(pc, 31);
 	mISDN_l3up(pc, MT_REGISTER, l3m);
 }
@@ -741,7 +737,7 @@ static l3_process_t
 static void
 l3dss1_setup_acknowledge_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, "port%d SETUP_ACK\n", pc->l2if->l2addr.dev);
 	L3DelTimer(&pc->timer1);
 	if (pc->t303msg)
 		free_l3_msg(pc->t303msg);
@@ -752,7 +748,7 @@ l3dss1_setup_acknowledge_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m
 static void
 l3dss1_proceeding_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, "port%d CALL_PROCEEDING\n", pc->l2if->l2addr.dev);
 	L3DelTimer(&pc->timer1);
 	if (pc->t303msg)
 		free_l3_msg(pc->t303msg);
@@ -763,7 +759,7 @@ l3dss1_proceeding_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_alerting_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, "port%d ALERTING\n", pc->l2if->l2addr.dev);
 	L3DelTimer(&pc->timer1);
 	if (pc->t303msg)
 		free_l3_msg(pc->t303msg);
@@ -774,7 +770,7 @@ l3dss1_alerting_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_connect_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s\n", __FUNCTION__);
+	dprint(DBGM_L3, "port%d CONNECT\n", pc->l2if->l2addr.dev);
 	L3DelTimer(&pc->timer1);
 	if (pc->t303msg)
 		free_l3_msg(pc->t303msg);
@@ -805,8 +801,8 @@ l3dss1_release_cmpl_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	if (pc->state == 6) {
 		ret = l3dss1_get_cause(pc, l3m);
 		if (!ret) {
-			dprint(DBGM_L3, pc->l2if->l2addr.dev,"%s cause (%d/%d)\n", __FUNCTION__,
-				pc->rm_cause, pc->cause);
+			dprint(DBGM_L3, "port%d RELEASE_COMPLETE cause (%d/%d)\n",
+				pc->l2if->l2addr.dev, pc->rm_cause, pc->cause);
 			switch(pc->rm_cause) {
 				case CAUSE_USER_BUSY:
 					break;
@@ -931,7 +927,7 @@ static void
 l3dss1_register_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (!test_bit(MISDN_FLG_PTP, &pc->l2if->l3->ml3.options)) {
-		eprint("%s MT_REGISTER is only allowed in PTP configuration!\n", __FUNCTION__);
+		eprint("MT_REGISTER is only allowed in PTP configuration!\n");
 		send_proc(pc, IMSG_END_PROC_M, NULL);
 		return;
 	}
@@ -1019,7 +1015,7 @@ l3dss1_information_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 //				return;
 //			memcpy(msg_put(msg, l), &pc->obuf[0], l);
 //			dhexprint(DBGM_L3DATA, "l3 oframe:", &pc->obuf[0], l);
-//			dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s: proc(%p) sending INFORMATION to CES 0 during state 25 (OVERLAP)\n", __FUNCTION__, pc);
+//			dprint(DBGM_L3, "port%d: proc(%p) sending INFORMATION to CES 0 during state 25 (OVERLAP)\n", pc->l2if->l2addr.dev, pc);
 //			if (l3_msgXXXXXX(pc->L3, DL_DATA | REQUEST, 0, msg))
 //				free_msg(msg);
 //		}
@@ -1117,7 +1113,7 @@ send_timeout(l3_process_t *pc, char *nr)
 
 	l3m = alloc_l3_msg();
 	if (!l3m) {
-		eprint("%s no memory for l3 message\n", __FUNCTION__);
+		eprint("No memory for l3 message\n");
 		return;
 	}
 	c[0] = 0x80 | CAUSE_LOC_USER;
@@ -1223,7 +1219,7 @@ l3dss1_t312(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	test_and_clear_bit(FLG_L3P_TIMER312, &pc->flags);
 	L3DelTimer(&pc->timer2);
-	dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
+	dprint(DBGM_L3, pc->l2if->l2addr.dev, "pc=%p del timer2\n", pc);
 	mIl3_debug(pc->L3, "%s: state %d", __FUNCTION__, pc->state);
 // only action if proc in state 22 ETSI !!!
 //	if (pc->state == 22 || pc->state == 25 || pc->state == 9 || pc->state == 7) {
@@ -1260,7 +1256,7 @@ l3dss1_t312(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	test_and_clear_bit(FLG_L3P_TIMER312, &pc->flags);
 	L3DelTimer(&pc->timer2);
-	dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s: pc=%p del timer2\n", __FUNCTION__, pc);
+	dprint(DBGM_L3, "port%d pc=%p del timer2\n", pc->l2if->l2addr.dev, pc);
 	mIl3_debug(pc->L3, "%s: state %d", __FUNCTION__, pc->state);
 	if (list_empty(&pc->child)) {
 		StopAllL3Timer(pc);
@@ -1591,9 +1587,9 @@ imsg_intrelease(l3_process_t *master, l3_process_t *child)
 
 	if ((!master) || (!child))
 		return(-EINVAL);
-	dprint(DBGM_L3, master->l2if->l2addr.dev, "%s: m/c(%x/%x) state(%d/%d) m->child:%d\n", __FUNCTION__,
-		master->pid, child->pid, master->state, child->state,
-		!list_empty(&master->child));
+	dprint(DBGM_L3, "port%d: m/c(%x/%x) state(%d/%d) m->child:%d\n",
+		master->l2if->l2addr.dev, master->pid, child->pid, master->state,
+		child->state, !list_empty(&master->child));
 	switch (master->state) {
 		case 0:
 			if (list_empty(&master->child)) {
@@ -1610,7 +1606,7 @@ imsg_intrelease(l3_process_t *master, l3_process_t *child)
 		case 9:
 		case 25:
 			if ((!list_empty(&master->child)) || test_bit(FLG_L3P_TIMER312, &master->flags)) {
-				dprint(DBGM_L3, master->l2if->l2addr.dev, "%s: JOLLY child %d, flg=%d\n", __FUNCTION__,
+				dprint(DBGM_L3, "port%d: JOLLY child %d, flg=%d\n", master->l2if->l2addr.dev,
 					!list_empty(&master->child), test_bit(FLG_L3P_TIMER312, &master->flags));
 			} else {
 				send_proc(master, IMSG_END_PROC, NULL);
@@ -1742,7 +1738,7 @@ send_proc(l3_process_t *proc, int op, void *arg)
 		case IMSG_SEL_PROC:
 			p = get_l3process4pid(proc->L3, proc->selpid);
 			if (!p) {
-				eprint("%s: did not find selected process %x\n", __FUNCTION__, proc->selpid);
+				eprint("Did not find selected process %x\n", proc->selpid);
 				break;
 			}
 			proc->L3->ml3.from_layer3(&proc->L3->ml3, MT_ASSIGN, proc->selpid, NULL);
@@ -1793,17 +1789,18 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 	l3_process_t	*proc;
 
 	if (msg->len < 3) {
-		fprintf(stderr, "dss1up frame too short(%d)\n", msg->len);
+		eprint("dss1up frame too short(%d)\n", msg->len);
 		goto freemsg;
 	}
 	if (msg->data[0] != Q931_PD)
 		goto freemsg;
 	ret = parseQ931(msg);
 	if (ret & Q931_ERROR_FATAL) {
-		fprintf(stderr, "dss1up: parse IE error %x\n", ret);
+		eprint("dss1up: parse IE error %x\n", ret);
 		goto freemsg;
 	}
-	dprint(DBGM_L3, msg->addr.dev, "%s: mt(%x) pid(%x) crlen(%d)\n", __FUNCTION__, msg->l3.type, msg->l3.pid, msg->l3h.crlen);
+	dprint(DBGM_L3, "port%d: mt(%x) pid(%x) crlen(%d)\n",
+		msg->addr.dev, msg->l3.type, msg->l3.pid, msg->l3h.crlen);
 	if (msg->l3h.crlen == 0) {	/* Dummy Callref */
 		if (msg->l3h.type == MT_FACILITY) {
 			l3dss1_facility(&l3->dummy, msg->h->prim, &msg->l3);
@@ -1815,7 +1812,7 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 		return 0;
 	}
 	proc = get_l3process4pid(l3, msg->l3.pid);
-	dprint(DBGM_L3, msg->addr.dev, "%s: proc(%x)\n", __FUNCTION__, proc ? proc->pid : 0);
+	dprint(DBGM_L3, "port%d: proc(%x)\n", msg->addr.dev, proc ? proc->pid : 0);
 	if (!proc) {
 		if (msg->l3.type == MT_SETUP || msg->l3.type == MT_RESUME || msg->l3.type == MT_REGISTER) {
 			/* Setup/Resume creates a new transaction process */
@@ -1828,13 +1825,13 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 			}
 			switch (msg->l3.type) {
 				case MT_SETUP:
-					dprint(DBGM_L3, msg->addr.dev, "%s: MT_SETUP\n", __FUNCTION__);
+					dprint(DBGM_L3, "port%d: MT_SETUP\n", msg->addr.dev);
 					break;
 				case MT_RESUME:
-					dprint(DBGM_L3, msg->addr.dev, "%s: MT_RESUME\n", __FUNCTION__);
+					dprint(DBGM_L3, "port%d: MT_RESUME\n", msg->addr.dev);
 					break;
 				case MT_REGISTER:
-					dprint(DBGM_L3, msg->addr.dev, "%s: MT_REGISTER\n", __FUNCTION__);
+					dprint(DBGM_L3, "port%d: MT_REGISTER\n", msg->addr.dev);
 					break;
 			}
 			if (!(proc = create_new_process(l3, msg->addr.channel,msg->l3h.cr, NULL))) {
@@ -1844,7 +1841,7 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 				 */
 				goto freemsg;
 			}
-			dprint(DBGM_L3, msg->addr.dev, "%s: proc(%x)\n", __FUNCTION__, proc->pid);
+			dprint(DBGM_L3, "port%d: proc(%x)\n", msg->addr.dev, proc->pid);
 		} else if (msg->l3h.type == MT_STATUS) {
 			cause = 0;
 			if (msg->l3.cause) {
@@ -1881,7 +1878,7 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 			 * (except MT_SETUP and RELEASE_COMPLETE) is received,
 			 * we must send MT_RELEASE_COMPLETE cause 81 */
 
-			dprint(DBGM_L3, msg->addr.dev, "%s: mt(%x) without callref (maybe former process)\n", __FUNCTION__, msg->l3.type);
+			dprint(DBGM_L3, "port%d: mt(%x) without callref (maybe former process)\n", msg->addr.dev, msg->l3.type);
 			if ((proc = create_new_process(l3, msg->addr.channel,msg->l3h.cr, NULL))) {
 				l3dss1_msg_without_setup(proc, CAUSE_INVALID_CALLREF);
 			}
@@ -1889,7 +1886,7 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 		}
 	}
 	if ((proc->pid & MISDN_PID_CRTYPE_MASK) == MISDN_PID_MASTER) {
-		dprint(DBGM_L3, msg->addr.dev, "%s: master state %d found\n", __FUNCTION__,
+		dprint(DBGM_L3, "port%d: master state %d found\n", msg->addr.dev,
 			proc->state);
 		send_proc(proc, IMSG_MASTER_L2_DATA, &msg->l3);
 	} else

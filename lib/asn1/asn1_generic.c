@@ -1,4 +1,16 @@
-/* $Id$
+/*
+ * ASN1 parser for standard elements
+ *
+ * Copyright 2009,2010  by Karsten Keil <kkeil@linux-pingi.de>
+ *
+ * This code is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
+ * version 2.1 as published by the Free Software Foundation.
+ *
+ * This code is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU LESSER GENERAL PUBLIC LICENSE for more details.
  *
  */
 
@@ -11,9 +23,8 @@ int ParseBoolean(struct asn1_parm *pc, u_char * p, u_char * end, int *i)
 {
 	INIT;
 
-	CHECK_P;
 	*i = *p ? 1 : 0;
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> BOOL = %d %#x\n", *i, *i);
+	dprint(DBGM_ASN1_DEC, " DEBUG> BOOL = %d %#x\n", *i, *i);
 	return end - beg;
 }
 
@@ -28,7 +39,6 @@ static int ParseUInt(struct asn1_parm *pc, u_char * p, u_char * end, unsigned in
 {
 	INIT;
 
-	CHECK_P;
 	*i = 0;
 	while (len--) {
 		*i = (*i << 8) | *p;
@@ -41,7 +51,6 @@ static int ParseSInt(struct asn1_parm *pc, u_char * p, u_char * end, signed int 
 {
 	INIT;
 
-	CHECK_P;
 	/* Read value as signed */
 	if (*p & 0x80) {
 		/* The value is negative */
@@ -61,7 +70,7 @@ int ParseUnsignedInteger(struct asn1_parm *pc, u_char * p, u_char * end, unsigne
 	int length;
 
 	length = ParseUInt(pc, p, end, i);
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> INT = %d %#x\n", *i, *i);
+	dprint(DBGM_ASN1_DEC, " DEBUG> INT = %d %#x\n", *i, *i);
 	return length;
 }
 
@@ -70,7 +79,8 @@ int ParseSignedInteger(struct asn1_parm *pc, u_char * p, u_char * end, signed in
 	int length;
 
 	length = ParseSInt(pc, p, end, i);
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> INT = %d %#x\n", *i, *i);
+
+	dprint(DBGM_ASN1_DEC, " DEBUG> INT = %d %#x\n", *i, *i);
 	return length;
 }
 
@@ -79,7 +89,7 @@ int ParseEnum(struct asn1_parm *pc, u_char * p, u_char * end, unsigned int *i)
 	int length;
 
 	length = ParseUInt(pc, p, end, i);
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> ENUM = %d %#x\n", *i, *i);
+	dprint(DBGM_ASN1_DEC, " DEBUG> ENUM = %d %#x\n", *i, *i);
 	return length;
 }
 
@@ -94,7 +104,6 @@ int ParseIA5String(struct asn1_parm *pc, u_char * p, u_char * end, struct asn1Pa
 		return -1;
 	}
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> IA5 = ");
 	if (str->maxSize < len + 1) {
 		numChars = str->maxSize - 1;
 	} else {
@@ -103,13 +112,12 @@ int ParseIA5String(struct asn1_parm *pc, u_char * p, u_char * end, struct asn1Pa
 	len -= numChars;
 	str->length = numChars;
 	buf = str->buf;
-	while (numChars--) {
-		print_asn1msg(PRT_DEBUG_DECODE, "%c", *p);
+	while (numChars--)
 		*buf++ = *p++;
-	}			/* end while */
-	print_asn1msg(PRT_DEBUG_DECODE, "\n");
 	*buf = 0;
+	dprint(DBGM_ASN1_DEC, " DEBUG> IA5 = %s\n", str->buf);
 	if (0 < len) {
+		wprint("Discard %d IA5 max %d\n", len, str->maxSize);
 		/* Discard the remainder of the string.  We have no room left. */
 		p += len;
 	}
@@ -127,7 +135,6 @@ int ParseNumericString(struct asn1_parm *pc, u_char * p, u_char * end, struct as
 		return -1;
 	}
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> NumStr = ");
 	if (str->maxSize < len + 1) {
 		numChars = str->maxSize - 1;
 	} else {
@@ -136,13 +143,12 @@ int ParseNumericString(struct asn1_parm *pc, u_char * p, u_char * end, struct as
 	len -= numChars;
 	str->length = numChars;
 	buf = str->buf;
-	while (numChars--) {
-		print_asn1msg(PRT_DEBUG_DECODE, "%c", *p);
+	while (numChars--)
 		*buf++ = *p++;
-	}			/* end while */
-	print_asn1msg(PRT_DEBUG_DECODE, "\n");
 	*buf = 0;
+	dprint(DBGM_ASN1_DEC, " DEBUG> NumStr = %s\n", str->buf);
 	if (0 < len) {
+		wprint("Discard %d NumStr max %d\n", len, str->maxSize);
 		/* Discard the remainder of the string.  We have no room left. */
 		p += len;
 	}
@@ -163,18 +169,25 @@ int ParseOctetString(struct asn1_parm *pc, u_char * p, u_char * end, struct asn1
 		 * The octet string will not fit in the available buffer
 		 * and truncating it is not a good idea in all cases.
 		 */
+		eprint("OctetString does not fit %d max %d\n", len, str->maxSize);
 		return -1;
 	}
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> Octets = ");
 	str->length = len;
 	buf = str->buf;
-	while (len--) {
-		print_asn1msg(PRT_DEBUG_DECODE, " %02x", *p);
+	while (len--)
 		*buf++ = *p++;
-	}			/* end while */
-	print_asn1msg(PRT_DEBUG_DECODE, "\n");
 	*buf = 0;
+	if (DBGM_ASN1_DEC & mI_debug_mask) {
+		char *tmp = malloc((3 * len) + 1);
+
+		if (tmp) {
+			mi_shexprint(tmp, p, len);
+			dprint(DBGM_ASN1_DEC, " DEBUG> Octets = %s\n", tmp);
+			free(tmp);
+		} else
+			eprint("MALLOC for %d bytes failed\n", (3 * len) + 1);
+	}
 	return p - beg;
 }
 
@@ -182,15 +195,8 @@ int ParseOid(struct asn1_parm *pc, u_char * p, u_char * end, struct asn1Oid *oid
 {
 	int numValues;
 	int value;
-#if defined(ASN1_DEBUG)
-	int delimiter;
-#endif				/* defined(ASN1_DEBUG) */
 	INIT;
 
-	print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> OID =");
-#if defined(ASN1_DEBUG)
-	delimiter = ' ';
-#endif				/* defined(ASN1_DEBUG) */
 	numValues = 0;
 	while (len) {
 		value = 0;
@@ -201,37 +207,28 @@ int ParseOid(struct asn1_parm *pc, u_char * p, u_char * end, struct asn1Oid *oid
 				/* Last octet in the OID subidentifier value */
 				if (numValues < sizeof(oid->value) / sizeof(oid->value[0])) {
 					oid->value[numValues] = value;
-#if defined(ASN1_DEBUG)
-					print_asn1msg(PRT_DEBUG_DECODE, "%c%d", delimiter, value);
-					delimiter = '.';
-#endif				/* defined(ASN1_DEBUG) */
 				} else {
-					/* Too many OID subidentifier values */
-#if defined(ASN1_DEBUG)
-					delimiter = '~';
-					print_asn1msg(PRT_DEBUG_DECODE, "%c%d", delimiter, value);
-#endif				/* defined(ASN1_DEBUG) */
+					dprint(DBGM_ASN1_WARN, "Too many OID subidentifier %d\n", value);
 				}
 				++numValues;
 				break;
 			}
 			if (!len) {
 				oid->numValues = 0;
-				print_asn1msg(PRT_DEBUG_DECODE, "\n");
-				print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> Last OID subidentifier value not terminated!\n");
+				wprint("Last OID subidentifier value (%d) not terminated!\n", value);
 				return -1;
 			}
 		}		/* end for */
 	}			/* end while */
-	print_asn1msg(PRT_DEBUG_DECODE, "\n");
 
 	if (numValues <= sizeof(oid->value) / sizeof(oid->value[0])) {
 		oid->numValues = numValues;
+		for (numValues = 0; numValues < oid->numValues; numValues++)
+			dprint(DBGM_ASN1_DEC, "OID->value[%d] = %d\n", numValues, oid->value[numValues]);
 		return p - beg;
 	} else {
 		/* Need to increase the size of the OID subidentifier list. */
-		oid->numValues = 0;
-		print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> Too many OID values!\n");
+		wprint("Too many OID values (%d)!\n", numValues);
 		return -1;
 	}
-}				/* end ParseOid() */
+}

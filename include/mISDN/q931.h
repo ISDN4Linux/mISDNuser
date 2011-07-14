@@ -97,8 +97,8 @@
 #define IE_CALLING_SUB		0x6d
 #define IE_CALLED_PN		0x70
 #define IE_CALLED_SUB		0x71
-#define IE_REDIR_NR		0x74
-#define IE_REDIR_DN		0x76
+#define IE_REDIRECTING_NR	0x74
+#define IE_REDIRECTION_NR	0x76
 #define IE_TRANS_SEL		0x78
 #define IE_RESTART_IND		0x79
 #define IE_LLC			0x7c
@@ -271,21 +271,30 @@ struct misdn_progress_info {
 #define MI_PROG_CTRL_NEEDSEND	0x02
 #define MI_PROG_CTRL_SENT	0x04
 
+/* Reason for diversion */
+#define MI_DIV_REASON_UNKNOWN	0x00
+#define MI_DIV_REASON_CFB	0x01
+#define MI_DIV_REASON_CFNR	0x02
+#define MI_DIV_REASON_CD	0x0a
+#define MI_DIV_REASON_CFU	0x0f
 
 /* Common IE encode helpers */
 struct l3_msg;
+struct asn1_parm;
 
 extern int mi_encode_bearer(struct l3_msg *, unsigned int, unsigned int, unsigned int, unsigned int);
 extern int mi_encode_channel_id(struct l3_msg *, struct misdn_channel_info *);
 extern int mi_encode_calling_nr(struct l3_msg *, char *, int, unsigned int, unsigned int, unsigned int);
 extern int mi_encode_connected_nr(struct l3_msg *, char *, int, unsigned int, unsigned int, unsigned int);
 extern int mi_encode_called_nr(struct l3_msg *, char *, unsigned int, unsigned int);
-extern int mi_encode_redir_nr(struct l3_msg *, char *, int, unsigned int, unsigned int, unsigned int, int);
+extern int mi_encode_redirecting_nr(struct l3_msg *, char *, int, unsigned int, unsigned int, int);
+extern int mi_encode_redirection_nr(struct l3_msg *, char *, int, unsigned int, unsigned int);
 extern int mi_encode_useruser(struct l3_msg *, int, int, char *);
 extern int mi_encode_cause(struct l3_msg *l, int cause, int, int, unsigned char *);
 extern int mi_encode_progress(struct l3_msg *, struct misdn_progress_info *);
 extern int mi_encode_date(struct l3_msg *, struct tm *);
 extern int mi_encode_restart_ind(struct l3_msg *, unsigned char);
+extern int mi_encode_facility(struct l3_msg *, struct asn1_parm *);
 
 /* Common IE decode helpers */
 extern int mi_decode_progress(struct l3_msg *, struct misdn_progress_info *);
@@ -296,11 +305,13 @@ extern int mi_decode_channel_id(struct l3_msg *, struct misdn_channel_info *);
 extern int mi_decode_calling_nr(struct l3_msg *, int *, int *, int *, int *, char *);
 extern int mi_decode_connected_nr(struct l3_msg *, int *, int *, int *, int *, char *);
 extern int mi_decode_called_nr(struct l3_msg *, int *, int *, char *);
-extern int mi_decode_redir_nr(struct l3_msg *, int *, int *, int *, int *, int *, char *);
+extern int mi_decode_redirecting_nr(struct l3_msg *, int *, int *, int *, int *, int *, char *);
+extern int mi_decode_redirection_nr(struct l3_msg *, int *, int *, int *, char *);
 extern int mi_decode_display(struct l3_msg *, char *, int);
 extern int mi_decode_useruser(struct l3_msg *, int *, int *, char *, int);
 extern int mi_decode_date(struct l3_msg *, struct tm *);
 extern int mi_decode_restart_ind(struct l3_msg *, unsigned char *);
+extern int mi_decode_facility(struct l3_msg *, struct asn1_parm *);
 
 /* some print helpers */
 extern const char *mi_bearer2str(int);

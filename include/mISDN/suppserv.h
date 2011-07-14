@@ -56,34 +56,13 @@ extern "C" {
 	};
 
 /* Facility operation-value function code */
-	enum FacFunction {
+	enum Operation {
+		/* No operation */
 		Fac_None = 0xffff,
 		Fac_ERROR = 0xfffe,
-		Fac_RESULT = 0xfffd,	/* For when there is no operation-value in the result */
-		Fac_REJECT = 0xfffc,	/* There was a problem with the facility ie */
-
-#if defined(MISDN_NO_LONGER_IMPLEMENTED)	/* No longer implemented if they ever were implemented. */
-		/* ??? Don't know where these are from. */
-		Fac_GetSupportedServices = FAC_OID_BASE(FacOIDBase_Local) + 0,
-		Fac_Listen = FAC_OID_BASE(FacOIDBase_Local) + 1,
-		Fac_Suspend = FAC_OID_BASE(FacOIDBase_Local) + 4,
-		Fac_Resume = FAC_OID_BASE(FacOIDBase_Local) + 5,
-
-		/*
-		 * localValue's from Diversion-Operations
-		 * {ccitt identified-organization etsi(0) 207 operations-and-errors(1)}
-		 *
-		 * These names are not even used by the standard document.
-		 */
-		Fac_CFActivate = FAC_OID_BASE(FacOIDBase_Local) + 7,	/* Use Fac_ActivationDiversion */
-		Fac_CFDeactivate = FAC_OID_BASE(FacOIDBase_Local) + 8,	/* Use Fac_DeactivationDiversion */
-		Fac_CFInterrogateParameters = FAC_OID_BASE(FacOIDBase_Local) + 11,	/* Use Fac_InterrogationDiversion */
-		Fac_CFInterrogateNumbers = FAC_OID_BASE(FacOIDBase_Local) + 12,	/* Use Fac_DiversionInformation */
-#endif				/* defined(MISDN_NO_LONGER_IMPLEMENTED) */
-
-		Fac_CD = FAC_OID_BASE(FacOIDBase_Local) + 13,	/* Use Fac_CallDeflection */
-
-		/*
+		Fac_RESULT = 0xfffd,
+		Fac_REJECT = 0xfffc,
+								/*
 		 * Malicious Call Identification Operation Request
 		 */
 		Fac_MaliciousCallId = FAC_OID_BASE(FacOIDBase_Local) + 3,
@@ -248,16 +227,6 @@ extern "C" {
 		FacError_ECT_LinkIdNotAssignedByNetwork = FAC_OID_BASE(FacOIDBase_ECT) + 21,
 	};
 
-	struct FacERROR {
-		__s16 InvokeID;
-		/*! \see enum FacErrorCode */
-		__u16 errorValue;
-	};
-
-	struct FacRESULT {
-		__s16 InvokeID;
-	};
-
 #define FAC_REJECT_BASE(Base)			((Base) * 0x10)
 	enum FacRejectBase {
 		FacRejectBase_General,
@@ -311,48 +280,6 @@ extern "C" {
 		__u16 Code;
 	};
 
-#if defined(MISDN_NO_LONGER_IMPLEMENTED)	/* No longer implemented if they ever were implemented. */
-	struct FacListen {
-		__u32 NotificationMask;
-	};
-
-	struct FacSuspend {
-		__s8 CallIdentity[16];
-	};
-
-	struct FacResume {
-		__s8 CallIdentity[16];
-	};
-
-	struct FacCFActivate {
-		__u32 Handle;
-		__u16 Procedure;
-		__u16 BasicService;
-		__s8 ServedUserNumber[16];
-		__s8 ForwardedToNumber[16];
-		__s8 ForwardedToSubaddress[16];
-	};
-
-	struct FacCFDeactivate {
-		__u32 Handle;
-		__u16 Procedure;
-		__u16 BasicService;
-		__s8 ServedUserNumber[16];
-	};
-
-#define FacCFInterrogateParameters FacCFDeactivate
-
-	struct FacCFInterrogateNumbers {
-		__u32 Handle;
-	};
-#endif				/* defined(MISDN_NO_LONGER_IMPLEMENTED) */
-
-	struct FacCDeflection {
-		__u16 PresentationAllowed;
-		__s8 DeflectedToNumber[16];
-		__s8 DeflectedToSubaddress[16];
-	};
-
 	struct ChargingAssociation {
 		__u8 chargeNumber[30];
 		__s32 chargeIdentifier;
@@ -360,7 +287,6 @@ extern "C" {
 
 /* This structure does not capture all information correctly */
 	struct FacAOCChargingUnit {
-		__s16 InvokeID;
 		__u16 chargeNotAvailable;
 		__u16 freeOfCharge;
 		__u32 recordedUnits;
@@ -371,7 +297,6 @@ extern "C" {
 	};
 
 	struct FacAOCCurrency {
-		__s16 InvokeID;
 		__u16 chargeNotAvailable;
 		__u16 freeOfCharge;
 		__u8 currency[10 + 1];
@@ -575,14 +500,7 @@ extern "C" {
 		__u8 CCBSReference;
 	};
 
-	enum FacComponentType {
-		FacComponent_Invoke,
-		FacComponent_Result,
-		FacComponent_Error,
-		FacComponent_Reject
-	};
-
-	struct FacStatusRequest_ARG {
+	struct FacStatusRequest {
 		/* The BC, HLC (optional) and LLC (optional) information */
 		struct Q931_Bc_Hlc_Llc Q931ie;
 
@@ -595,32 +513,17 @@ extern "C" {
 		__u8 Status;
 	};
 
-	struct FacStatusRequest {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacStatusRequest_ARG Invoke;
-			struct FacStatusRequest_RES Result;
-		} Component;
-	};
-
 	struct FacCallInfoRetain {
-		__s16 InvokeID;
-
 		/* Call Linkage Record ID */
 		__u8 CallLinkageID;
 	};
 
 	struct FacEraseCallLinkageID {
-		__s16 InvokeID;
-
 		/* Call Linkage Record ID */
 		__u8 CallLinkageID;
 	};
 
-	struct FacCCBSRequest_ARG {
+	struct FacCCBSRequest {
 		/* Call Linkage Record ID */
 		__u8 CallLinkageID;
 	};
@@ -633,33 +536,12 @@ extern "C" {
 		__u8 CCBSReference;
 	};
 
-	struct FacCCBSRequest {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacCCBSRequest_ARG Invoke;
-			struct FacCCBSRequest_RES Result;
-		} Component;
-	};
-
-	struct FacCCBSDeactivate_ARG {
+	struct FacCCBSDeactivate {
 		/* CCBS Record ID */
 		__u8 CCBSReference;
 	};
 
-	struct FacCCBSDeactivate {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacCCBSDeactivate_ARG Invoke;
-		} Component;
-	};
-
-	struct FacCCBSInterrogate_ARG {
+	struct FacCCBSInterrogate {
 		/* Party A number (Optional) */
 		struct FacPartyNumber AParty;
 
@@ -680,20 +562,7 @@ extern "C" {
 		__u8 RecallMode;
 	};
 
-	struct FacCCBSInterrogate {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacCCBSInterrogate_ARG Invoke;
-			struct FacCCBSInterrogate_RES Result;
-		} Component;
-	};
-
 	struct FacCCBSErase {
-		__s16 InvokeID;
-
 		/* The BC, HLC (optional) and LLC (optional) information */
 		struct Q931_Bc_Hlc_Llc Q931ie;
 
@@ -717,8 +586,6 @@ extern "C" {
 	};
 
 	struct FacCCBSRemoteUserFree {
-		__s16 InvokeID;
-
 		/* The BC, HLC (optional) and LLC (optional) information */
 		struct Q931_Bc_Hlc_Llc Q931ie;
 
@@ -733,13 +600,11 @@ extern "C" {
 	};
 
 	struct FacCCBSCall {
-		__s16 InvokeID;
-
 		/* CCBS Record ID */
 		__u8 CCBSReference;
 	};
 
-	struct FacCCBSStatusRequest_ARG {
+	struct FacCCBSStatusRequest {
 		/* The BC, HLC (optional) and LLC (optional) information */
 		struct Q931_Bc_Hlc_Llc Q931ie;
 
@@ -755,20 +620,7 @@ extern "C" {
 		__u8 Free;
 	};
 
-	struct FacCCBSStatusRequest {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacCCBSStatusRequest_ARG Invoke;
-			struct FacCCBSStatusRequest_RES Result;
-		} Component;
-	};
-
 	struct FacCCBSBFree {
-		__s16 InvokeID;
-
 		/* The BC, HLC (optional) and LLC (optional) information */
 		struct Q931_Bc_Hlc_Llc Q931ie;
 
@@ -783,13 +635,11 @@ extern "C" {
 	};
 
 	struct FacCCBSStopAlerting {
-		__s16 InvokeID;
-
 		/* CCBS Record ID */
 		__u8 CCBSReference;
 	};
 
-	struct FacCCBS_T_Request_ARG {
+	struct FacCCBS_T_Request {
 		/* The BC, HLC (optional) and LLC (optional) information */
 		struct Q931_Bc_Hlc_Llc Q931ie;
 
@@ -814,38 +664,11 @@ extern "C" {
 		__u8 RetentionSupported;
 	};
 
-	struct FacCCBS_T_Request {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacCCBS_T_Request_ARG Invoke;
-			struct FacCCBS_T_Request_RES Result;
-		} Component;
-	};
-
-	struct FacCCBS_T_Event {
-		__s16 InvokeID;
-	};
-
-	struct FacEctExecute {
-		__s16 InvokeID;
-	};
-
 	struct FacExplicitEctExecute {
-		__s16 InvokeID;
-
 		__s16 LinkID;
 	};
 
-	struct FacRequestSubaddress {
-		__s16 InvokeID;
-	};
-
 	struct FacSubaddressTransfer {
-		__s16 InvokeID;
-
 		/* Transferred to subaddress */
 		struct FacPartySubaddress Subaddress;
 	};
@@ -854,19 +677,7 @@ extern "C" {
 		__s16 LinkID;
 	};
 
-	struct FacEctLinkIdRequest {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacEctLinkIdRequest_RES Result;
-		} Component;
-	};
-
 	struct FacEctInform {
-		__s16 InvokeID;
-
 		/* Redirection Number (Optional) */
 		struct FacPresentedNumberUnscreened Redirection;
 
@@ -877,7 +688,7 @@ extern "C" {
 		__u8 Status;
 	};
 
-	struct FacEctLoopTest_ARG {
+	struct FacEctLoopTest {
 		__s8 CallTransferID;
 	};
 
@@ -890,18 +701,7 @@ extern "C" {
 		__u8 LoopResult;
 	};
 
-	struct FacEctLoopTest {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacEctLoopTest_ARG Invoke;
-			struct FacEctLoopTest_RES Result;
-		} Component;
-	};
-
-	struct FacActivationDiversion_ARG {
+	struct FacActivationDiversion {
 		/* Forwarded to address */
 		struct FacAddress ForwardedTo;
 
@@ -933,17 +733,7 @@ extern "C" {
 		__u8 BasicService;
 	};
 
-	struct FacActivationDiversion {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacActivationDiversion_ARG Invoke;
-		} Component;
-	};
-
-	struct FacDeactivationDiversion_ARG {
+	struct FacDeactivationDiversion {
 		/* Forward all numbers if not present. */
 		struct FacPartyNumber ServedUser;
 
@@ -972,19 +762,7 @@ extern "C" {
 		__u8 BasicService;
 	};
 
-	struct FacDeactivationDiversion {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacDeactivationDiversion_ARG Invoke;
-		} Component;
-	};
-
 	struct FacActivationStatusNotificationDiv {
-		__s16 InvokeID;
-
 		/* Forwarded to address */
 		struct FacAddress ForwardedTo;
 
@@ -1017,8 +795,6 @@ extern "C" {
 	};
 
 	struct FacDeactivationStatusNotificationDiv {
-		__s16 InvokeID;
-
 		/* Forward all numbers if not present. */
 		struct FacPartyNumber ServedUser;
 
@@ -1047,7 +823,7 @@ extern "C" {
 		__u8 BasicService;
 	};
 
-	struct FacInterrogationDiversion_ARG {
+	struct FacInterrogationDiversion {
 		/* Forward all numbers if not present. */
 		struct FacPartyNumber ServedUser;
 
@@ -1118,20 +894,7 @@ extern "C" {
 		__u8 NumRecords;
 	};
 
-	struct FacInterrogationDiversion {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacInterrogationDiversion_ARG Invoke;
-			struct FacForwardingList Result;
-		} Component;
-	};
-
 	struct FacDiversionInformation {
-		__s16 InvokeID;
-
 		/* Served user subaddress (Optional) */
 		struct FacPartySubaddress ServedUserSubaddress;
 
@@ -1203,7 +966,7 @@ extern "C" {
 		__u8 BasicService;
 	};
 
-	struct FacCallDeflection_ARG {
+	struct FacCallDeflection {
 		/* Deflection address (Deflected-To address) */
 		struct FacAddress Deflection;
 
@@ -1214,17 +977,7 @@ extern "C" {
 		__u8 PresentationAllowedToDivertedToUser;
 	};
 
-	struct FacCallDeflection {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacCallDeflection_ARG Invoke;
-		} Component;
-	};
-
-	struct FacCallRerouteing_ARG {
+	struct FacCallRerouteing {
 		struct FacAddress CalledAddress;
 
 		/* The BC, HLC (optional), LLC (optional), and User-user (optional) information */
@@ -1259,16 +1012,6 @@ extern "C" {
 		__u8 SubscriptionOption;
 	};
 
-	struct FacCallRerouteing {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacCallRerouteing_ARG Invoke;
-		} Component;
-	};
-
 	struct FacServedUserNumberList {
 		/* SET SIZE (0..99) OF Served user numbers */
 		struct FacPartyNumber List[99];
@@ -1277,19 +1020,7 @@ extern "C" {
 		__u8 NumRecords;
 	};
 
-	struct FacInterrogateServedUserNumbers {
-		__s16 InvokeID;
-
-		/*! \see enum FacComponentType */
-		__u8 ComponentType;
-		union {
-			struct FacServedUserNumberList Result;
-		} Component;
-	};
-
 	struct FacDivertingLegInformation1 {
-		__s16 InvokeID;
-
 		/* Diverted to number (Optional) */
 		struct FacPresentedNumberUnscreened DivertedTo;
 
@@ -1315,8 +1046,6 @@ extern "C" {
 	};
 
 	struct FacDivertingLegInformation2 {
-		__s16 InvokeID;
-
 		/* Diverting number (Optional) */
 		struct FacPresentedNumberUnscreened Diverting;
 
@@ -1344,38 +1073,36 @@ extern "C" {
 	};
 
 	struct FacDivertingLegInformation3 {
-		__s16 InvokeID;
-
 		/* TRUE if presentation is allowed */
 		__u8 PresentationAllowedIndicator;
 	};
 
-	struct FacParm {
-		enum FacFunction Function;
+	typedef enum {
+		CompInvoke = 1,
+		CompReturnResult = 2,
+		CompReturnError = 3,
+		CompReject = 4,
+	} asn1Component;
+
+	typedef enum {
+		GeneralP = 0,
+		InvokeP = 1,
+		ReturnResultP = 2,
+		ReturnErrorP = 3,
+	} asn1Problem;
+
+	struct ChargeNumber {
+		char *number;
+		int *identifier;
+	};
+
+	struct asn1Invoke {
+		__s16 invokeId;
+		__u16 operationValue;
 		union {
-#if defined(MISDN_NO_LONGER_IMPLEMENTED)	/* No longer implemented if they ever were implemented. */
-			struct FacListen Listen;
-			struct FacSuspend Suspend;
-			struct FacResume Resume;
-
-			/* Original diversion support */
-			struct FacCFActivate CFActivate;
-			struct FacCFDeactivate CFDeactivate;
-			struct FacCFInterrogateParameters CFInterrogateParameters;
-			struct FacCFInterrogateNumbers CFInterrogateNumbers;
-#endif				/* defined(MISDN_NO_LONGER_IMPLEMENTED) */
-
-			struct FacCDeflection CDeflection;
-
-			/* Original AOC support */
 			struct FacAOCChargingUnit AOCchu;
 			struct FacAOCCurrency AOCcur;
 
-			struct FacRESULT RESULT;
-			struct FacERROR ERROR;
-			struct FacREJECT REJECT;
-
-			/* CCBS/CCNR support */
 			struct FacStatusRequest StatusRequest;
 
 			/* CCBS/CCNR support */
@@ -1397,13 +1124,6 @@ extern "C" {
 			struct FacCCBSRequest CCNRRequest;
 			struct FacCCBSInterrogate CCNRInterrogate;
 
-			/* CCBS-T/CCNR-T support */
-			struct FacCCBS_T_Event CCBS_T_Call;
-			struct FacCCBS_T_Event CCBS_T_Suspend;
-			struct FacCCBS_T_Event CCBS_T_Resume;
-			struct FacCCBS_T_Event CCBS_T_RemoteUserFree;
-			struct FacCCBS_T_Event CCBS_T_Available;
-
 			/* CCBS-T support */
 			struct FacCCBS_T_Request CCBS_T_Request;
 
@@ -1411,11 +1131,8 @@ extern "C" {
 			struct FacCCBS_T_Request CCNR_T_Request;
 
 			/* ECT support */
-			struct FacEctExecute EctExecute;
 			struct FacExplicitEctExecute ExplicitEctExecute;
-			struct FacRequestSubaddress RequestSubaddress;
 			struct FacSubaddressTransfer SubaddressTransfer;
-			struct FacEctLinkIdRequest EctLinkIdRequest;
 			struct FacEctInform EctInform;
 			struct FacEctLoopTest EctLoopTest;
 
@@ -1428,12 +1145,86 @@ extern "C" {
 			struct FacDiversionInformation DiversionInformation;
 			struct FacCallDeflection CallDeflection;
 			struct FacCallRerouteing CallRerouteing;
-			struct FacInterrogateServedUserNumbers InterrogateServedUserNumbers;
 			struct FacDivertingLegInformation1 DivertingLegInformation1;
 			struct FacDivertingLegInformation2 DivertingLegInformation2;
 			struct FacDivertingLegInformation3 DivertingLegInformation3;
+		} o;
+	};
+
+	struct asn1ReturnResult {
+		__s16 invokeId;
+		int operationValuePresent;
+		int operationValue;
+		union {
+			struct FacStatusRequest_RES StatusRequest;
+
+			/* CCBS/CCNR support */
+			struct FacCCBSStatusRequest_RES CCBSStatusRequest;
+
+			/* CCBS support */
+			struct FacCCBSRequest_RES CCBSRequest;
+			struct FacCCBSInterrogate_RES CCBSInterrogate;
+
+			/* CCNR support */
+			struct FacCCBSRequest_RES CCNRRequest;
+			struct FacCCBSInterrogate_RES CCNRInterrogate;
+
+			/* CCBS-T support */
+			struct FacCCBS_T_Request_RES CCBS_T_Request;
+
+			/* CCNR-T support */
+			struct FacCCBS_T_Request_RES CCNR_T_Request;
+
+			/* ECT support */
+			struct FacEctLinkIdRequest_RES EctLinkIdRequest;
+			struct FacEctLoopTest_RES EctLoopTest;
+
+			/* Diversion support */
+			struct FacForwardingList InterrogationDiversion;
+			struct FacServedUserNumberList InterrogateServedUserNumbers;
+		} o;
+	};
+
+	struct asn1Oid {
+		/* Number of subidentifier values in OID list */
+		__u16 numValues;
+
+		/*
+		 * OID subidentifier value list
+		 * Note the first value is really the first two OID subidentifiers.
+		 * They are compressed using this formula:
+		 * First_Value = (First_Subidentifier * 40) + Second_Subidentifier
+		 */
+		__u16 value[10];
+	};
+
+	struct asn1OidConvert {
+		enum FacOIDBase baseCode;
+		struct asn1Oid oid;
+	};
+
+	struct asn1ReturnError {
+		__s16 invokeId;
+		/*! \see enum FacErrorCode */
+		__u16 errorValue;
+	};
+
+	struct asn1Reject {
+		int invokeIdPresent;
+		int invokeId;
+		asn1Problem problem;
+		int problemValue;
+	};
+
+	struct asn1_parm {
+		int Valid;
+		asn1Component comp;
+		union {
+			struct asn1Invoke inv;
+			struct asn1ReturnResult retResult;
+			struct asn1ReturnError retError;
+			struct asn1Reject reject;
 		} u;
-		int InvokeID;
 	};
 
 /*
@@ -1448,7 +1239,7 @@ extern "C" {
  * returns:
  *    length of the encoded facility, or -1 on error
  */
-	int encodeFac(__u8 * dest, struct FacParm *fac);
+extern int encodeFac(__u8 * dest, struct asn1_parm *apm);
 
 /*
  * decodeFac(__u8 *src, struct FacParm *fac)
@@ -1462,7 +1253,7 @@ extern "C" {
  * returns:
  *    0 on success, -1 on error
  */
-	int decodeFac(__u8 * src, struct FacParm *fac);
+extern int decodeFac(__u8 * src, struct asn1_parm *apm);
 
 /* ------------------------------------------------------------------- */
 
