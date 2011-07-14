@@ -15402,28 +15402,12 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
 
 
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for .git/objects" >&5
-$as_echo_n "checking for .git/objects... " >&6; }
-if ${ac_cv_file__git_objects+:} false; then :
-  $as_echo_n "(cached) " >&6
+if test -d .git/objects
+then
+	git_repo=true
 else
-  test "$cross_compiling" = yes &&
-  as_fn_error $? "cannot check for file existence when cross compiling" "$LINENO" 5
-if test -r ".git/objects"; then
-  ac_cv_file__git_objects=yes
-else
-  ac_cv_file__git_objects=no
+	git_repo=false
 fi
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_file__git_objects" >&5
-$as_echo "$ac_cv_file__git_objects" >&6; }
-if test "x$ac_cv_file__git_objects" = xyes; then :
-  git_repo=true
-else
-  git_repo=false
-
-fi
-
 
  if test "x$git_repo" = xtrue; then
   GIT_REPO_TRUE=
@@ -15434,9 +15418,7 @@ else
 fi
 
 
-
-
-ac_config_files="$ac_config_files Makefile include/Makefile include/mISDN/mISDNcompat.h lib/Makefile suppserv/Makefile bridge/Makefile l1oip/Makefile tools/Makefile example/Makefile guitools/Makefile guitools/qmisdnwatch/Makefile"
+ac_config_files="$ac_config_files Makefile include/Makefile include/mISDN/mISDNcompat.h lib/Makefile bridge/Makefile l1oip/Makefile tools/Makefile example/Makefile guitools/Makefile guitools/qmisdnwatch/Makefile"
 
 
 cat >confcache <<\_ACEOF
@@ -16546,7 +16528,6 @@ do
     "include/Makefile") CONFIG_FILES="$CONFIG_FILES include/Makefile" ;;
     "include/mISDN/mISDNcompat.h") CONFIG_FILES="$CONFIG_FILES include/mISDN/mISDNcompat.h" ;;
     "lib/Makefile") CONFIG_FILES="$CONFIG_FILES lib/Makefile" ;;
-    "suppserv/Makefile") CONFIG_FILES="$CONFIG_FILES suppserv/Makefile" ;;
     "bridge/Makefile") CONFIG_FILES="$CONFIG_FILES bridge/Makefile" ;;
     "l1oip/Makefile") CONFIG_FILES="$CONFIG_FILES l1oip/Makefile" ;;
     "tools/Makefile") CONFIG_FILES="$CONFIG_FILES tools/Makefile" ;;

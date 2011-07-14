@@ -69,8 +69,20 @@ am__base_list = \
 am__installdirs = "$(DESTDIR)$(libdir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 libmisdn_la_LIBADD =
-am_libmisdn_la_OBJECTS = debug.lo dss1net.lo dss1user.lo fsm.lo \
-	layer3.lo mbuffer.lo mlayer3.lo mtimer.lo q931.lo
+am__dirstamp = $(am__leading_dot)dirstamp
+am__objects_1 = misc/debug.lo misc/fsm.lo misc/mbuffer.lo \
+	misc/mtimer.lo
+am__objects_2 = layer3/dss1net.lo layer3/dss1user.lo layer3/layer3.lo \
+	layer3/mlayer3.lo layer3/q931.lo
+am__objects_3 =
+am__objects_4 = $(am__objects_3)
+am__objects_5 = asn1/asn1.lo asn1/asn1_enc.lo asn1/asn1_generic.lo
+am__objects_6 = suppserv/aoc.lo suppserv/basic_service.lo \
+	suppserv/component.lo suppserv/diversion.lo \
+	suppserv/address.lo suppserv/ccbs.lo suppserv/fac.lo \
+	suppserv/ect.lo
+am_libmisdn_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
+	$(am__objects_4) $(am__objects_5) $(am__objects_6)
 libmisdn_la_OBJECTS = $(am_libmisdn_la_OBJECTS)
 libmisdn_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
@@ -212,11 +224,22 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+ASN1_SRC = asn1/asn1.c asn1/asn1_enc.c asn1/asn1_generic.c
+SUPPSERV_SRC = suppserv/aoc.c suppserv/basic_service.c suppserv/component.c \
+		suppserv/diversion.c suppserv/address.c suppserv/ccbs.c \
+		suppserv/fac.c suppserv/ect.c
+
+SUPPSERV_INC = suppserv/ccbs.h suppserv/diversion.h suppserv/ect.h suppserv/asn1.h
+MISC_SRC = misc/debug.c misc/fsm.c misc/mbuffer.c misc/mtimer.c
+LAYER3_SRC = layer3/dss1net.c layer3/dss1user.c layer3/layer3.c layer3/mlayer3.c layer3/q931.c
+INCLUDE_SRC = include/debug.h include/dss1.h include/fsm.h include/helper.h include/layer3.h \
+		include/mlist.h include/mtimer.h $(SUPPSERV_INC)
+
 lib_LTLIBRARIES = libmisdn.la
-libmisdn_la_SOURCES = debug.c debug.h dss1.h dss1net.c dss1user.c fsm.c fsm.h helper.h layer3.c layer3.h mbuffer.c mlayer3.c mlist.h mtimer.c mtimer.h q931.c
-libmisdn_la_LDFLAGS = -version-info 2:1:2
+libmisdn_la_SOURCES = $(MISC_SRC) $(LAYER3_SRC) $(INCLUDE_SRC) $(ASN1_SRC) $(SUPPSERV_SRC)
+libmisdn_la_LDFLAGS = -version-info 1:0:0
 AM_CPPFLAGS = -I$(top_srcdir)/include
-CLEANFILES = *~
+CLEANFILES = *~ */*~
 all: all-am
 
 .SUFFIXES:
@@ -282,24 +305,133 @@ clean-libLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
+misc/$(am__dirstamp):
+	@$(MKDIR_P) misc
+	@: > misc/$(am__dirstamp)
+misc/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) misc/$(DEPDIR)
+	@: > misc/$(DEPDIR)/$(am__dirstamp)
+misc/debug.lo: misc/$(am__dirstamp) misc/$(DEPDIR)/$(am__dirstamp)
+misc/fsm.lo: misc/$(am__dirstamp) misc/$(DEPDIR)/$(am__dirstamp)
+misc/mbuffer.lo: misc/$(am__dirstamp) misc/$(DEPDIR)/$(am__dirstamp)
+misc/mtimer.lo: misc/$(am__dirstamp) misc/$(DEPDIR)/$(am__dirstamp)
+layer3/$(am__dirstamp):
+	@$(MKDIR_P) layer3
+	@: > layer3/$(am__dirstamp)
+layer3/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) layer3/$(DEPDIR)
+	@: > layer3/$(DEPDIR)/$(am__dirstamp)
+layer3/dss1net.lo: layer3/$(am__dirstamp) \
+	layer3/$(DEPDIR)/$(am__dirstamp)
+layer3/dss1user.lo: layer3/$(am__dirstamp) \
+	layer3/$(DEPDIR)/$(am__dirstamp)
+layer3/layer3.lo: layer3/$(am__dirstamp) \
+	layer3/$(DEPDIR)/$(am__dirstamp)
+layer3/mlayer3.lo: layer3/$(am__dirstamp) \
+	layer3/$(DEPDIR)/$(am__dirstamp)
+layer3/q931.lo: layer3/$(am__dirstamp) \
+	layer3/$(DEPDIR)/$(am__dirstamp)
+asn1/$(am__dirstamp):
+	@$(MKDIR_P) asn1
+	@: > asn1/$(am__dirstamp)
+asn1/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) asn1/$(DEPDIR)
+	@: > asn1/$(DEPDIR)/$(am__dirstamp)
+asn1/asn1.lo: asn1/$(am__dirstamp) asn1/$(DEPDIR)/$(am__dirstamp)
+asn1/asn1_enc.lo: asn1/$(am__dirstamp) asn1/$(DEPDIR)/$(am__dirstamp)
+asn1/asn1_generic.lo: asn1/$(am__dirstamp) \
+	asn1/$(DEPDIR)/$(am__dirstamp)
+suppserv/$(am__dirstamp):
+	@$(MKDIR_P) suppserv
+	@: > suppserv/$(am__dirstamp)
+suppserv/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) suppserv/$(DEPDIR)
+	@: > suppserv/$(DEPDIR)/$(am__dirstamp)
+suppserv/aoc.lo: suppserv/$(am__dirstamp) \
+	suppserv/$(DEPDIR)/$(am__dirstamp)
+suppserv/basic_service.lo: suppserv/$(am__dirstamp) \
+	suppserv/$(DEPDIR)/$(am__dirstamp)
+suppserv/component.lo: suppserv/$(am__dirstamp) \
+	suppserv/$(DEPDIR)/$(am__dirstamp)
+suppserv/diversion.lo: suppserv/$(am__dirstamp) \
+	suppserv/$(DEPDIR)/$(am__dirstamp)
+suppserv/address.lo: suppserv/$(am__dirstamp) \
+	suppserv/$(DEPDIR)/$(am__dirstamp)
+suppserv/ccbs.lo: suppserv/$(am__dirstamp) \
+	suppserv/$(DEPDIR)/$(am__dirstamp)
+suppserv/fac.lo: suppserv/$(am__dirstamp) \
+	suppserv/$(DEPDIR)/$(am__dirstamp)
+suppserv/ect.lo: suppserv/$(am__dirstamp) \
+	suppserv/$(DEPDIR)/$(am__dirstamp)
 libmisdn.la: $(libmisdn_la_OBJECTS) $(libmisdn_la_DEPENDENCIES) 
 	$(libmisdn_la_LINK) -rpath $(libdir) $(libmisdn_la_OBJECTS) $(libmisdn_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
+	-rm -f asn1/asn1.$(OBJEXT)
+	-rm -f asn1/asn1.lo
+	-rm -f asn1/asn1_enc.$(OBJEXT)
+	-rm -f asn1/asn1_enc.lo
+	-rm -f asn1/asn1_generic.$(OBJEXT)
+	-rm -f asn1/asn1_generic.lo
+	-rm -f layer3/dss1net.$(OBJEXT)
+	-rm -f layer3/dss1net.lo
+	-rm -f layer3/dss1user.$(OBJEXT)
+	-rm -f layer3/dss1user.lo
+	-rm -f layer3/layer3.$(OBJEXT)
+	-rm -f layer3/layer3.lo
+	-rm -f layer3/mlayer3.$(OBJEXT)
+	-rm -f layer3/mlayer3.lo
+	-rm -f layer3/q931.$(OBJEXT)
+	-rm -f layer3/q931.lo
+	-rm -f misc/debug.$(OBJEXT)
+	-rm -f misc/debug.lo
+	-rm -f misc/fsm.$(OBJEXT)
+	-rm -f misc/fsm.lo
+	-rm -f misc/mbuffer.$(OBJEXT)
+	-rm -f misc/mbuffer.lo
+	-rm -f misc/mtimer.$(OBJEXT)
+	-rm -f misc/mtimer.lo
+	-rm -f suppserv/address.$(OBJEXT)
+	-rm -f suppserv/address.lo
+	-rm -f suppserv/aoc.$(OBJEXT)
+	-rm -f suppserv/aoc.lo
+	-rm -f suppserv/basic_service.$(OBJEXT)
+	-rm -f suppserv/basic_service.lo
+	-rm -f suppserv/ccbs.$(OBJEXT)
+	-rm -f suppserv/ccbs.lo
+	-rm -f suppserv/component.$(OBJEXT)
+	-rm -f suppserv/component.lo
+	-rm -f suppserv/diversion.$(OBJEXT)
+	-rm -f suppserv/diversion.lo
+	-rm -f suppserv/ect.$(OBJEXT)
+	-rm -f suppserv/ect.lo
+	-rm -f suppserv/fac.$(OBJEXT)
+	-rm -f suppserv/fac.lo
 
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/debug.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dss1net.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dss1user.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fsm.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/layer3.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mbuffer.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mlayer3.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mtimer.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/q931.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@asn1/$(DEPDIR)/asn1.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@asn1/$(DEPDIR)/asn1_enc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@asn1/$(DEPDIR)/asn1_generic.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@layer3/$(DEPDIR)/dss1net.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@layer3/$(DEPDIR)/dss1user.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@layer3/$(DEPDIR)/layer3.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@layer3/$(DEPDIR)/mlayer3.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@layer3/$(DEPDIR)/q931.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@misc/$(DEPDIR)/debug.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@misc/$(DEPDIR)/fsm.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@misc/$(DEPDIR)/mbuffer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@misc/$(DEPDIR)/mtimer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@suppserv/$(DEPDIR)/address.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@suppserv/$(DEPDIR)/aoc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@suppserv/$(DEPDIR)/basic_service.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@suppserv/$(DEPDIR)/ccbs.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@suppserv/$(DEPDIR)/component.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@suppserv/$(DEPDIR)/diversion.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@suppserv/$(DEPDIR)/ect.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@suppserv/$(DEPDIR)/fac.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
@@ -330,6 +462,10 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+	-rm -rf asn1/.libs asn1/_libs
+	-rm -rf layer3/.libs layer3/_libs
+	-rm -rf misc/.libs misc/_libs
+	-rm -rf suppserv/.libs suppserv/_libs
 
 ID: $(HEADERS) $(SOURCES) $(LISP) $(TAGS_FILES)
 	list='$(SOURCES) $(HEADERS) $(LISP) $(TAGS_FILES)'; \
@@ -442,6 +578,14 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f asn1/$(DEPDIR)/$(am__dirstamp)
+	-rm -f asn1/$(am__dirstamp)
+	-rm -f layer3/$(DEPDIR)/$(am__dirstamp)
+	-rm -f layer3/$(am__dirstamp)
+	-rm -f misc/$(DEPDIR)/$(am__dirstamp)
+	-rm -f misc/$(am__dirstamp)
+	-rm -f suppserv/$(DEPDIR)/$(am__dirstamp)
+	-rm -f suppserv/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -452,7 +596,7 @@ clean-am: clean-generic clean-libLTLIBRARIES clean-libtool \
 	mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ./$(DEPDIR)
+	-rm -rf asn1/$(DEPDIR) layer3/$(DEPDIR) misc/$(DEPDIR) suppserv/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -498,7 +642,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ./$(DEPDIR)
+	-rm -rf asn1/$(DEPDIR) layer3/$(DEPDIR) misc/$(DEPDIR) suppserv/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
