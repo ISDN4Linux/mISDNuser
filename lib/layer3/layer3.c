@@ -2,9 +2,10 @@
  *
  * Basic Layer3 functions
  *
- * Author       Karsten Keil <kkeil@novell.com>
+ * Author       Karsten Keil <kkeil@linux-pingi.de>
  *
  * Copyright 2007  by Karsten Keil <kkeil@novell.com>
+ * Copyright 2010  by Karsten Keil <kkeil@linux-pingi.de>
  *
  * This code is free software; you can redistribute it and/or modify
  * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
@@ -24,6 +25,7 @@
 #include <sys/ioctl.h>
 #include <errno.h>
 #include <mISDN/q931.h>
+#include <mISDN/mlayer3.h>
 #include "layer3.h"
 #include "debug.h"
 
@@ -38,7 +40,7 @@ mIl3_debug(layer3_t *l3, char *fmt, ...)
 	p += sprintf(p, "l3 ");
 	p += vsprintf(p, fmt, args);
 	va_end(args);
-	dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s\n", buf);
+	dprint(DBGM_L3, "port%d %s\n", l3->l2master.l2addr.dev, buf);
 }
 
 void
@@ -60,7 +62,7 @@ mIpc_debug(u_int dmask, l3_process_t *pc, char *fmt, ...)
 	p += sprintf(p, "pc-%08x ", pc->pid);
 	p += vsprintf(p, fmt, args);
 	va_end(args);
-	dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s\n", buf);
+	dprint(DBGM_L3, "port%d %s\n", l3->l2master.l2addr.dev, buf);
 }
 
 static void
@@ -76,7 +78,7 @@ l3fi_debug(struct FsmInst *fi, char *fmt, ...)
 	p += sprintf(p, "l3 ");
 	p += vsprintf(p, fmt, args);
 	va_end(args);
-	dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s\n", buf);
+	dprint(DBGM_L3, "port%d %s\n", l3->l2master.l2addr.dev, buf);
 }
 
 static
@@ -352,7 +354,7 @@ release_l3_process(l3_process_t *pc)
 	free(pc);
 	pc = get_first_l3process4ces(l3, ces);
 	if ((!pc) && !test_bit(MISDN_FLG_L2_HOLD, &l3->ml3.options)) {
-		dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s: tei %d idle\n", __func__, l2i->l2addr.tei);
+		dprint(DBGM_L3, "port%d: tei %d idle\n", l3->l2master.l2addr.dev, l2i->l2addr.tei);
 		l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2IDLE, l2i->l2addr.tei, NULL);
 //		if (!mqueue_len(&l2i->squeue)) {
 //			FsmEvent(&l2i->l3m, EV_RELEASE_REQ, NULL);
@@ -368,10 +370,12 @@ l3ml3p(layer3_t *l3, int pr, unsigned int ces)
 
 	list_for_each_entry_safe(p, np, &l3->plist, list) {
 		p_ces = (p->pid >> 16) & 0xffff;
-		dprint(DBGM_L2, l3->l2master.l2addr.dev, "%s: pr %s tei:%d pid %x ces %x/%x\n", __func__,
-			_mi_msg_type2str(pr), l3->l2master.l2addr.tei, p->pid, ces, p_ces);
+		dprint(DBGM_L2, "port%d: pr %s tei:%d pid %x ces %x/%x\n",
+			l3->l2master.l2addr.dev, _mi_msg_type2str(pr),
+			l3->l2master.l2addr.tei, p->pid, ces, p_ces);
 		if ((p_ces == ces) || (p_ces == MISDN_CES_MASTER)) {
-			dprint(L3_DEB_PROC, l3->l2master.l2addr.dev, "%s: send to l3proc pid=%x\n", __func__, p->pid);
+			dprint(L3_DEB_PROC, "port%d: send to l3proc pid=%x\n",
+				l3->l2master.l2addr.dev, p->pid);
 			l3->p_mgr(p, pr, NULL);
 		}
 	}
@@ -410,7 +414,9 @@ l3down(struct l2l3if *l2i, u_int prim, struct mbuffer *mb)
 		mb->h->id = 0;
 		mb->addr = l2i->l2addr;
 	}
-	dprint(DBGM_L3DATA, l2i->l3->l2master.l2addr.dev, "%s send %s to tei %d\n", __func__, _mi_msg_type2str(prim), l2i->l2addr.tei);
+	dprint(DBGM_L3DATA, "port%d send %s to tei %d\n",
+		l2i->l3->l2master.l2addr.dev,
+		_mi_msg_type2str(prim), l2i->l2addr.tei);
 	ret = sendto(l2i->l3->l2sock, mb->head, mb->len, 0, (struct sockaddr *)&mb->addr, sizeof(mb->addr));
 	if (ret < 0)
 		eprint("%s write socket error %s\n", __FUNCTION__, strerror(errno));
@@ -582,8 +588,8 @@ to_layer3(struct mlayer3 *ml3, unsigned int prim, unsigned int pid, struct l3_ms
 		proc = create_new_process(l3, MISDN_CES_MASTER, 0, NULL);
 		if (!proc)
 			return -EBUSY;
-		dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s: new procpid(%x)\n",
-			__FUNCTION__, proc->pid);
+		dprint(DBGM_L3, "port%d: new procpid(%x)\n",
+			l3->l2master.l2addr.dev, proc->pid);
 		ml3->from_layer3(ml3, MT_ASSIGN, proc->pid, NULL);
 		break;
 	case MT_L2ESTABLISH:
@@ -673,8 +679,8 @@ create_l2l3if(layer3_t *l3, struct sockaddr_mISDN *addr)
 	else
 		l2i = get_l2if(l3, addr->channel);
 	if (l2i) {
-		dprint(DBGM_L3, l2i->l2addr.dev, "%s: changing tei: chan(%x) old tei(%x) new tei(%x)\n",
-			__FUNCTION__, addr->channel, addr->tei, l2i->l2addr.tei);
+		dprint(DBGM_L3, "port%d: changing tei: chan(%x) old tei(%x) new tei(%x)\n",
+			l2i->l2addr.dev, addr->channel, addr->tei, l2i->l2addr.tei);
 		l2i->l2addr = *addr;
 		return l2i;
 	}
@@ -686,8 +692,8 @@ create_l2l3if(layer3_t *l3, struct sockaddr_mISDN *addr)
 	init_l2if(l2i, l3);
 	l2i->l2addr = *addr;
 	list_add_tail(&l2i->list, &l3->l2master.list);
-	dprint(DBGM_L3, l2i->l2addr.dev, "%s: creating tei: chan(%x) tei(%x)\n",
-		__FUNCTION__, addr->channel, addr->tei);
+	dprint(DBGM_L3, "port%d: creating tei: chan(%x) tei(%x)\n",
+		l2i->l2addr.dev, addr->channel, addr->tei);
 	return l2i;
 }
 
@@ -773,13 +779,13 @@ handle_l2msg(struct _layer3 *l3, struct mbuffer *mb)
 	switch (mb->h->prim) {
 	case DL_DATA_IND:
 	case DL_UNITDATA_IND:
-		dprint(DBGM_L3, mb->addr.dev, "%s: DL_(UNIT)DATA_IND: chan(%x) tei(%x)\n",
-			__FUNCTION__, mb->addr.channel, mb->addr.tei);
+		dprint(DBGM_L3, "port%d: DL_(UNIT)DATA_IND: chan(%x) tei(%x)\n",
+			mb->addr.dev, mb->addr.channel, mb->addr.tei);
 		l3->from_l2(l3, mb);
 		return;
 	case DL_INFORMATION_IND:
-		dprint(DBGM_L3, mb->addr.dev, "%s: DL_INFORMATION_IND: chan(%x) tei(%x)\n",
-			__FUNCTION__, mb->addr.channel, mb->addr.tei);
+		dprint(DBGM_L3, "port%d: DL_INFORMATION_IND: chan(%x) tei(%x)\n",
+			mb->addr.dev, mb->addr.channel, mb->addr.tei);
 		l2i = create_l2l3if(l3, &mb->addr);
 		goto free_out;
 	case MPH_INFORMATION_IND:
@@ -797,27 +803,28 @@ handle_l2msg(struct _layer3 *l3, struct mbuffer *mb)
 	}
 	switch (mb->h->prim) {
 	case DL_ESTABLISH_CNF:
-		dprint(DBGM_L3, mb->addr.dev, "%s: DL_ESTABLISH_CNF: chan(%x) tei(%x)\n",
-			__FUNCTION__, mb->addr.channel, mb->addr.tei);
+		dprint(DBGM_L3, "port%d: DL_ESTABLISH_CNF: chan(%x) tei(%x)\n",
+			mb->addr.dev, mb->addr.channel, mb->addr.tei);
 		FsmEvent(&l2i->l3m, EV_ESTABLISH_CNF, NULL);
 		break;
 	case DL_ESTABLISH_IND:
-		dprint(DBGM_L3, mb->addr.dev, "%s: DL_ESTABLISH_IND: chan(%x) tei(%x)\n",
-			__FUNCTION__, mb->addr.channel, mb->addr.tei);
+		dprint(DBGM_L3, "port%d: DL_ESTABLISH_IND: chan(%x) tei(%x)\n",
+			mb->addr.dev, mb->addr.channel, mb->addr.tei);
 		FsmEvent(&l2i->l3m, EV_ESTABLISH_IND, NULL);
 		break;
 	case DL_RELEASE_IND:
-		dprint(DBGM_L3, mb->addr.dev, "%s: DL_RELEASE_IND: chan(%x) tei(%x)\n",
-			__FUNCTION__, mb->addr.channel, mb->addr.tei);
+		dprint(DBGM_L3, "port%d: DL_RELEASE_IND: chan(%x) tei(%x)\n",
+			mb->addr.dev, mb->addr.channel, mb->addr.tei);
 		FsmEvent(&l2i->l3m, EV_RELEASE_IND, NULL);
 		break;
 	case DL_RELEASE_CNF:
-		dprint(DBGM_L3, mb->addr.dev, "%s: DL_RELEASE_CNF: chan(%x) tei(%x)\n",
-			__FUNCTION__, mb->addr.channel, mb->addr.tei);
+		dprint(DBGM_L3, "port%d: DL_RELEASE_CNF: chan(%x) tei(%x)\n",
+			mb->addr.dev, mb->addr.channel, mb->addr.tei);
 		FsmEvent(&l2i->l3m, EV_RELEASE_CNF, NULL);
 		break;
 	default:
-		dprint(DBGM_L3, mb->addr.dev, "%s: unknown prim(%x) chan(%x)\n", __FUNCTION__,  mb->h->prim, mb->addr.channel);
+		dprint(DBGM_L3, "port%d: unknown prim(%x) chan(%x)\n",
+			mb->addr.dev,  mb->h->prim, mb->addr.channel);
 	}
 free_out:
 	free_mbuffer(mb);
@@ -829,10 +836,12 @@ to_l2(layer3_t *l3, struct l3_msg *l3m)
 	struct l2l3if	*l2i;
 
 	/* given tei or 0=first tei, but not 127 */
-	dprint(DBGM_L3, l3->l2master.l2addr.dev, "got %s tei %d\n", _mi_msg_type2str(l3m->type), l3m->pid);
+	dprint(DBGM_L3, "port%d got %s tei %d\n",
+		l3->l2master.l2addr.dev, _mi_msg_type2str(l3m->type), l3m->pid);
 	if (l3m->pid == l3->l2master.l2addr.tei
 	 || (l3m->pid == 0 && l3->l2master.l2addr.tei != 127)) {
-		dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s tei %d match first\n", _mi_msg_type2str(l3m->type), l3m->pid);
+		dprint(DBGM_L3, "port%d %s tei %d match first\n",
+			l3->l2master.l2addr.dev, _mi_msg_type2str(l3m->type), l3m->pid);
 		switch(l3m->type) {
 		case MT_L2ESTABLISH:
 			FsmEvent(&l3->l2master.l3m, EV_ESTABLISH_REQ, NULL);
@@ -848,7 +857,8 @@ to_l2(layer3_t *l3, struct l3_msg *l3m)
 		/* given tei or 0=first tei, but not 127 */
 		if (l3m->pid == l2i->l2addr.tei
 		 || (l3m->pid == 0 && l2i->l2addr.tei != 127)) {
-			dprint(DBGM_L3, l3->l2master.l2addr.dev, "%s tei %d match second\n", _mi_msg_type2str(l3m->type), l3m->pid);
+			dprint(DBGM_L3, "port%d %s tei %d match second\n", l3->l2master.l2addr.dev,
+				_mi_msg_type2str(l3m->type), l3m->pid);
 			switch(l3m->type) {
 			case MT_L2ESTABLISH:
 				FsmEvent(&l2i->l3m, EV_ESTABLISH_REQ, NULL);
@@ -919,7 +929,8 @@ layer3_thread(void *arg)
 		}
 		if (l3->l2master.l3m.state == ST_L3_LC_ESTAB) {
 			while ((mb = mdequeue(&l3->l2master.squeue))) {
-				dprint(DBGM_L3DATA, l3->l2master.l2addr.dev, "%s send %s to tei %d\n", __func__, _mi_msg_type2str(mb->h->prim), mb->addr.tei);
+				dprint(DBGM_L3DATA, "port%d send %s to tei %d\n",
+					l3->l2master.l2addr.dev, _mi_msg_type2str(mb->h->prim), mb->addr.tei);
 				ret = sendto(l3->l2sock, mb->head, mb->len, 0, (struct sockaddr *)&mb->addr, sizeof(mb->addr));
 				if (ret < 0)
 					eprint("%s write socket error %s\n", __FUNCTION__, strerror(errno));
@@ -929,7 +940,8 @@ layer3_thread(void *arg)
 		list_for_each_entry(l2i, &l3->l2master.list, list) {
 			if (l2i->l3m.state == ST_L3_LC_ESTAB) {
 				while ((mb = mdequeue(&l2i->squeue))) {
-					dprint(DBGM_L2, mb->addr.dev, "send msg (%s) len=%d to L2 tei %d\n", _mi_msg_type2str(mb->h->prim), mb->len, mb->addr.tei);
+					dprint(DBGM_L2, "port%d send msg (%s) len=%d to L2 tei %d\n",
+						mb->addr.dev, _mi_msg_type2str(mb->h->prim), mb->len, mb->addr.tei);
 					ret = sendto(l3->l2sock, mb->head, mb->len, 0, (struct sockaddr *)&mb->addr, sizeof(mb->addr));
 					if (ret < 0)
 						eprint("%s write socket error %s\n", __FUNCTION__, strerror(errno));
@@ -966,7 +978,7 @@ l3_start(struct _layer3 *l3)
 
 	pthread_mutex_lock(&l3->run);
 	test_and_set_bit(FLG_RUN_WAIT, &l3->ml3.options);
-	ret = pthread_create(&l3->worker, NULL, layer3_thread, (void *)l3);
+	ret = mi_thread_create(&l3->worker, NULL, layer3_thread, (void *)l3);
 	if (ret) {
 		eprint("%s cannot start worker thread  %s\n", __FUNCTION__, strerror(errno));
 	} else

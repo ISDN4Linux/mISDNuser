@@ -1,10 +1,11 @@
 /* debug.c
  *
- * Basic Layer3 functions
+ * mISDN lib debug functions
  *
- * Author       Karsten Keil <kkeil@novell.com>
+ * Author       Karsten Keil <kkeil@linux-pingi.de>
  *
- * Copyright 2007  by Karsten Keil <kkeil@novell.com>
+ * Copyright 2007 by Karsten Keil <kkeil@novell.com>
+ * Copyright 2009, 2010 by Karsten Keil <kkeil@linux-pingi.de>
  *
  * This code is free software; you can redistribute it and/or modify
  * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
@@ -17,169 +18,145 @@
  *
  */
 #include <stdarg.h>
+#include <stdio.h>
 #include <time.h>
 #include <string.h>
 #include "debug.h"
+#include <mISDN/mlayer3.h>
+
+unsigned int		mI_debug_mask;
 
 
-unsigned int	mI_debug_mask;
+#ifdef MEMLEAK_DEBUG
 
-static FILE		*debug_file = NULL;
-static FILE		*warn_file = NULL;
-static FILE		*error_file = NULL;
+#undef malloc
+#undef calloc
+#undef free
 
-int
-mISDN_debug_init(unsigned int mask, char *dfile, char *wfile, char *efile)
+void *
+__mi_alloc(size_t size, const char *file, int lineno, const char *func)
 {
-	mI_debug_mask = mask;
-	if (dfile) {
-		if (debug_file && (debug_file != stderr))
-			debug_file = freopen(dfile, "a", debug_file);
-		else
-			debug_file = fopen(dfile, "a");
-		if (!debug_file) {
-			debug_file = stderr;
-			fprintf(debug_file,
-				"%s: cannot open %s for debug log, using stderr\n",
-				__FUNCTION__, dfile);
-		}
-	} else {
-		if (!debug_file) {
-			debug_file = stderr;
-		}
-	}
-	if (wfile) {
-		if (warn_file && (warn_file != stderr))
-			warn_file = freopen(wfile, "a", warn_file);
-		else
-			warn_file = fopen(wfile, "a");
-		if (!warn_file) {
-			warn_file = stderr;
-			fprintf(warn_file,
-				"%s: cannot open %s for warning log, using stderr\n",
-				__FUNCTION__, wfile);
-		}
-	} else {
-		if (!warn_file) {
-			warn_file = stderr;
-		}
-	}
-	if (efile) {
-		if (error_file && (error_file != stderr))
-			error_file = freopen(efile, "a", error_file);
-		else
-			error_file = fopen(efile, "a");
-		if (!error_file) {
-			error_file = stderr;
-			fprintf(error_file,
-				"%s: cannot open %s for error log, using stderr\n",
-				__FUNCTION__, efile);
-		}
-	} else {
-		if (!error_file) {
-			error_file = stderr;
-		}
-	}
-	return 0;
+	void *p;
+
+	if (mi_extern_func && mi_extern_func->malloc)
+		p = mi_extern_func->malloc(size, file, lineno, func);
+	else
+		p = malloc(size);
+	return p;
+}
+
+void *
+__mi_calloc(size_t nmemb, size_t size, const char *file, int lineno, const char *func)
+{
+	void *p;
+
+	if (mi_extern_func && mi_extern_func->calloc)
+		p = mi_extern_func->calloc(nmemb, size, file, lineno, func);
+	else
+		p = calloc(nmemb, size);
+	return p;
 }
 
 void
-mISDN_debug_close(void)
+__mi_free(void *ptr, const char *file, int lineno, const char *func)
 {
-	if (debug_file && (debug_file != stderr))
-		fclose(debug_file);
-	if (warn_file && (warn_file != stderr))
-		fclose(warn_file);
-	if (error_file && (error_file != stderr))
-		fclose(error_file);
+	if (mi_extern_func && mi_extern_func->free)
+		mi_extern_func->free(ptr, file, lineno, func);
+	else
+		free(ptr);
+}
+
+void __mi_reuse(void *ptr, const char *file, int lineno, const char *func)
+{
+	if (mi_extern_func && mi_extern_func->reuse)
+		mi_extern_func->reuse(ptr, file, lineno, func);
+}
+
+#endif
+
+
+
+void
+mISDN_set_debug_level(unsigned int mask)
+{
+	mI_debug_mask = mask;
 }
 
 int
-dprint(unsigned int mask, int port, const char *fmt, ...)
+mi_printf(const char *file, int line, const char *func, int lev, const char *fmt, ...)
 {
 	int	ret = 0;
 	va_list	args;
-	time_t tm = time(NULL);
-	char *tmp=ctime(&tm),*p;
-
-	p=strchr(tmp,'\n');
-	if (p) *p=':';
 
 	va_start(args, fmt);
-	if (mI_debug_mask & mask) {
-		if (debug_file != stderr)
-			fprintf(debug_file, "%s P(%02d): L(0x%02x):",tmp, port,mask);
-		ret = vfprintf(debug_file, fmt, args);
-		if (debug_file != stderr)
-			fflush(debug_file);
+	if (mi_extern_func && mi_extern_func->prt_debug) {
+		ret = mi_extern_func->prt_debug(file, line, func, lev, fmt, args);
+	} else {
+		FILE *f = stderr;
+
+		if (lev == MISDN_LIBDEBUG_DEBUG || lev == MISDN_LIBDEBUG_INFO)
+			f = stdout;
+		ret = vfprintf(f, fmt, args);
+		fflush(f);
 	}
 	va_end(args);
 	return ret;
 }
 
 int
-iprint(const char *fmt, ...)
+_mi_thread_create(pthread_t *thread, pthread_attr_t *attr, void *(*start_routine) (void *),
+			void *arg, const char *file, const char *caller, int line, const char *start_fn)
 {
-	int	ret = 0;
-	va_list	args;
+	int ret;
 
-	va_start(args, fmt);
-	if (debug_file != stderr) {
-		ret = vfprintf(debug_file, fmt, args);
-		fflush(debug_file);
-	}
-	va_end(args);
-	return(ret);
+	if (mi_extern_func && mi_extern_func->thread_create)
+		ret = mi_extern_func->thread_create(thread, attr, start_routine, arg, file, caller, line, start_fn);
+	else
+		ret = pthread_create(thread, attr, start_routine, arg);
+	return ret;
 }
 
-
-int
-wprint(const char *fmt, ...)
+void
+mi_dhexprint(const char *file, int line, const char *func, char *head, unsigned char *buf, int len)
 {
-	int	ret = 0;
-	va_list	args;
-
-	va_start(args, fmt);
-	ret = vfprintf(warn_file, fmt, args);
-	fflush(warn_file);
-	va_end(args);
-	return(ret);
-}
-
-
-int
-eprint(const char *fmt, ...)
-{
-	int	ret = 0;
-	va_list	args;
-
-	va_start(args, fmt);
-	ret = vfprintf(error_file, fmt, args);
-	fflush(error_file);
-	va_end(args);
-	return(ret);
-}
-
-int
-dhexprint(unsigned int mask, char *head, unsigned char *buf, int len)
-{
-	int	ret = 0;
+	int	ret = 0,i;
 	char	*p,*obuf;
 
-	if (mI_debug_mask & mask) {
-		obuf = malloc(3*(len+1));
-		if (!obuf)
-			return(-ENOMEM);
-		p = obuf;
-		while (len) {
-			p += sprintf(p,"%02x ", *buf);
-			buf++;
-			len--;
+
+	obuf = malloc(100);
+	if (!obuf)
+		return;
+	p = obuf;
+	*p = 0;
+	for (i = 1; i <= len; i++) {
+		p += sprintf(p, "%02x ", *buf);
+		buf++;
+		if (!(i % 32)) {
+			p--;
+			*p = 0;
+			mi_printf(file, line, func, MISDN_LIBDEBUG_DEBUG, "%s %s\n", head, obuf);
+			p = obuf;
+			*p = 0;
 		}
-		p--;
-		*p=0;
-		ret = fprintf(debug_file, "%s %s\n", head, obuf);
-		free(obuf);
 	}
-	return(ret);
+	if (*obuf) {
+		p--;
+		*p = 0;
+		mi_printf(file, line, func, MISDN_LIBDEBUG_DEBUG, "%s %s\n", head, obuf);
+	}
+	free(obuf);
+}
+
+void
+mi_shexprint(char *dest, unsigned char *buf, int len)
+{
+	char *p = dest;
+
+	while (len) {
+		p += sprintf(p, "%02x ", *buf);
+		buf++;
+		len--;
+	}
+	p--;
+	*p = 0;
 }

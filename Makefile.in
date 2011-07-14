@@ -146,6 +146,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
 MAKEINFO = @MAKEINFO@
+MEMLEAKDEBUG_COMPILE = @MEMLEAKDEBUG_COMPILE@
 MISDN_AF_ISDN_VAL = @MISDN_AF_ISDN_VAL@
 MKDIR_P = @MKDIR_P@
 NM = @NM@
@@ -706,6 +707,11 @@ uninstall-am:
 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
 	tags tags-recursive uninstall uninstall-am
 
+
+export _MEMLEAKDEBUG
+
+@MEMLEAKDEBUG_TRUE@	_MEMLEAKDEBUG = "-DMEMLEAK_DEBUG=1"
+@MEMLEAKDEBUG_FALSE@	_MEMLEAKDEBUG =
 
 @GIT_REPO_TRUE@ChangeLog: .git/objects
 @GIT_REPO_TRUE@	git log > $@

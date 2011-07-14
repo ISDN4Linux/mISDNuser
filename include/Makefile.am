@@ -4,4 +4,4 @@ nobase_nodist_include_HEADERS = mISDN/mISDNcompat.h
 # private mISDNuser code fragment
 noinst_HEADERS = mISDN/af_isdn.h
 
-CLEANFILES = *~
+CLEANFILES = *~ mISDN/*~

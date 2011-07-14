@@ -1217,10 +1217,33 @@ int do_setup(devinfo_t *di) {
 	return 0;
 }
 
+static int my_lib_debug(const char *file, int line, const char *func, int level, const char *fmt, va_list va)
+{
+	int ret;
+	char log[256];
+
+	ret = vsnprintf(log, 256, fmt, va);
+	if (VerifyOn > 3) {
+		if (level > MISDN_LIBDEBUG_WARN)
+			fprintf(stdout, "%20s:%4d %20s %s", file, line, func, log);
+		else
+			fprintf(stderr, "%20s:%4d %20s %s", file, line, func, log);
+	} else {
+		if (level > MISDN_LIBDEBUG_WARN)
+			fprintf(stdout, "%s", log);
+		else
+			fprintf(stderr, "%s", log);
+	}
+	return ret;
+}
+
+static struct mi_ext_fn_s myfn = {
+                         .prt_debug = my_lib_debug,
+};
+
 int main(argc,argv)
 int argc;
 char *argv[];
-
 {
 	char FileName[200],FileNameOut[200];
 	int aidx=1,para=1, idx, af;
@@ -1323,7 +1346,9 @@ char *argv[];
 		} while (aidx<argc);
 	}
 
-	init_layer3(4);
+	init_layer3(4, &myfn);
+	if (VerifyOn > 2)
+		mISDN_set_debug_level(0xffffffff);
 
 	err = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (err < 0) {
@@ -1334,8 +1359,7 @@ char *argv[];
 	close(err);
 	sprintf(FileNameOut,"%s.out",FileName);
 	sprintf(FileName,"%s.in",FileName);
-	if (VerifyOn > 2)
-		mISDN_debug_init(0xffffffff, "testlayer3.debug", "testlayer3.warn", "testlayer3.error");
+
 	if (0>(mISDN.save = open(FileName, O_WRONLY|O_CREAT|O_TRUNC,S_IRWXU))) {
 		printf("TestmISDN cannot open %s due to %s\n",FileName,
 			strerror(errno));
@@ -1357,6 +1381,5 @@ char *argv[];
 		close(mISDN.play);
 	if (mISDN.bchan > 0)
 		close(mISDN.bchan);
-	mISDN_debug_close();
 	return 0;
 }

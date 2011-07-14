@@ -313,39 +313,39 @@ l3dss1_get_cid(l3_process_t *pc, struct l3_msg *l3m) {
 	memset(pc->cid, 0, 4); /* clear cid */
 
 	if (!l3m->channel_id) {
-		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s no channel id\n", __FUNCTION__);
+		dprint(DBGM_L3, "port%d no channel id\n", pc->l2if->l2addr.dev);
 		return -1;
 	}
 	if (l3m->channel_id[0] < 1) {
-		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id short read\n", __FUNCTION__);
+		dprint(DBGM_L3, "port%d ERROR: channel id short read\n", pc->l2if->l2addr.dev);
 		return -2;
 	}
 	if (l3m->channel_id[0] > 3) {
-		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id too large\n", __FUNCTION__);
+		dprint(DBGM_L3, "port%d ERROR: channel id too large\n", pc->l2if->l2addr.dev);
 		return -3;
 	}
 	if (l3m->channel_id[1] & 0x40) {
-		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id for adjected channels not supported\n", __FUNCTION__);
+		dprint(DBGM_L3, "port%d ERROR: channel id for adjected channels not supported\n", pc->l2if->l2addr.dev);
 		return -4;
 	}
 	if (l3m->channel_id[1] & 0x04) {
-		dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s channel id with dchannel\n", __FUNCTION__);
+		dprint(DBGM_L3, "port%d channel id with dchannel\n", pc->l2if->l2addr.dev);
 		goto done;
 	}
 	if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
 		if (l3m->channel_id[1] & 0x20) {
-			dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id not for BRI interface\n", __FUNCTION__);
+			dprint(DBGM_L3, "port%d ERROR: channel id not for BRI interface\n", pc->l2if->l2addr.dev);
 			return -11;
 		}
 	} else { /* primary rate */
 		if (!(l3m->channel_id[1] & 0x20)) {
-			dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id not for PRI interface\n", __FUNCTION__);
+			dprint(DBGM_L3, "port%d ERROR: channel id not for PRI interface\n", pc->l2if->l2addr.dev);
 			return -11;
 		}
 		if (l3m->channel_id[0] < 3)
 			goto done;
 		if (l3m->channel_id[2] & 0x10) { /* map not allowed by ETSI */
-			dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s ERROR: channel id uses channel map\n", __FUNCTION__);
+			dprint(DBGM_L3, "port%d ERROR: channel id uses channel map\n", pc->l2if->l2addr.dev);
 			return -12;
 		}
 	}
@@ -881,7 +881,7 @@ l3dss1_setup(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_register(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	dprint(DBGM_L3, pc->l2if->l2addr.dev, "%s\n", __FUNCTION__);
+	dprint(DBGM_L3, "port%d REGISTER\n", pc->l2if->l2addr.dev);
 	newl3state(pc, 31);
 	mISDN_l3up(pc, MT_REGISTER, l3m);
 }
@@ -2157,10 +2157,10 @@ dss1_fromdown(layer3_t *l3, struct mbuffer *msg)
 			}
 			switch (msg->l3h.type) {
 				case MT_SETUP:
-					dprint(DBGM_L3, msg->addr.dev, "%s: MT_SETUP\n", __FUNCTION__);
+					dprint(DBGM_L3, "port%d: MT_SETUP\n", msg->addr.dev);
 					break;
 				case MT_REGISTER:
-					dprint(DBGM_L3, msg->addr.dev, "%s: MT_REGISTER\n", __FUNCTION__);
+					dprint(DBGM_L3, "port%d: MT_REGISTER\n", msg->addr.dev);
 					break;
 			}
 			if (!(proc = create_new_process(l3, msg->addr.channel,msg->l3h.cr, NULL))) {
@@ -2217,7 +2217,7 @@ dss1_fromdown(layer3_t *l3, struct mbuffer *msg)
 			 * (except MT_SETUP and RELEASE_COMPLETE) is received,
 			 * we must send MT_RELEASE_COMPLETE cause 81 */
 
-			dprint(DBGM_L3, msg->addr.dev, "%s: mt(%x) without callref (maybe former process)\n", __FUNCTION__, msg->l3.type);
+			dprint(DBGM_L3, "port%d: mt(%x) without callref (maybe former process)\n", msg->addr.dev, msg->l3.type);
 			if ((proc = create_new_process(l3, msg->addr.channel,msg->l3h.cr, NULL))) {
 				l3dss1_msg_without_setup(proc, CAUSE_INVALID_CALLREF);
 			}

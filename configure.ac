@@ -67,6 +67,23 @@ then
 	fi
 fi
 
+AC_ARG_ENABLE([memleak_debug],
+	[  --enable-memleak_debug    Turn on debugging of memleaks],
+	[case "${enableval}" in
+		yes) memleak_debug=true ;;
+		no)  memleak_debug=false ;;
+		*) AC_MSG_ERROR([bad value ${enableval} for --enable-memleak_debug]) ;;
+	esac],
+	[debug=false])
+
+AM_CONDITIONAL([MEMLEAKDEBUG], [test x$memleak_debug = xtrue])
+if test x$memleak_debug = xtrue ; then
+	MEMLEAKDEBUG_COMPILE=1
+else
+	MEMLEAKDEBUG_COMPILE=0
+fi
+AC_SUBST(MEMLEAKDEBUG_COMPILE)
+
 # Checks for library functions.
 AC_FUNC_FORK
 AC_FUNC_MALLOC

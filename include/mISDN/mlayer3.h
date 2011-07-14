@@ -1,8 +1,9 @@
 /* mlayer3.h
  *
- * Author       Karsten Keil <kkeil@novell.com>
+ * Author       Karsten Keil <kkeil@linux-pingi.de>
  *
  * Copyright 2007  by Karsten Keil <kkeil@novell.com>
+ * Copyright 2011  by Karsten Keil <kkeil@linux-pingi.de>
  *
  * This code is free software; you can redistribute it and/or modify
  * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
@@ -20,6 +21,14 @@
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+#include <stdarg.h>
+#include <pthread.h>
+#include <mISDN/mISDNcompat.h>
+
+#undef MEMLEAK_DEBUG
+#if MEMLEAKDEBUG_COMPILE
+#define MEMLEAK_DEBUG 1
 #endif
 
 struct l3_head {
@@ -65,8 +74,8 @@ struct l3_msg {
 	unsigned char	*calling_sub;
 	unsigned char	*called_nr;
 	unsigned char	*called_sub;
-	unsigned char	*redirect_nr;
-	unsigned char	*redirect_dn;
+	unsigned char	*redirecting_nr;
+	unsigned char	*redirection_nr;
 	unsigned char	*transit_net_sel;
 	unsigned char	*restart_ind;
 	unsigned char	*llc;
@@ -90,6 +99,31 @@ struct mlayer3;
  */
 typedef int (mlayer3_cb_t)(struct mlayer3 *, unsigned int, unsigned int, struct l3_msg *);
 
+
+/* debug helper */
+#define MISDN_LIBDEBUG_ERROR	1
+#define MISDN_LIBDEBUG_WARN	2
+#define MISDN_LIBDEBUG_INFO	3
+#define MISDN_LIBDEBUG_DEBUG	4
+
+typedef int (*mi_thread_create_t)(pthread_t *thread, pthread_attr_t *attr, void *(*start_routine) (void *),
+			void *arg, const char *file, const char *caller, int line, const char *start_fn);
+typedef int (*mi_debug_t)(const char *file, int line, const char *func, int level, const char *fmt, va_list va);
+typedef void * (*mi_malloc_t)(size_t size, const char *file, int line, const char *func);
+typedef void * (*mi_calloc_t)(size_t nmemb, size_t size, const char *file, int line, const char *func);
+typedef void (*mi_free_t)(void *ptr, const char *file, int line, const char *func);
+
+
+struct mi_ext_fn_s {
+	mi_thread_create_t	thread_create;
+	mi_debug_t		prt_debug;
+	mi_malloc_t		malloc;
+	mi_calloc_t		calloc;
+	mi_free_t		reuse;
+	mi_free_t		free;
+};
+
+extern struct mi_ext_fn_s *mi_extern_func;
 
 /*
  * To avoid to include always all headers needed for mISDNif.h we redefine MISDN_CHMAP_SIZE here
@@ -170,9 +204,10 @@ struct mlayer3 {
  * init layer3 statemachines and caches
  * must be called before first open
  * @parameter count of cached mbuffers
+ * @parameter optional block of external functions for debug
  * @return: interface version
  */
-extern unsigned int	init_layer3(int);
+extern unsigned int	init_layer3(int, struct mi_ext_fn_s *);
 
 /*
  * cleanup layer3 statemachines and chaches
@@ -199,13 +234,22 @@ extern void		close_layer3(struct mlayer3 *);
 extern unsigned int	request_new_pid(struct mlayer3 *);
 extern int		mISDN_get_pcm_slots(struct mlayer3 *, int, int *, int *);
 extern int		mISDN_set_pcm_slots(struct mlayer3 *, int, int, int);
-extern struct l3_msg	*alloc_l3_msg(void);
-extern void		free_l3_msg(struct l3_msg *);
 extern int		add_layer3_ie(struct l3_msg *, unsigned char, int, unsigned char *);
 extern void		l3_msg_increment_refcnt(struct l3_msg *);
 
-extern	int		mISDN_debug_init(unsigned int, char *, char *, char *);
-extern	void		mISDN_debug_close(void);
+#ifdef MEMLEAK_DEBUG
+extern struct l3_msg    *__alloc_l3_msg(const char *file, int lineno, const char *func);
+extern void             __free_l3_msg(struct l3_msg *, const char *file, int lineno, const char *func);
+
+#define alloc_l3_msg()  __alloc_l3_msg(__FILE__, __LINE__, __PRETTY_FUNCTION__)
+#define free_l3_msg(p)  __free_l3_msg(p, __FILE__, __LINE__, __PRETTY_FUNCTION__)
+
+#else
+extern struct l3_msg    *alloc_l3_msg(void);
+extern void             free_l3_msg(struct l3_msg *);
+#endif
+
+extern  void		mISDN_set_debug_level(unsigned int);
 
 #ifdef __cplusplus
 }

@@ -1,8 +1,9 @@
 /* mbuffer.h
  *
- * Author       Karsten Keil <kkeil@novell.com>
+ * Author       Karsten Keil <kkeil@linux-pingi.de>
  *
  * Copyright 2007  by Karsten Keil <kkeil@novell.com>
+ * Copyright 2011  by Karsten Keil <kkeil@linux-pingi.de>
  *
  * This code is free software; you can redistribute it and/or modify
  * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
@@ -67,16 +68,31 @@ extern void		init_mbuffer(int);
  */
 extern void		cleanup_mbuffer(void);
 
+#ifdef MEMLEAK_DEBUG
 /*
  * alloc a new mbuffer
  */
 
+extern struct mbuffer	*__alloc_mbuffer(const char *file, int lineno, const char *func);
+
+/*
+ * free the message
+ */
+extern void		__free_mbuffer(struct mbuffer *, const char *file, int lineno, const char *func);
+
+#define alloc_mbuffer()	__alloc_mbuffer(__FILE__, __LINE__, __PRETTY_FUNCTION__)
+#define free_mbuffer(p)	__free_mbuffer(p, __FILE__, __LINE__, __PRETTY_FUNCTION__)
+#else
+/*
+ * alloc a new mbuffer
+ */
 extern struct mbuffer	*alloc_mbuffer(void);
 
 /*
  * free the message 
  */
 extern void		free_mbuffer(struct mbuffer *);
+#endif
 
 static inline void
 mqueue_init(struct mqueue *q)

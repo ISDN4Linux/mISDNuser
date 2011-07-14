@@ -148,6 +148,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
 MAKEINFO = @MAKEINFO@
+MEMLEAKDEBUG_COMPILE = @MEMLEAKDEBUG_COMPILE@
 MISDN_AF_ISDN_VAL = @MISDN_AF_ISDN_VAL@
 MKDIR_P = @MKDIR_P@
 NM = @NM@
@@ -238,7 +239,7 @@ INCLUDE_SRC = include/debug.h include/dss1.h include/fsm.h include/helper.h incl
 lib_LTLIBRARIES = libmisdn.la
 libmisdn_la_SOURCES = $(MISC_SRC) $(LAYER3_SRC) $(INCLUDE_SRC) $(ASN1_SRC) $(SUPPSERV_SRC)
 libmisdn_la_LDFLAGS = -version-info 1:0:0
-AM_CPPFLAGS = -I$(top_srcdir)/include
+AM_CPPFLAGS = -I$(top_srcdir)/include -Iinclude $(__MEMLEAKDEBUG)
 CLEANFILES = *~ */*~
 all: all-am
 

@@ -16,10 +16,10 @@
  *
  */
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "fsm.h"
+#include "debug.h"
 
 #define FSM_TIMER_DEBUG 0
 
@@ -36,7 +36,7 @@ FsmNew(struct Fsm *fsm,
 	memset(fsm->jumpmatrix, 0, sizeof (FSMFNPTR) * fsm->state_count * fsm->event_count);
 	for (i = 0; i < fncount; i++)
 		if ((fnlist[i].state>=fsm->state_count) || (fnlist[i].event>=fsm->event_count)) {
-			fprintf(stderr, "FsmNew Error line %d st(%ld/%ld) ev(%ld/%ld)\n",
+			eprint("FsmNew Error line %d st(%ld/%ld) ev(%ld/%ld)\n",
 				i,(long)fnlist[i].state,(long)fsm->state_count,
 				(long)fnlist[i].event,(long)fsm->event_count);
 		} else
@@ -56,7 +56,7 @@ FsmEvent(struct FsmInst *fi, int event, void *arg)
 	FSMFNPTR r;
 
 	if ((fi->state>=fi->fsm->state_count) || (event >= fi->fsm->event_count)) {
-		fprintf(stderr, "FsmEvent Error st(%ld/%ld) ev(%d/%ld)\n",
+		eprint("FsmEvent Error st(%ld/%ld) ev(%d/%ld)\n",
 			(long)fi->state,(long)fi->fsm->state_count,event,(long)fi->fsm->event_count);
 		return(1);
 	}
@@ -130,7 +130,7 @@ FsmAddTimer(struct FsmTimer *ft,
 #endif
 
 	if (timer_pending(&ft->tl)) {
-		fprintf(stderr, "FsmAddTimer: timer already active!\n");
+		eprint("FsmAddTimer: timer already active!\n");
 		ft->fi->printdebug(ft->fi, "FsmAddTimer already active!");
 		return -1;
 	}

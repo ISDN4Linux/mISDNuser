@@ -1,8 +1,9 @@
 /* mbuffer.c
  *
- * Author       Karsten Keil <kkeil@novell.com>
+ * Author       Karsten Keil <kkeil@linux-pingi.de>
  *
  * Copyright 2007  by Karsten Keil <kkeil@novell.com>
+ * Copyright 2010  by Karsten Keil <kkeil@linux-pingi.de>
  *
  * This code is free software; you can redistribute it and/or modify
  * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
@@ -38,27 +39,141 @@ init_mbuffer(int max_cache)
 	Max_Cache = max_cache;
 }
 
-static void
-__mqueue_purge(struct mqueue *q) {
-	struct mbuffer *mb;
+#ifdef MEMLEAK_DEBUG
 
-	while ((mb = mdequeue(q))!=NULL) {
-		if (mb->head)
-			free(mb->head);
-		if (mb->chead)
-			free(mb->chead);
-		free(mb);
+static struct mbuffer *
+_new_mbuffer(int typ, const char *file, int lineno, const char *func)
+{
+	struct mbuffer	*m;
+
+	m = __mi_calloc(1, sizeof(struct mbuffer), file, lineno, func);
+	if (!m)
+		goto err;
+	switch(typ) {
+	case MB_TYP_L3:
+		m->chead = malloc(MBUFFER_DATA_SIZE);
+		if (!m->chead) {
+			free(m);
+			goto err;
+		}
+		m->cend = m->chead + MBUFFER_DATA_SIZE;
+		m->ctail = m->chead;
+	case MB_TYP_L2:
+		m->head = malloc(MBUFFER_DATA_SIZE);
+		if (!m->head) {
+			if (m->chead)
+				free(m->chead);
+			free(m);
+			goto err;
+		}
+		m->end = m->head + MBUFFER_DATA_SIZE;
+		m->data = m->tail = m->head;
+		m->h = (struct mISDNhead *) m->head;
+		break;
+	}
+	return(m);
+err:
+	eprint("%s: no mem for mbuffer\n", __FUNCTION__);
+	return(NULL);
+}
+
+static struct mbuffer *
+_alloc_mbuffer(int typ, const char *file, int lineno, const char *func)
+{
+	struct mbuffer	*m;
+
+	switch(typ) {
+	case MB_TYP_L3:
+		m =  mdequeue(&free_queue_l3);
+		break;
+	case MB_TYP_L2:
+		m =  mdequeue(&free_queue_l2);
+		break;
+	}
+	if (!m)
+		m = _new_mbuffer(typ, file, lineno, func);
+	else
+		__mi_reuse(m, file, lineno, func);
+	return m;
+}
+
+struct mbuffer *
+__alloc_mbuffer(const char *file, int lineno, const char *func)
+{
+	return _alloc_mbuffer(MB_TYP_L2, file, lineno, func);
+}
+
+
+void
+__free_mbuffer(struct mbuffer *m, const char *file, int lineno, const char *func) {
+	if (!m)
+		return;
+	if (m->refcnt) {
+		m->refcnt--;
+		return;
+	}
+	if (m->list) {
+		if (m->list == &free_queue_l3)
+			dprint(DBGM_L3BUFFER, "%s l3 buffer %p already freed: %lx\n",  __FUNCTION__, m, (unsigned long)__builtin_return_address(0));
+		else if (m->list == &free_queue_l2)
+			dprint(DBGM_L3BUFFER, "%s l2 buffer %p already freed: %lx\n",  __FUNCTION__, m, (unsigned long)__builtin_return_address(0));
+		else
+			dprint(DBGM_L3BUFFER, "%s buffer %p still in list %p : %lx\n", __FUNCTION__, m, m->list, (unsigned long)__builtin_return_address(0));
+		return;
+	} else
+		dprint(DBGM_L3BUFFER, "%s buffer %p freed: %lx\n",  __FUNCTION__, m, (unsigned long)__builtin_return_address(0));
+	if (m->chead) {
+		if (free_queue_l3.len > Max_Cache) {
+			free(m->chead);
+			free(m->head);
+			__mi_free(m, file, lineno, func);
+		} else {
+			memset(&m->l3, 0, sizeof(m->l3));
+			memset(&m->l3h, 0, sizeof(m->l3h));
+			m->data = m->tail = m->head;
+			m->len = 0;
+			m->ctail = m->chead;
+			__mi_reuse(m, file, lineno, "IN_FREE_QUEUE");
+			mqueue_head(&free_queue_l3, m);
+		}
+	} else {
+		if (free_queue_l2.len > Max_Cache) {
+			free(m->head);
+			__mi_free(m, file, lineno, func);
+		} else {
+			memset(&m->l3, 0, sizeof(m->l3));
+			memset(&m->l3h, 0, sizeof(m->l3h));
+			m->data = m->tail = m->head;
+			m->len = 0;
+			__mi_reuse(m, file, lineno, "IN_FREE_QUEUE");
+			mqueue_head(&free_queue_l2, m);
+		}
 	}
 }
 
-void
-cleanup_mbuffer(void)
+struct l3_msg	*
+__alloc_l3_msg(const char *file, int lineno, const char *func)
 {
-	__mqueue_purge(&free_queue_l2);
-	__mqueue_purge(&free_queue_l3);
+	struct mbuffer	*m;
+
+	m = _alloc_mbuffer(MB_TYP_L3, file, lineno, func);
+	if (m)
+		return &m->l3;
+	else
+		return NULL;
 }
 
+void
+__free_l3_msg(struct l3_msg *l3m, const char *file, int lineno, const char *func)
+{
+	struct mbuffer	*m;
 
+	if (!l3m)
+		return;
+	m = container_of(l3m, struct mbuffer, l3);
+	__free_mbuffer(m, file, lineno, func);
+}
+#else
 static struct mbuffer *
 _new_mbuffer(int typ)
 {
@@ -95,10 +210,10 @@ err:
 	return(NULL);
 }
 
-struct mbuffer *
+static struct mbuffer *
 _alloc_mbuffer(int typ)
 {
-	struct mbuffer	*m = NULL;
+	struct mbuffer	*m;
 
 	switch(typ) {
 	case MB_TYP_L3:
@@ -130,14 +245,14 @@ free_mbuffer(struct mbuffer *m) {
 	}
 	if (m->list) {
 		if (m->list == &free_queue_l3)
-			dprint(DBGM_L3BUFFER, 0,"%s l3 buffer %p already freed: %lx\n",  __FUNCTION__, m, (unsigned long)__builtin_return_address(0));
+			dprint(DBGM_L3BUFFER, "%s l3 buffer %p already freed: %lx\n",  __FUNCTION__, m, (unsigned long)__builtin_return_address(0));
 		else if (m->list == &free_queue_l2)
-			dprint(DBGM_L3BUFFER, 0,"%s l2 buffer %p already freed: %lx\n",  __FUNCTION__, m, (unsigned long)__builtin_return_address(0));
+			dprint(DBGM_L3BUFFER, "%s l2 buffer %p already freed: %lx\n",  __FUNCTION__, m, (unsigned long)__builtin_return_address(0));
 		else
-			dprint(DBGM_L3BUFFER, 0,"%s buffer %p still in list %p : %lx\n", __FUNCTION__, m, m->list, (unsigned long)__builtin_return_address(0));
+			dprint(DBGM_L3BUFFER, "%s buffer %p still in list %p : %lx\n", __FUNCTION__, m, m->list, (unsigned long)__builtin_return_address(0));
 		return;
 	} else
-		dprint(DBGM_L3BUFFER, 0,"%s buffer %p freed: %lx\n",  __FUNCTION__, m, (unsigned long)__builtin_return_address(0));
+		dprint(DBGM_L3BUFFER, "%s buffer %p freed: %lx\n",  __FUNCTION__, m, (unsigned long)__builtin_return_address(0));
 	if (m->chead) {
 		if (free_queue_l3.len > Max_Cache) {
 			free(m->chead);
@@ -187,6 +302,7 @@ free_l3_msg(struct l3_msg *l3m)
 	m = container_of(l3m, struct mbuffer, l3);
 	free_mbuffer(m);
 }
+#endif
 
 void
 l3_msg_increment_refcnt(struct l3_msg *l3m)
@@ -195,4 +311,24 @@ l3_msg_increment_refcnt(struct l3_msg *l3m)
 
 	m = container_of(l3m, struct mbuffer, l3);
 	m->refcnt++;
+}
+
+static void
+__mqueue_purge(struct mqueue *q) {
+	struct mbuffer *mb;
+
+	while ((mb = mdequeue(q))!=NULL) {
+		if (mb->head)
+			free(mb->head);
+		if (mb->chead)
+			free(mb->chead);
+		free(mb);
+	}
+}
+
+void
+cleanup_mbuffer(void)
+{
+	__mqueue_purge(&free_queue_l2);
+	__mqueue_purge(&free_queue_l3);
 }
