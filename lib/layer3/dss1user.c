@@ -1,5 +1,5 @@
 /* dss1user.c
- * 
+ *
  * Author       Karsten Keil <kkeil@novell.com>
  *
  * Copyright 2007  by Karsten Keil <kkeil@novell.com>
@@ -232,7 +232,7 @@ check_infoelements(l3_process_t *pc, struct l3_msg *l3m, int *checklist, int mt)
 	if (l3m->comprehension_req) {
 		err_compr++;
 	}
-	
+
 	if (err_compr)
 		return Q931_ERROR_COMPREH;
 	if (err_ureg)
@@ -765,7 +765,7 @@ l3dss1_disconnect(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 		newl3state(pc, 19);
 	else
 		newl3state(pc, 12);
-       	if (11 != ret) {
+	if (11 != ret) {
 		mISDN_l3up(pc, MT_DISCONNECT, l3m);
 	} else if (!cause) {
 		l3dss1_release_req(pc, pr, NULL);
@@ -967,10 +967,10 @@ l3dss1_progress(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m) {
 	err = check_infoelements(pc, l3m, ie_PROGRESS, MT_PROGRESS);
 	if (err)
 		l3dss1_std_ie_err(pc, err);
-	/* 
-	 * clear T310 if running (should be cleared by a Progress 
-	 * Message, according to ETSI). 
-	 * 
+	/*
+	 * clear T310 if running (should be cleared by a Progress
+	 * Message, according to ETSI).
+	 *
 	 */
 	L3DelTimer(&pc->timer1);
 	if (pc->t303msg) {
@@ -1280,14 +1280,14 @@ l3dss1_global_restart(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	}
 	newl3state(pc, 2);
 	list_for_each_entry_safe(up, n, &pc->L3->plist, list) {
-		if ((ri & 6) == 6) 
+		if ((ri & 6) == 6)
 			dss1man(up, MT_RESTART, NULL);
 		else if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
 			if ((up->cid[1] & 3) == (pc->cid[1] & 3))
 				dss1man(up, MT_RESTART, NULL);
 		} else {
 			if ((up->cid[3] & 0x7f) == (pc->cid[3] & 0x7f))
-				dss1man(up, MT_RESTART, NULL); 
+				dss1man(up, MT_RESTART, NULL);
 		}
 	}
 	nl3m = MsgStart(pc, MT_RESTART_ACKNOWLEDGE);
@@ -1754,14 +1754,14 @@ static void
 l3dss1_t305(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int cause;
-	
+
 	L3DelTimer(&pc->timer1);
 	if (pc->cause != NO_CAUSE) {
 		cause = pc->cause;
 	} else {
 		cause = CAUSE_NORMAL_CLEARING;
 	}
-	
+
 	newl3state(pc, 19);
 	l3dss1_message_cause(pc, MT_RELEASE, cause);
 	L3AddTimer(&pc->timer1, T308, CC_T308_1);
@@ -2133,7 +2133,7 @@ dss1_fromdown(layer3_t *l3, struct mbuffer *msg)
 		goto freemsg;
 	ret = parseQ931(msg);
 	if (ret & Q931_ERROR_FATAL) {
-		eprint("dss1up: parse IE error %x\n", ret); 
+		eprint("dss1up: parse IE error %x\n", ret);
 		goto freemsg;
 	}
 	if (msg->l3h.crlen == 0) {	/* Dummy Callref */
@@ -2216,7 +2216,7 @@ dss1_fromdown(layer3_t *l3, struct mbuffer *msg)
 			 * if setup has not been made and a message type
 			 * (except MT_SETUP and RELEASE_COMPLETE) is received,
 			 * we must send MT_RELEASE_COMPLETE cause 81 */
-			
+
 			dprint(DBGM_L3, msg->addr.dev, "%s: mt(%x) without callref (maybe former process)\n", __FUNCTION__, msg->l3.type);
 			if ((proc = create_new_process(l3, msg->addr.channel,msg->l3h.cr, NULL))) {
 				l3dss1_msg_without_setup(proc, CAUSE_INVALID_CALLREF);
@@ -2331,4 +2331,3 @@ struct l3protocol	dss1user = {
 	.protocol = L3_PROTOCOL_DSS1_USER ,
 	.init = dss1_user_init
 };
-

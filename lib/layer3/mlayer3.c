@@ -70,7 +70,7 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	int			set = 1;
 
 	if (__init_done == 0) {
-		fprintf(stderr, "You should call init_layer3(nr of message cache entres) first\n"); 
+		fprintf(stderr, "You should call init_layer3(nr of message cache entres) first\n");
 		init_layer3(10);
 	}
 	fd = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
@@ -87,14 +87,14 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	iprint("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
 	iprint("mISDN user   version %d.%02d.%d found\n", MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
 	iprint("mISDN library interface version %d release %d\n", MISDN_LIB_VERSION, MISDN_LIB_RELEASE);
-	
+
 	if (ver.major != MISDN_MAJOR_VERSION) {
 		fprintf(stderr, "VERSION incompatible please update\n");
 		close(fd);
 		return NULL;
 	}
 	/* handle version backward compatibility specific  stuff here */
-	
+
 	l3 = calloc(1, sizeof(struct _layer3));
 	if (!l3)
 		return NULL;
@@ -167,14 +167,14 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	if (test_bit(MISDN_FLG_L2_CLEAN, &l3->ml3.options)
 		&& proto == L3_PROTOCOL_DSS1_NET) {
 		ret = ioctl(fd, IMCLEAR_L2, &set);
-       		if (ret < 0) {
+		if (ret < 0) {
 			fprintf(stderr, "could not send IOCTL IMCLEAN_L2 %s\n", strerror(errno));
 			goto fail;
 		}
 	}
 	if (test_bit(MISDN_FLG_L1_HOLD, &l3->ml3.options)) {
 		ret = ioctl(fd, IMHOLD_L1, &set);
-       		if (ret < 0) {
+		if (ret < 0) {
 			fprintf(stderr, "could not send IOCTL IMHOLD_L1 %s\n", strerror(errno));
 			goto fail;
 		}

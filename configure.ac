@@ -89,7 +89,6 @@ AC_CONFIG_FILES([Makefile
                  include/Makefile
                  include/mISDN/mISDNcompat.h
                  lib/Makefile
-                 suppserv/Makefile
                  bridge/Makefile
                  l1oip/Makefile
                  tools/Makefile

@@ -1,5 +1,5 @@
 /* dss1.h
- * 
+ *
  * Author       Karsten Keil <kkeil@novell.com>
  *
  * Copyright 2007  by Karsten Keil <kkeil@novell.com>
@@ -20,7 +20,7 @@
 
 /*
  * Timer values
- */ 
+ */
 #define T302	15000
 #define T303	4000
 #define T304	30000

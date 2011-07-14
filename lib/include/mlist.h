@@ -3,7 +3,7 @@
  * Simple doubly linked list implementation and helper
  * function reduce version of linux kernel list.h
  */
-              
+
 #ifndef _MLIST_H
 #define _MLIST_H
 
@@ -90,7 +90,7 @@ static inline int list_empty(const struct list_head *head)
  */
 #define list_for_each(pos, head) \
 	for (pos = (head)->next; pos != (head); \
-        	pos = pos->next)
+		pos = pos->next)
 
 /*
  * list_for_each_entry	-	iterate over list of given type

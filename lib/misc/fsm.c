@@ -1,6 +1,6 @@
 /* $Id: fsm.c,v 2.0 2004/06/29 14:35:31 kkeil Exp $
  *
- * 
+ *
  * Author       Karsten Keil <kkeil@novell.com>
  *
  * Copyright 2007  by Karsten Keil <kkeil@novell.com>
@@ -34,12 +34,12 @@ FsmNew(struct Fsm *fsm,
 	if (!fsm->jumpmatrix)
 		return;
 	memset(fsm->jumpmatrix, 0, sizeof (FSMFNPTR) * fsm->state_count * fsm->event_count);
-	for (i = 0; i < fncount; i++) 
+	for (i = 0; i < fncount; i++)
 		if ((fnlist[i].state>=fsm->state_count) || (fnlist[i].event>=fsm->event_count)) {
 			fprintf(stderr, "FsmNew Error line %d st(%ld/%ld) ev(%ld/%ld)\n",
 				i,(long)fnlist[i].state,(long)fsm->state_count,
 				(long)fnlist[i].event,(long)fsm->event_count);
-		} else		
+		} else
 			fsm->jumpmatrix[fsm->state_count * fnlist[i].event +
 				fnlist[i].state] = (FSMFNPTR) fnlist[i].routine;
 }

@@ -1,5 +1,5 @@
 /* debug.h
- * 
+ *
  * Basic Layer3 functions
  *
  * Author       Karsten Keil <kkeil@novell.com>

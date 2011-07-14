@@ -76,7 +76,7 @@ int
 parseQ931(struct mbuffer *mb) {
 	int		codeset, maincodeset;
 	int		iep, err = 0, eidx = -1;
-	unsigned char	*p, ie, **v_ie = &mb->l3.bearer_capability; 
+	unsigned char	*p, ie, **v_ie = &mb->l3.bearer_capability;
 
 	__msg_pull(mb, 1);
 	mb->l3h.crlen = *__msg_pull(mb, 1);

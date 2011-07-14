@@ -9,7 +9,7 @@ if OPT_GUI
     MAYBE_GUI = guitools
 endif
 
-SUBDIRS = include lib suppserv tools bridge l1oip $(MAYBE_EXAMPLE) $(MAYBE_GUI)
+SUBDIRS = include lib tools bridge l1oip $(MAYBE_EXAMPLE) $(MAYBE_GUI)
 
 CLEANFILES = *~
 

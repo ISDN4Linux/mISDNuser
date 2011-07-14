@@ -1,5 +1,5 @@
 /* debug.c
- * 
+ *
  * Basic Layer3 functions
  *
  * Author       Karsten Keil <kkeil@novell.com>
@@ -101,7 +101,7 @@ dprint(unsigned int mask, int port, const char *fmt, ...)
 	va_list	args;
 	time_t tm = time(NULL);
 	char *tmp=ctime(&tm),*p;
-	
+
 	p=strchr(tmp,'\n');
 	if (p) *p=':';
 

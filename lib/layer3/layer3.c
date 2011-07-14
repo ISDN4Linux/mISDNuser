@@ -1,5 +1,5 @@
 /* layer3.c
- * 
+ *
  * Basic Layer3 functions
  *
  * Author       Karsten Keil <kkeil@novell.com>
@@ -254,7 +254,7 @@ create_new_process(layer3_t *l3, unsigned int ces, unsigned int cr, l3_process_t
 	l3_process_t	*pc;
 	unsigned int	max_cr = 0x7fff;
 	int		try;
-	
+
 
 	if ((cr & 0xffff) > 0) { /* remote owned callref */
 		pc = get_l3process4pid(l3, ((ces & 0xff) << 16) | cr);
@@ -312,12 +312,12 @@ SendMsg(l3_process_t *pc, struct l3_msg *l3m, int state) {
 	int		ret;
 	struct mbuffer	*mb = container_of(l3m, struct mbuffer, l3);
 
-	
+
 	ret = assembleQ931(pc, l3m);
 	if (ret) {
 		eprint("%s assembleQ931 error %x\n", __FUNCTION__, ret);
 		free_l3_msg(l3m);
-		return;		
+		return;
 	}
 	if (state != -1)
 		newl3state(pc, state);
@@ -987,4 +987,3 @@ l3_stop(struct _layer3 *l3)
 	if (ret)
 		eprint("%s cannot join worker thread  %s\n", __FUNCTION__, strerror(errno));
 }
-

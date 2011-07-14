@@ -1,6 +1,6 @@
 /* $Id: fsm.h,v 2.0 2007/06/29 14:35:31 kkeil Exp $
  *
- * 
+ *
  * Author       Karsten Keil <kkeil@novell.com>
  *
  * Copyright 2007  by Karsten Keil <kkeil@novell.com>
@@ -61,4 +61,3 @@ extern void FsmInitTimer(struct FsmInst *, struct FsmTimer *);
 extern int FsmAddTimer(struct FsmTimer *, int, int, void *, int);
 extern void FsmRestartTimer(struct FsmTimer *, int, int, void *, int);
 extern void FsmDelTimer(struct FsmTimer *, int);
-

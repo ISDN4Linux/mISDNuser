@@ -1,6 +1,6 @@
 /* helper.h
  *
- * some helper functions 
+ * some helper functions
  *
  * Author       Karsten Keil <kkeil@novell.com>
  *
@@ -37,7 +37,7 @@
 #define container_of(ptr, type, member) ({			\
 	const typeof( ((type *)0)->member ) *__mptr = (ptr);	\
 	(type *)( (char *)__mptr - offsetof(type,member) );})
-                      
+
 
 /* Simple replacement for the NON-ATOMIC routines which asm/bitops.h
    was providing. */

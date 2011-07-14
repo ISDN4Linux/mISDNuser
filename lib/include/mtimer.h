@@ -1,5 +1,5 @@
 /* mtimer.h
- * 
+ *
  * Author       Karsten Keil <kkeil@novell.com>
  *
  * Copyright 2007  by Karsten Keil <kkeil@novell.com>

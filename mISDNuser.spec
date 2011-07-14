@@ -122,8 +122,6 @@ ldconfig
 
 %{_libdir}/libmisdn.so.0
 %{_libdir}/libmisdn.so.0.2.1
-%{_libdir}/libsuppserv.so.0
-%{_libdir}/libsuppserv.so.0.1.1
 
 %files devel
 %defattr(-,root,root)
@@ -132,9 +130,6 @@ ldconfig
 %attr (0644, root, root) %{_libdir}/libmisdn.a
 %attr (0644, root, root) %{_libdir}/libmisdn.la
 %attr (0644, root, root) %{_libdir}/libmisdn.so
-%attr (0644, root, root) %{_libdir}/libsuppserv.so
-%attr (0644, root, root) %{_libdir}/libsuppserv.a
-%attr (0644, root, root) %{_libdir}/libsuppserv.la
 
 %files gui
 %defattr(-,root,root)

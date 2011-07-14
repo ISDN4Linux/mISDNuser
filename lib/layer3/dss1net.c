@@ -31,7 +31,7 @@ const char *l3_revision = "$Revision: 2.00 $";
 enum {
 	ST_L3_LC_REL,
 	ST_L3_LC_ESTAB_WAIT,
-	ST_L3_LC_REL_DELAY, 
+	ST_L3_LC_REL_DELAY,
 	ST_L3_LC_REL_WAIT,
 	ST_L3_LC_ESTAB,
 };
@@ -291,7 +291,7 @@ static void
 l3dss1_setup(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	int		err = 0;
-	
+
 	/*
 	 * Bearer Capabilities
 	 */
@@ -355,7 +355,7 @@ l3dss1_disconnect(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	if (ret) {
 		if (pc->L3->debug & L3_DEB_WARN)
 			mIl3_debug(pc->L3, "DISC get_cause ret(%d)", ret);
-	} 
+	}
 	mISDN_l3up(pc, MT_DISCONNECT, l3m);
 }
 
@@ -619,7 +619,7 @@ l3dss1_hold(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 		l3dss1_message_cause(pc, MT_HOLD_REJECT, CAUSE_NOTCOMPAT_STATE);
 		return;
 	}
-	pc->aux_state = AUX_HOLD_IND; 
+	pc->aux_state = AUX_HOLD_IND;
 
 	mISDN_l3up(pc, MT_HOLD, l3m);
 }
@@ -736,7 +736,7 @@ static l3_process_t
 		newl3state(pc, state);
 	send_proc(p3i, IMSG_L2_DATA, l3m);
 	return(p3i);
-}                                                   
+}
 
 static void
 l3dss1_setup_acknowledge_m(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
@@ -873,7 +873,7 @@ static struct stateentry mdatastatelist[] =
 
 #define MDATASLLEN \
 	(sizeof(mdatastatelist) / sizeof(struct stateentry))
-                                                   
+
 static void
 l3dss1_setup_ack_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
@@ -1009,7 +1009,7 @@ l3dss1_information_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (pc->state == 25 && !test_bit(MISDN_FLG_PTP, &pc->L3->ml3.options))
 		return;
-	
+
 	if (l3m) {
 //		if (pc->state != 25)
 			SendMsg(pc, l3m, -1);
@@ -1275,7 +1275,7 @@ l3dss1_holdack_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (pc->aux_state != AUX_HOLD_IND)
 		return;
-	pc->aux_state = AUX_CALL_HELD; 
+	pc->aux_state = AUX_CALL_HELD;
 	if (l3m) {
 		SendMsg(pc, l3m, -1);
 	} else {
@@ -1314,7 +1314,7 @@ l3dss1_retrrej_req(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
 	if (pc->aux_state != AUX_RETRIEVE_IND)
 		return;
-	pc->aux_state = AUX_CALL_HELD; 
+	pc->aux_state = AUX_CALL_HELD;
 	if (!l3m->cause)
 		l3dss1_message_cause(pc,
 			MT_RETRIEVE_REJECT, CAUSE_NORMALUNSPECIFIED);
@@ -1407,14 +1407,14 @@ l3dss1_global_restart(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 	}
 	newl3state(pc, 2);
 	list_for_each_entry_safe(up, n, &pc->L3->plist, list) {
-		if ((ri & 6) == 6) 
+		if ((ri & 6) == 6)
 			dss1man(up, MT_RESTART, NULL);
 		else if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
 			if ((up->cid[1] & 3) == (pc->cid[1] & 3))
 				dss1man(up, MT_RESTART, NULL);
 		} else {
 			if ((up->cid[3] & 0x7f) == (pc->cid[3] & 0x7f))
-				dss1man(up, MT_RESTART, NULL); 
+				dss1man(up, MT_RESTART, NULL);
 		}
 	}
 	nl3m = MsgStart(pc, MT_RESTART_ACKNOWLEDGE);
@@ -1648,7 +1648,7 @@ send_proc(l3_process_t *proc, int op, void *arg)
 
 	if (proc->L3 && proc->L3->debug & L3_DEB_PROC)
 		mIl3_debug(proc->L3, "%s: proc(%x) op(%d)", __FUNCTION__,
-			proc->pid, op);  
+			proc->pid, op);
 	switch(op) {
 		case IMSG_END_PROC:
 		case IMSG_END_PROC_M:
@@ -1800,7 +1800,7 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 		goto freemsg;
 	ret = parseQ931(msg);
 	if (ret & Q931_ERROR_FATAL) {
-		fprintf(stderr, "dss1up: parse IE error %x\n", ret); 
+		fprintf(stderr, "dss1up: parse IE error %x\n", ret);
 		goto freemsg;
 	}
 	dprint(DBGM_L3, msg->addr.dev, "%s: mt(%x) pid(%x) crlen(%d)\n", __FUNCTION__, msg->l3.type, msg->l3.pid, msg->l3h.crlen);
@@ -1819,7 +1819,7 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 	if (!proc) {
 		if (msg->l3.type == MT_SETUP || msg->l3.type == MT_RESUME || msg->l3.type == MT_REGISTER) {
 			/* Setup/Resume creates a new transaction process */
-			
+
 			if (msg->l3.pid & 0x8000) {
 				/* Setup/Resume with wrong CREF flag */
 				if (l3->debug & L3_DEB_STATE)
@@ -1880,7 +1880,7 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 			 * if setup has not been made and a message type
 			 * (except MT_SETUP and RELEASE_COMPLETE) is received,
 			 * we must send MT_RELEASE_COMPLETE cause 81 */
-			
+
 			dprint(DBGM_L3, msg->addr.dev, "%s: mt(%x) without callref (maybe former process)\n", __FUNCTION__, msg->l3.type);
 			if ((proc = create_new_process(l3, msg->addr.channel,msg->l3h.cr, NULL))) {
 				l3dss1_msg_without_setup(proc, CAUSE_INVALID_CALLREF);
@@ -1969,4 +1969,3 @@ struct l3protocol	dss1net = {
 	.protocol = L3_PROTOCOL_DSS1_NET ,
 	.init = dss1_net_init
 };
-
