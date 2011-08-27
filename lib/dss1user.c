@@ -32,7 +32,7 @@ static int
 l3dss1_message(l3_process_t *pc, u_char mt)
 {
 	struct l3_msg	*l3m;
-	int		ret;
+	int		ret = 0;
 
 	if (!(l3m = MsgStart(pc, mt)))
 		return -ENOMEM;
