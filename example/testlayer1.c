@@ -1,7 +1,5 @@
-/* $Id$
- * (c) 2008 Martin Bachem, info@colognechip.com
- *
- * This file is part of mISDNuser/example
+/*
+ * Copyright 2008 Martin Bachem <info@colognechip.com>
  *
  * 'testlayer1' is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -53,6 +51,16 @@
  *    testlayer1 -v --te    : only check if S0 bus activates using your
  *                            ISDN TA in TE mode
  *
+ *
+ *    testlayer1 --testloop=[x] : control testloops (line RX -> line TX)
+ *                                0 disable all
+ *                                bit0 : 1: set B1 loop, 0: unset B1 loop
+ *                                bit1 : 1: set B2 loop, 0: unset B2 loop
+ *                                bit2 : 1: set D  loop, 0: unset D  loop
+ *
+ *                                e.g. --testloop=3 enables B1+B2 and
+ *                                disables D loop
+ *
  */
 
 
@@ -83,6 +91,11 @@ void usage(void) {
 	printf("  --b1, --b1=<n>     enable B channel stream with <n> packet sz\n");
 	printf("  --b2, --b2=<n>     enable B channel stream with <n> packet sz\n");
 	printf("  --te               use TA in TE mode (default is NT)\n");
+	printf("  --testloop=<x>     set up hardware testloops, 7 activates B1+B2+D:\n");
+	printf("                            0: deactivate testloops\n");
+	printf("                            1: activate B1 testloop rx -> line tx\n");
+	printf("                            2: activate B2 testloop rx -> line tx\n");
+	printf("                            4: activate  D testloop rx -> line tx\n");
 	printf("  --playload=<x>     hdlc package payload types:\n");
 	printf("                            0: always 0x00\n");
 	printf("                            1: incremental playload (default)\n");
@@ -168,6 +181,7 @@ static int te_mode = 0;
 static int stop = 0; // stop after x seconds
 static unsigned char payload = 1;
 static int btrans = 0;
+static int testloop = 0;
 
 // globals
 static devinfo_t mISDN;
@@ -313,84 +327,16 @@ int activate_bchan(devinfo_t *di, unsigned char bch) {
 }
 
 /*
- * opens NT-mode layer1, send PH_ACTIVATE_REQ and wait for PH_ACTIVATE_IND
+ * send PH_ACTIVATE_REQ and wait for PH_ACTIVATE_IND
  * returns 0 if PH_ACTIVATE_IND received within timeout interval
- *
  */
 int do_setup(devinfo_t *di) {
-	int cnt, ret = 0;
-	int sk;
-	struct mISDN_devinfo devinfo;
-	socklen_t alen;
-	struct mISDNhead *hh;
+	int ret = 0;
 	struct timeval tout;
-	fd_set rds;
+	struct mISDNhead *hh;
 	unsigned char buffer[2048];
-
-	sk = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
-	if (sk < 1) {
-		fprintf(stderr, "could not open socket 'ISDN_P_BASE' %s\n",
-			strerror(errno));
-		return 2;
-	}
-	ret = ioctl(sk, IMGETCOUNT, &cnt);
-	if (ret) {
-		fprintf(stderr, "ioctl error %s\n", strerror(errno));
-		close(sk);
-		return 3;
-	}
-
-	if (debug > 1) {
-		fprintf(stdout, "%d devices found\n", cnt);
-	}
-	if (cnt < di->cardnr + 1) {
-		fprintf(stderr, "cannot config card nr %d only %d cards\n",
-			di->cardnr, cnt);
-		return 4;
-	}
-
-	devinfo.id = di->cardnr;
-	ret = ioctl(sk, IMGETDEVINFO, &devinfo);
-	if (ret < 0) {
-		fprintf(stdout, "ioctl error %s\n", strerror(errno));
-	} else if (debug > 1) {
-		fprintf(stdout, "        id:             %d\n", devinfo.id);
-		fprintf(stdout, "        Dprotocols:     %08x\n", devinfo.Dprotocols);
-		fprintf(stdout, "        Bprotocols:     %08x\n", devinfo.Bprotocols);
-		fprintf(stdout, "        protocol:       %d\n", devinfo.protocol);
-		fprintf(stdout, "        nrbchan:        %d\n", devinfo.nrbchan);
-		fprintf(stdout, "        name:           %s\n", devinfo.name);
-	}
-	close(sk);
-
-	if (te_mode) {
-		mISDN.layerid[CHAN_D] = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_TE_S0);
-	} else {
-		mISDN.layerid[CHAN_D] = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_NT_S0);
-	}
-	if (mISDN.layerid[CHAN_D] < 1) {
-		fprintf(stderr, "could not open socket '%s': %s\n",
-			strerror(errno),
-			(te_mode) ? "ISDN_P_TE_S0" : "ISDN_P_NT_S0");
-		return 5;
-	}
-
-	di->nds = di->layerid[CHAN_D] + 1;
-	ret = fcntl(di->layerid[CHAN_D], F_SETFL, O_NONBLOCK);
-	if (ret < 0) {
-		fprintf(stdout, "fcntl error %s\n", strerror(errno));
-		return 6;
-	}
-
-	di->laddr[CHAN_D].family = AF_ISDN;
-	di->laddr[CHAN_D].dev = di->cardnr;
-	di->laddr[CHAN_D].channel = 0;
-	ret = bind(di->layerid[CHAN_D], (struct sockaddr *) &di->laddr[CHAN_D], sizeof (di->laddr[CHAN_D]));
-
-	if (ret < 0) {
-		fprintf(stdout, "could not bind l1 socket %s\n", strerror(errno));
-		return 7;
-	}
+	fd_set rds;
+	socklen_t alen;
 
 	hh = (struct mISDNhead *) buffer;
 	hh->prim = PH_ACTIVATE_REQ;
@@ -763,6 +709,102 @@ int main_data_loop(devinfo_t *di) {
 	}
 }
 
+
+int
+connect_layer1_d(devinfo_t *di) {
+	struct mISDN_ctrl_req creq;
+	int cnt, ret = 0;
+	int sk;
+	struct mISDN_devinfo devinfo;
+	socklen_t alen;
+	struct mISDNhead *hh;
+	struct timeval tout;
+	fd_set rds;
+	unsigned char buffer[2048];
+
+	sk = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
+	if (sk < 1) {
+		fprintf(stderr, "could not open socket 'ISDN_P_BASE' %s\n",
+			strerror(errno));
+		return 2;
+	}
+	ret = ioctl(sk, IMGETCOUNT, &cnt);
+	if (ret) {
+		fprintf(stderr, "ioctl error %s\n", strerror(errno));
+		close(sk);
+		return 3;
+	}
+
+	if (debug > 1) {
+		fprintf(stdout, "%d devices found\n", cnt);
+	}
+	if (cnt < di->cardnr + 1) {
+		fprintf(stderr, "cannot config card nr %d only %d cards\n",
+			di->cardnr, cnt);
+		return 4;
+	}
+
+	devinfo.id = di->cardnr;
+	ret = ioctl(sk, IMGETDEVINFO, &devinfo);
+	if (ret < 0) {
+		fprintf(stdout, "ioctl error %s\n", strerror(errno));
+	} else if (debug > 1) {
+		fprintf(stdout, "        id:             %d\n", devinfo.id);
+		fprintf(stdout, "        Dprotocols:     %08x\n", devinfo.Dprotocols);
+		fprintf(stdout, "        Bprotocols:     %08x\n", devinfo.Bprotocols);
+		fprintf(stdout, "        protocol:       %d\n", devinfo.protocol);
+		fprintf(stdout, "        nrbchan:        %d\n", devinfo.nrbchan);
+		fprintf(stdout, "        name:           %s\n", devinfo.name);
+	}
+	close(sk);
+
+	if (te_mode) {
+		mISDN.layerid[CHAN_D] = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_TE_S0);
+	} else {
+		mISDN.layerid[CHAN_D] = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_NT_S0);
+	}
+	if (mISDN.layerid[CHAN_D] < 1) {
+		fprintf(stderr, "could not open socket '%s': %s\n",
+			strerror(errno),
+			(te_mode) ? "ISDN_P_TE_S0" : "ISDN_P_NT_S0");
+		return 5;
+	}
+
+	di->nds = di->layerid[CHAN_D] + 1;
+	ret = fcntl(di->layerid[CHAN_D], F_SETFL, O_NONBLOCK);
+	if (ret < 0) {
+		fprintf(stdout, "fcntl error %s\n", strerror(errno));
+		return 6;
+	}
+
+	di->laddr[CHAN_D].family = AF_ISDN;
+	di->laddr[CHAN_D].dev = di->cardnr;
+	di->laddr[CHAN_D].channel = 0;
+	ret = bind(di->layerid[CHAN_D], (struct sockaddr *) &di->laddr[CHAN_D], sizeof (di->laddr[CHAN_D]));
+
+	if (ret < 0) {
+		fprintf(stdout, "could not bind l1 socket %s\n", strerror(errno));
+		return 7;
+	}
+
+	return 0;
+}
+
+int
+set_hw_loop(devinfo_t *di)
+{
+	int ret;
+	struct mISDN_ctrl_req creq;
+
+	creq.op = MISDN_CTRL_LOOP;
+	creq.channel = di->channel_mask;
+	ret = ioctl(mISDN.layerid[CHAN_D], IMCTRLREQ, &creq);
+	if (ret < 0) {
+		fprintf(stdout, "set_hw_loop ioctl error %s\n", strerror(errno));
+	}
+}
+
+
 int main(int argc, char *argv[]) {
 	int c, err;
 	unsigned char ch_idx;
@@ -779,6 +821,7 @@ int main(int argc, char *argv[]) {
 		{"d", optional_argument, 0, 'x'},
 		{"b1", optional_argument, 0, 'y'},
 		{"b2", optional_argument, 0, 'z'},
+		{"testloop", required_argument, 0, 'l'},
 		{"help", no_argument, 0, 'h'},
 	};
 
@@ -838,14 +881,18 @@ int main(int argc, char *argv[]) {
 					mISDN.ch[CHAN_B2].tx_size = atoi(optarg);
 				}
 				break;
+			case 'l':
+				mISDN.channel_mask = atoi(optarg) & 0x7;
+				testloop = 1;
+				break;
 			case 'h':
 				usage();
 				return 0;
 		}
 	}
 
-	fprintf(stdout, "\n\ntestlayer1 - card(%i) debug(%i) playload(%i) btrans(%i)\n",
-		mISDN.cardnr, debug, payload, btrans);
+	fprintf(stdout, "\n\ntestlayer1 - card(%i) debug(%i) playload(%i) btrans(%i) testloop(%i)\n",
+		mISDN.cardnr, debug, payload, btrans, testloop);
 
 	// init Data burst values
 	for (ch_idx = 0; ch_idx < MAX_CHAN; ch_idx++) {
@@ -874,20 +921,30 @@ int main(int argc, char *argv[]) {
 	}
 	close(err);
 
-	set_signals();
-	err = do_setup(&mISDN);
+	err = connect_layer1_d(&mISDN);
 	if (err) {
-		fprintf(stdout, "do_setup error %d\n", err);
-		return (0);
+		fprintf(stdout, "error(%d) connecting layer1\n", err);
+		return err;
 	}
 
-	if (mISDN.channel_mask) {
-		main_data_loop(&mISDN);
+
+	if (testloop) {
+		set_hw_loop(&mISDN);
 	} else {
-		fprintf(stdout, "no channels request, try [--d, --b1, --b2]\n");
-	}
+		set_signals();
+		err = do_setup(&mISDN);
+		if (err) {
+			fprintf(stdout, "do_setup error %d\n", err);
+			return (0);
+		}
+		if (mISDN.channel_mask) {
+			main_data_loop(&mISDN);
+		} else {
+			fprintf(stdout, "no channels request, try [--d, --b1, --b2]\n");
+		}
 
-	sig_handler(9); // abuse as cleanup
+		sig_handler(9); // abuse as cleanup
+	}
 
 	return (0);
 }
