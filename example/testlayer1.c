@@ -108,20 +108,6 @@ void usage(void) {
 	printf("\n");
 }
 
-
-/* MISDN_CTRL_XHFC_CUSTOM_CMD */
-#ifndef MISDN_CTRL_XHFC_READ_REGISTER
-#define MISDN_CTRL_XHFC_READ_REGISTER 1
-#endif
-#ifndef MISDN_CTRL_XHFC_SREAD_REGISTER
-#define MISDN_CTRL_XHFC_SREAD_REGISTER 2
-#endif
-#ifndef MISDN_CTRL_XHFC_WRITE_REGISTER
-#define MISDN_CTRL_XHFC_WRITE_REGISTER 3
-#endif
-
-// #define TESTLAYER1_XHFC_CUSTOM_INIT
-
 #define MISDN_BUF_SZ	2048 // data buffer for message mISDNcore message Q
 
 #define CHAN_B1		0
@@ -804,90 +790,6 @@ connect_layer1_d(devinfo_t *di) {
 	return 0;
 }
 
-#ifdef TESTLAYER1_XHFC_CUSTOM_INIT
-
-u_int8_t read_xhfc(devinfo_t *di, u_int8_t reg_addr) {
-	int ret;
-	struct mISDN_ctrl_req creq;
-
-	creq.op = MISDN_CTRL_XHFC_CUSTOM_CMD;
-	creq.p1 = MISDN_CTRL_XHFC_READ_REGISTER;
-	creq.p2 = reg_addr;
-
-	ret = ioctl(mISDN.layerid[CHAN_D], IMCTRLREQ, &creq);
-	if (ret < 0) {
-		fprintf(stdout, "read_xhfc error %s\n", strerror(errno));
-	}
-	return ret;
-}
-
-u_int8_t sread_xhfc(devinfo_t *di, u_int8_t reg_addr) {
-	int ret;
-	struct mISDN_ctrl_req creq;
-
-	creq.op = MISDN_CTRL_XHFC_CUSTOM_CMD;
-	creq.p1 = MISDN_CTRL_XHFC_SREAD_REGISTER;
-	creq.p2 = reg_addr;
-
-	ret = ioctl(mISDN.layerid[CHAN_D], IMCTRLREQ, &creq);
-	if (ret < 0) {
-		fprintf(stdout, "sread_xhfc error %s\n", strerror(errno));
-	}
-	return ret;
-}
-
-u_int8_t write_xhfc(devinfo_t *di, u_int8_t reg_addr, u_int8_t value) {
-	int ret;
-	struct mISDN_ctrl_req creq;
-
-	creq.op = MISDN_CTRL_XHFC_CUSTOM_CMD;
-	creq.p1 = MISDN_CTRL_XHFC_WRITE_REGISTER;
-	creq.p2 = reg_addr;
-	creq.p2 += (value << 8);
-
-	ret = ioctl(mISDN.layerid[CHAN_D], IMCTRLREQ, &creq);
-	if (ret < 0) {
-		fprintf(stdout, "write_xhfc error %s\n", strerror(errno));
-	}
-	return ret;
-}
-
-int
-xhfc_custom_init(devinfo_t *di) {
-	struct mISDN_ctrl_req creq;
-	int ret;
-	u_int8_t tmp;
-
-	creq.op = MISDN_CTRL_GETOP;
-	ret = ioctl(mISDN.layerid[CHAN_D], IMCTRLREQ, &creq);
-	if (ret < 0) {
-		fprintf(stdout, "xhfc_custom_init MISDN_CTRL_GETOP error %s\n", strerror(errno));
-		return -1;
-	}
-
-	if (!(creq.op & MISDN_CTRL_XHFC_CUSTOM_CMD)) {
-		fprintf(stdout, "xhfc_custom_init lack of MISDN_CTRL_XHFC_CUSTOM_CMD in layer1 instance\n", strerror(errno));
-		return -2;
-	}
-
-	fprintf(stdout, "R_CHIP_ID : 0x%x\n", read_xhfc(di, 0x16));
-
-	/*
-	tmp = read_xhfc(di, 0xFA);
-	fprintf(stdout, "A_CON_HDLC a: 0x%x\n", tmp);
-
-	write_xhfc(di, 0xFA, 0x01);
-	fprintf(stdout, "A_CON_HDLC b: 0x%x\n", read_xhfc(di, 0xFA));
-
-	write_xhfc(di, 0xFA, tmp);
-	fprintf(stdout, "A_CON_HDLC b: 0x%x\n", read_xhfc(di, 0xFA));
-	*/
-
-	return 0;
-}
-
-#endif // TESTLAYER1_XHFC_CUSTOM_INIT
-
 int
 set_hw_loop(devinfo_t *di)
 {
@@ -1025,9 +927,6 @@ int main(int argc, char *argv[]) {
 		return err;
 	}
 
-#ifdef TESTLAYER1_XHFC_CUSTOM_INIT
-	xhfc_custom_init(&mISDN);
-#endif
 
 	if (testloop) {
 		set_hw_loop(&mISDN);
