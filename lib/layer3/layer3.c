@@ -373,7 +373,7 @@ l3ml3p(layer3_t *l3, int pr, unsigned int ces)
 		dprint(DBGM_L2, "port%d: pr %s tei:%d pid %x ces %x/%x\n",
 			l3->l2master.l2addr.dev, _mi_msg_type2str(pr),
 			l3->l2master.l2addr.tei, p->pid, ces, p_ces);
-		if ((p_ces == ces) || (p_ces == MISDN_CES_MASTER)) {
+		if ((p_ces == ces) || (p_ces == MISDN_CES_MASTER && test_bit(FLG_USER, &l3->ml3.options))) {
 			dprint(L3_DEB_PROC, "port%d: send to l3proc pid=%x\n",
 				l3->l2master.l2addr.dev, p->pid);
 			l3->p_mgr(p, pr, NULL);
