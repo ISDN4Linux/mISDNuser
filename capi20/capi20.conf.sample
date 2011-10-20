@@ -1,0 +1,15 @@
+# This is a example config file for mISDNcapid
+# columns starting with "#", "!", ";" or newline are ignored
+
+# first column controller type (for mISDNcapi only lines starting with mISDN are used)
+# first column could be also a global parameter (e.g. debugmask is supported)  
+# second column is the number of the mISDN controller (0 -126)
+# third column is the CAPI controller number (1-127) default mISDN controller + 1
+# forth column is 0 (controller is disabled for CAPI20) or 1 (enabled - default)
+
+# with no config file or a empty config file all mISDN controllers are used for CAPI
+
+debugmask 0x13  - example default debuglevel
+mISDN 0 1 1  - first mISDN device is mapped to CAPI20 controller 1 and enabled
+mISDN 1 2 0  - second mISDN device is disabled for CAPI20
+

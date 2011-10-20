@@ -17,7 +17,11 @@ if OPT_GUI
     MAYBE_GUI = guitools
 endif
 
-SUBDIRS = include lib tools bridge l1oip $(MAYBE_EXAMPLE) $(MAYBE_GUI)
+if OPT_CAPI
+    MAYBE_CAPI = capi20
+endif
+
+SUBDIRS = include lib tools bridge l1oip $(MAYBE_EXAMPLE) $(MAYBE_GUI) $(MAYBE_CAPI)
 
 CLEANFILES = *~
 

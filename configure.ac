@@ -84,6 +84,26 @@ else
 fi
 AC_SUBST(MEMLEAKDEBUG_COMPILE)
 
+AC_ARG_ENABLE([capi],
+	[  --enable-capi   Include CAPI2.0 support],
+	[case "${enableval}" in
+		yes) capi=true ;;
+		no)  capi=false ;;
+		*) AC_MSG_ERROR([bad value ${enableval} for --enable-capi]) ;;
+	  esac],
+	  [capi=false])
+                         	
+AM_CONDITIONAL([OPT_CAPI], [test "x$capi" = xtrue])
+
+if $capi
+then
+	AC_CHECK_HEADERS([capi20.h capiutils.h capi_mod.h])
+	AC_CHECK_LIB(capi20, [capi20_isinstalled],
+		AC_MSG_RESULT(found),
+		AC_MSG_ERROR([capi library not found])
+	)
+fi
+
 # Checks for library functions.
 AC_FUNC_FORK
 AC_FUNC_MALLOC
@@ -112,6 +132,8 @@ AC_CONFIG_FILES([Makefile
                  example/Makefile
                  guitools/Makefile
                  guitools/qmisdnwatch/Makefile
+                 capi20/Makefile
+                 capi20/module/Makefile
                ])
 
 AC_OUTPUT
