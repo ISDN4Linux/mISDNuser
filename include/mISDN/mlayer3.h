@@ -47,40 +47,40 @@ struct m_extie {
 struct l3_msg {
 	unsigned int	type;
 	unsigned int	pid;
-	unsigned char	*bearer_capability;
-	unsigned char	*cause;
-	unsigned char	*call_id;
-	unsigned char	*call_state;
-	unsigned char	*channel_id;
-	unsigned char	*facility;
-	unsigned char	*progress;
-	unsigned char	*net_fac;
-	unsigned char	*notify;
-	unsigned char	*display;
-	unsigned char	*date;
-	unsigned char	*keypad;
-	unsigned char	*signal;
-	unsigned char	*info_rate;
-	unsigned char	*end2end_transit;
-	unsigned char	*transit_delay_sel;
-	unsigned char	*pktl_bin_para;
-	unsigned char	*pktl_window;
-	unsigned char	*pkt_size;
-	unsigned char	*closed_userg;
-	unsigned char	*reverse_charge;
-	unsigned char	*connected_nr;
-	unsigned char	*connected_sub;
-	unsigned char	*calling_nr;
-	unsigned char	*calling_sub;
-	unsigned char	*called_nr;
-	unsigned char	*called_sub;
-	unsigned char	*redirecting_nr;
-	unsigned char	*redirection_nr;
-	unsigned char	*transit_net_sel;
-	unsigned char	*restart_ind;
-	unsigned char	*llc;
-	unsigned char	*hlc;
-	unsigned char	*useruser;
+	unsigned char	*bearer_capability;	/* ie 0x04 pos  0 */
+	unsigned char	*cause;			/* ie 0x08 pos  1 */
+	unsigned char	*call_id;		/* ie 0x10 pos  2 */
+	unsigned char	*call_state;		/* ie 0x14 pos  3 */
+	unsigned char	*channel_id;		/* ie 0x18 pos  4 */
+	unsigned char	*facility;		/* ie 0x1c pos  5 */
+	unsigned char	*progress;		/* ie 0x1e pos  6 */
+	unsigned char	*net_fac;		/* ie 0x20 pos  7 */
+	unsigned char	*notify;		/* ie 0x27 pos  8 */
+	unsigned char	*display;		/* ie 0x28 pos  9 */
+	unsigned char	*date;			/* ie 0x29 pos 10 */
+	unsigned char	*keypad;		/* ie 0x2c pos 11 */
+	unsigned char	*signal;		/* ie 0x34 pos 12 */
+	unsigned char	*info_rate;		/* ie 0x40 pos 13 */
+	unsigned char	*end2end_transit;	/* ie 0x42 pos 14 */
+	unsigned char	*transit_delay_sel;	/* ie 0x43 pos 15 */
+	unsigned char	*pktl_bin_para;		/* ie 0x44 pos 16 */
+	unsigned char	*pktl_window;		/* ie 0x45 pos 17 */
+	unsigned char	*pkt_size;		/* ie 0x46 pos 18 */
+	unsigned char	*closed_userg;		/* ie 0x47 pos 19 */
+	unsigned char	*reverse_charge;	/* ie 0x4a pos 20 */
+	unsigned char	*connected_nr;		/* ie 0x4c pos 21 */
+	unsigned char	*connected_sub;		/* ie 0x4d pos 22 */
+	unsigned char	*calling_nr;		/* ie 0x6c pos 23 */
+	unsigned char	*calling_sub;		/* ie 0x6d pos 24 */
+	unsigned char	*called_nr;		/* ie 0x70 pos 25 */
+	unsigned char	*called_sub;		/* ie 0x71 pos 26 */
+	unsigned char	*redirecting_nr;	/* ie 0x74 pos 27 */
+	unsigned char	*redirection_nr;	/* ie 0x76 pos 28 */
+	unsigned char	*transit_net_sel;	/* ie 0x78 pos 29 */
+	unsigned char	*restart_ind;		/* ie 0x79 pos 30 */
+	unsigned char	*llc;			/* ie 0x7c pos 31 */
+	unsigned char	*hlc;			/* ie 0x7d pos 32 */
+	unsigned char	*useruser;		/* ie 0x7e pos 33 */
 	unsigned char	comprehension_req;
 	unsigned char	more_data;
 	unsigned char	sending_complete;

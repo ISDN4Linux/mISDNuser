@@ -344,6 +344,27 @@ mi_encode_bearer(struct l3_msg *l3m, unsigned int capability, unsigned int l1use
 }
 
 int
+mi_encode_hlc(struct l3_msg *l3m, int hlc, int ehlc)
+{
+	unsigned char ie[3];
+	int l = 2;
+
+	if (hlc < 0) /* no hlc to include */
+		return 0;
+
+	ie[0] = 0x91;
+	ie[1] = hlc & 0x7f;
+	
+	if (ehlc < 0)
+		ie[1] | 0x80;
+	else {
+		l = 3;
+		ie[2] = 0x80 | (ehlc & 0x7f);
+	}
+	return add_layer3_ie(l3m, IE_HLC, l, ie);
+}
+
+int
 mi_encode_channel_id(struct l3_msg *l3m, struct misdn_channel_info *ci)
 {
 	unsigned char ie[3];
@@ -750,6 +771,26 @@ done:
 	_ASSIGN_PVAL(oct_7, opt[octet_7]);
 	return 0;
 };
+
+int
+mi_decode_hlc(struct l3_msg *l3m, int *hlchar, int *exthcl)
+{
+	int hlc = -1, exthlc = -1;
+
+	if (l3m == NULL || l3m->hlc == NULL)
+		goto done;
+	if (*l3m->hlc < 2)
+		return -EINVAL;
+	if (l3m->hlc[1] != 0x91)
+		return -EINVAL;
+	hlc = l3m->hlc[2] & 0x7f;
+	if (*l3m->hlc > 2 && !(l3m->hlc[2] & 0x80))
+		exthlc = l3m->hlc[2] & 0x7f;
+done:
+	_ASSIGN_PVAL(hlchar, hlc);
+	_ASSIGN_PVAL(exthcl, exthlc);
+	return 0;
+}
 
 int
 mi_decode_cause(struct l3_msg *l3m, int *coding, int *loc, int *rec, int *val, int *dialen, unsigned char *dia)
