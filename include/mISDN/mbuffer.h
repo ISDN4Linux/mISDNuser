@@ -29,6 +29,11 @@ extern "C" {
 #include <mISDN/mISDNif.h>
 #include <mISDN/mlayer3.h>
 
+#ifndef eprint
+#define eprint(fmt, ...)	mi_printf(__FILE__, __LINE__, __PRETTY_FUNCTION__, 1, fmt, ##__VA_ARGS__)
+extern int mi_printf(const char *file, int line, const char *func, int lev, const char *fmt, ...) __attribute__ ((format (printf,5,6)));
+#endif
+
 struct mqueue {
 	struct mbuffer	*prev;
 	struct mbuffer	*next;
@@ -169,7 +174,7 @@ static __inline__ unsigned char *msg_put(struct mbuffer *msg, unsigned int len)
 	msg->tail += len;
 	msg->len += len;
 	if (msg->tail > msg->end) {
-		fprintf(stderr, "msg_over_panic msg(%p) data(%p) head(%p)\n",
+		eprint("msg_over_panic msg(%p) data(%p) head(%p)\n",
 			msg, msg->data, msg->head);
 		return NULL;
 	}
@@ -182,7 +187,7 @@ static __inline__ unsigned char *msg_push(struct mbuffer *msg, unsigned int len)
 	msg->len += len;
 	if(msg->data < msg->head)
 	{
-		fprintf(stderr, "msg_under_panic msg(%p) data(%p) head(%p)\n",
+		eprint("msg_under_panic msg(%p) data(%p) head(%p)\n",
 			msg, msg->data, msg->head);
 		return NULL;
 	}
