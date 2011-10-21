@@ -40,8 +40,6 @@ struct mPLCI *new_mPLCI(struct pController *pc, int pid, struct lPLCI *lp)
 		plci->pc = pc;
 		plci->lPLCIs = lp;
 		plci->next = pc->plciL;
-		if (pc->plciL)
-			pc->plciL->prev = plci;
 		pc->plciL = plci;
 	}
 	return plci;
@@ -61,14 +59,13 @@ int free_mPLCI(struct mPLCI *plci)
 	pc = plci->pc;
 	p = pc->plciL;
 	if (p == plci)
-		pc->plciL = p->next;
+		pc->plciL = plci->next;
 	else {
-		while(p) {
-			if (p->next == plci)
+		while(p && p->next) {
+			if (p->next == plci) {
 				p->next = plci->next;
-			if (plci->prev)
-				plci->next->prev = p;
-			
+				break;
+			}
 			p = p->next;
 		}
 	}
@@ -86,8 +83,6 @@ int plciAttach_lPLCI(struct mPLCI *plci, struct lPLCI *lp)
 	}
 	lp->PLCI = plci;
 	lp->next = plci->lPLCIs;
-	if (plci->lPLCIs)
-		plci->lPLCIs->prev = lp;
 	plci->lPLCIs = lp;
 	plci->nAppl++;
 	return plci->nAppl;
@@ -95,27 +90,23 @@ int plciAttach_lPLCI(struct mPLCI *plci, struct lPLCI *lp)
 
 void plciDetachlPLCI(struct lPLCI *lp)
 {
-	struct lPLCI *n;
+	struct lPLCI *o;
 	struct mPLCI *p;
 
 	p = lp->PLCI;
 
 	if (p->lPLCIs == lp) {
 		p->lPLCIs = lp->next;
-		if (p->lPLCIs)
-			p->lPLCIs->prev = NULL;
 		p->nAppl--;
 	} else {
-		n = p->lPLCIs;
-		while (n->next) {
-			if (n->next == lp) {
-				n->next = lp->next;
-				if (n->next)
-					n->next->prev = n;
+		o = p->lPLCIs;
+		while (o && o->next) {
+			if (o->next == lp) {
+				o->next = lp->next;
 				p->nAppl--;
 				break;
 			}
-			n = n->next;
+			o = o->next;
 		}
 	}
 	if (p->nAppl == 0 && p->lPLCIs == NULL) {

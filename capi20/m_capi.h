@@ -100,9 +100,7 @@ struct BInstance *ControllerSelChannel(struct pController *, int, int);
 /* This is a struct for the logical controller per application, also has the listen statemachine */
 struct lController {
 	struct lController	*nextC;
-	struct lController	*prevC;
 	struct lController	*nextA;
-	struct lController	*prevA;
 	int			refc;		/* refcount */
 	struct pController	*Contr;		/* pointer to the physical controler */
 	struct mApplication	*Appl;		/* pointer to the CAPI application */
@@ -112,7 +110,14 @@ struct lController {
 	uint32_t		CIPmask2;	/* Listen CIP mask 2 */
 };
 
+/* listen.c */
 struct lController *get_lController(struct mApplication *, int);
+void init_listen(void);
+void free_listen(void);
+struct lController *addlController(struct mApplication *, struct pController *);
+void rm_lController(struct lController *lc);
+int listenRequest(struct lController *, struct mc_buf *);
+
 
 struct mApplication {
 	struct mApplication	*next;
@@ -136,7 +141,6 @@ int ListenController(struct pController *);
 
 struct mPLCI {
 	struct mPLCI		*next;
-	struct mPLCI		*prev;
 	uint32_t		plci;		/* PLCI ID */
 	int			pid;		/* L3 pid */
 	struct pController	*pc;
@@ -160,7 +164,6 @@ int plci_l3l4(struct mPLCI *, int, struct l3_msg *);
 
 struct lPLCI {
 	struct lPLCI			*next;
-	struct lPLCI			*prev;
 	uint32_t			plci;		/* PLCI ID */
 	int				pid;		/* L3 pid */
 	struct lController		*lc;
@@ -211,7 +214,6 @@ enum _flowmode {
 
 struct mNCCI {
 	struct mNCCI			*next;
-	struct mNCCI			*prev;
 	uint32_t			ncci;
 	struct lPLCI			*lp;
 	struct mApplication		*appl;
@@ -248,14 +250,6 @@ int recvB_L12(struct BInstance *, int, struct mc_buf *);
 void ncciReleaseLink(struct mNCCI *);
 void ncciDel_lPlci(struct mNCCI *);
 
-/* listen.c */
-void init_listen(void);
-void free_listen(void);
-struct lController *addlController(struct mApplication *, struct pController *);
-void rm_lController(struct lController *lc);
-int listenRequest(struct lController *, struct mc_buf *);
-
-int SendSSNotificationEvent(struct lPLCI *, uint16_t);
 
 #define MC_BUF_ALLOC(a) if (!(a = alloc_mc_buf())) {eprint("Cannot allocate mc_buff\n");return;}
 

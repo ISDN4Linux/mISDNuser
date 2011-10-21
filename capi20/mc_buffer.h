@@ -42,27 +42,28 @@ struct mc_buf {
  * alloc a new mbuffer
  */
 
-extern struct mc_buf	*__alloc_mc_buf(const char *file, int lineno, const char *func);
+#define	alloc_mc_buf()	__mi_calloc(1, sizeof(struct mc_buf), __FILE__, __LINE__, __PRETTY_FUNCTION__)
 
 /*
  * free the message
  */
 extern void		__free_mc_buf(struct mc_buf *, const char *file, int lineno, const char *func);
 
-#define alloc_mc_buf()	__alloc_mc_buf(__FILE__, __LINE__, __PRETTY_FUNCTION__)
 #define free_mc_buf(p)	__free_mc_buf(p, __FILE__, __LINE__, __PRETTY_FUNCTION__)
 #else
 /*
  * alloc a new mbuffer
  */
-extern struct mc_buf	*alloc_mc_buf(void);
-
+#define alloc_mc_buf()	calloc(1, sizeof(struct mc_buf))
 /*
  * free the message 
  */
 extern void		free_mc_buf(struct mc_buf *);
 #endif
 
+#define	mcbuf_rb2cmsg(m)	capi_message2cmsg(&(m)->cmsg, (m)->rb)
+
+extern void			mc_clear_cmsg(struct mc_buf *);
 
 #ifdef __cplusplus
 }

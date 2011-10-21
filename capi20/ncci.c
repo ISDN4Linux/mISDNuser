@@ -112,7 +112,6 @@ static char* str_ev_ncci[] = {
 };
 
 static struct Fsm ncci_fsm = { 0, 0, 0, 0, 0 };
-static struct Fsm ncciD_fsm = { 0, 0, 0, 0, 0 };
 
 static int ncciL4L3(struct mNCCI *ncci, uint32_t, int, int, void *, struct mc_buf *);
 
@@ -273,7 +272,7 @@ ncci_facility_req(struct FsmInst *fi, int event, void *arg)
 		int err = ncciL4L3(ncci, PH_CONTROL_REQ, HW_POTS_ON, 0, NULL, NULL);
 		if (err)
 #endif
-			mc->cmsg.Info = CapiSupplementServiceNotSupported;
+			mc->cmsg.Info = CapiSupplementaryServiceNotSupported;
 	} else if (mc->cmsg.FacilitySelector != 1) { // not DTMF
 		mc->cmsg.Info = CapiIllMessageParmCoding;
 	} else if (p && p[0]) {
@@ -290,7 +289,7 @@ ncci_facility_req(struct FsmInst *fi, int event, void *arg)
 				ncciL4L3(ncci, PH_CONTROL_REQ, 0, sizeof(int), &op, NULL);
 				break;
 			default:
-				mc->cmsg.Info = CapiSupplementServiceNotSupported;
+				mc->cmsg.Info = CapiSupplementaryServiceNotSupported;
 				break;
 		}
 	} else
@@ -330,7 +329,7 @@ ncci_manufacturer_req(struct FsmInst *fi, int event, void *arg)
 			case mISDN_MF_HANDSET_DISABLE:
 				err = ncciL4L3(ncci, PH_CONTROL | REQUEST, HW_POTS_OFF, 0, NULL, NULL);
 				if (err)
-					mcp.Info = CapiSupplementServiceNotSupported;
+					mcp.Info = CapiSupplementaryServiceNotSupported;
 				break;
 			case mISDN_MF_HANDSET_SETMICVOLUME:
 			case mISDN_MF_HANDSET_SETSPKVOLUME:
@@ -342,7 +341,7 @@ ncci_manufacturer_req(struct FsmInst *fi, int event, void *arg)
 					HW_POTS_SETSPKVOL : HW_POTS_SETMICVOL;
 				err = ncciL4L3(ncci, PH_CONTROL | REQUEST, op, 2, &mrp->vol, NULL);
 				if (err == -ENODEV)
-					mcp.Info = CapiSupplementServiceNotSupported;
+					mcp.Info = CapiSupplementaryServiceNotSupported;
 				else if (err)
 					mcp.Info = CapiIllMessageParmCoding;
 				break;
@@ -350,7 +349,7 @@ ncci_manufacturer_req(struct FsmInst *fi, int event, void *arg)
 			case mISDN_MF_HANDSET_GETMICVOLUME:
 			case mISDN_MF_HANDSET_GETSPKVOLUME:
 			default:
-				mcp.Info = CapiSupplementServiceNotSupported;
+				mcp.Info = CapiSupplementaryServiceNotSupported;
 				break;
 		}
 	} else
@@ -359,7 +358,7 @@ ncci_manufacturer_req(struct FsmInst *fi, int event, void *arg)
 	cmsg->ManuData = (_cstruct)&mcp;
 #else
 	capi_cmsg_answer(&mc->cmsg);
-	mc->cmsg.Info = CapiSupplementServiceNotSupported;
+	mc->cmsg.Info = CapiSupplementaryServiceNotSupported;
 #endif
 	Send2Application(ncci, mc);
 }
@@ -602,7 +601,6 @@ ncciCreate(struct lPLCI *lp)
 		while (old->next)
 			old = old->next;
 		old->next = nc;
-		nc->prev = old;
 	} else
 		lp->Nccis = nc;
 	dprintf(MIDEBUG_NCCI, "NCCI %06x: created\n", nc->ncci);
