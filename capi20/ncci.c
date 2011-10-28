@@ -987,6 +987,10 @@ static int ncciGetCmsg(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, struct m
 		case CAPI_FACILITY_REQ:
 			retval = FsmEvent(&ncci->ncci_m, EV_AP_FACILITY_REQ, mc);
 			break;
+		case CAPI_FACILITY_RESP:
+			/* no need to handle */
+			retval = 0;
+			break;
 		case CAPI_MANUFACTURER_REQ:
 			retval = FsmEvent(&ncci->ncci_m, EV_AP_MANUFACTURER_REQ, mc);
 			break;
@@ -1135,7 +1139,12 @@ int recvB_L12(struct BInstance *bi, int pr, struct mc_buf *mc)
 			}
 		}
 		FsmEvent(&bi->nc->ncci_m, EV_DL_ESTABLISH_CONF, mc);
-		ret = 1;
+		/* send  dummy to allow better buffering */
+		hh->prim = PH_DATA_IND;
+		mc->len = 136;
+		memset(&mc->rb[8], 128, 128);
+		ncciDataInd(bi->nc, hh->prim, mc);
+		ret = 0;
 		break;
 	case PH_ACTIVATE_IND:
 	case DL_ESTABLISH_IND:

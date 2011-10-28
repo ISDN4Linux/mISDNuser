@@ -165,8 +165,8 @@ SendCmsg2Application(struct mApplication *appl, struct mc_buf *mc)
 	if (ret != mc->len)
 		eprint("Message send error len=%d ret=%d - %s\n", mc->len, ret, strerror(errno));
 	else
-		dprint(MIDEBUG_NCCI_DATA, "Msg: %02x/%02x %02x/%02x %s len %d/%d\n", mc->rb[4],  mc->rb[5],
-			mc->cmsg.Command, mc->cmsg.Subcommand, capi20_cmd2str(mc->cmsg.Command, mc->cmsg.Subcommand), mc->len, ret);
+		dprint(MIDEBUG_NCCI_DATA, "Msg: %02x/%02x %s addr %x len %d/%d\n", mc->rb[4],  mc->rb[5],
+			capi20_cmd2str(mc->rb[4],  mc->rb[5]), CAPIMSG_CONTROL(mc->rb), mc->len, ret);
 }
 
 void

@@ -24,6 +24,9 @@
 #include "mc_buffer.h"
 #include "m_capi_sock.h"
 
+/* should be moved to capi_debug.h */
+#include <capi_debug.h>
+
 #ifndef DEF_CONFIG_FILE
 #define DEF_CONFIG_FILE	"/etc/capi20.conf"
 #endif
@@ -608,6 +611,8 @@ int ListenController(struct pController *pc)
 	return 0;
 }
 
+void capi_dump_shared(void);
+
 static void get_profile(int fd, struct mc_buf *mc)
 {
 	int ret, cnt, i, contr;
@@ -645,6 +650,7 @@ static void get_profile(int fd, struct mc_buf *mc)
 	ret = send(fd, mc->rb, 74, 0);
 	if (ret != 74)
 		eprint("error send %d/%d  - %s\n", ret, 74, strerror(errno));
+	capi_dump_shared();
 }
 
 static void mIcapi_register(int fd, int idx, struct mc_buf *mc)
@@ -979,6 +985,12 @@ static int my_lib_debug(const char *file, int line, const char *func, int level,
 	return ret;
 }
 
+
+static int my_capilib_dbg(const char *file, int line, const char *func, const char *fmt, va_list va)
+{
+	return my_lib_debug(file, line, func, 1, fmt, va);
+}
+
 static struct mi_ext_fn_s l3dbg = {
 	.prt_debug = my_lib_debug,
 };
@@ -1005,6 +1017,7 @@ int main(int argc, char *argv[])
 	if (debugmask & 0x100)
 		libdebug |= 0xfffff;
 
+	register_dbg_vprintf(my_capilib_dbg);
 	ver = init_layer3(4, &l3dbg);
 	mISDN_set_debug_level(libdebug);
 	iprint("Init mISDN lib version %x, debug = %x (%x)\n", ver, debugmask, libdebug);

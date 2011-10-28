@@ -759,6 +759,7 @@ GIT_REPO_TRUE
 AF_ISDN_VAL
 MISDN_AF_ISDN_VAL
 LIBOBJS
+CAPI_MODULE_LOADER_VERSION
 OPT_CAPI_FALSE
 OPT_CAPI_TRUE
 MEMLEAKDEBUG_COMPILE
@@ -5855,13 +5856,13 @@ if ${lt_cv_nm_interface+:} false; then :
 else
   lt_cv_nm_interface="BSD nm"
   echo "int some_variable = 0;" > conftest.$ac_ext
-  (eval echo "\"\$as_me:5858: $ac_compile\"" >&5)
+  (eval echo "\"\$as_me:5859: $ac_compile\"" >&5)
   (eval "$ac_compile" 2>conftest.err)
   cat conftest.err >&5
-  (eval echo "\"\$as_me:5861: $NM \\\"conftest.$ac_objext\\\"\"" >&5)
+  (eval echo "\"\$as_me:5862: $NM \\\"conftest.$ac_objext\\\"\"" >&5)
   (eval "$NM \"conftest.$ac_objext\"" 2>conftest.err > conftest.out)
   cat conftest.err >&5
-  (eval echo "\"\$as_me:5864: output\"" >&5)
+  (eval echo "\"\$as_me:5865: output\"" >&5)
   cat conftest.out >&5
   if $GREP 'External.*some_variable' conftest.out > /dev/null; then
     lt_cv_nm_interface="MS dumpbin"
@@ -7066,7 +7067,7 @@ ia64-*-hpux*)
   ;;
 *-*-irix6*)
   # Find out which ABI we are using.
-  echo '#line 7069 "configure"' > conftest.$ac_ext
+  echo '#line 7070 "configure"' > conftest.$ac_ext
   if { { eval echo "\"\$as_me\":${as_lineno-$LINENO}: \"$ac_compile\""; } >&5
   (eval $ac_compile) 2>&5
   ac_status=$?
@@ -8851,11 +8852,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:8854: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:8855: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:8858: \$? = $ac_status" >&5
+   echo "$as_me:8859: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -9190,11 +9191,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:9193: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:9194: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:9197: \$? = $ac_status" >&5
+   echo "$as_me:9198: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -9295,11 +9296,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:9298: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:9299: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:9302: \$? = $ac_status" >&5
+   echo "$as_me:9303: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -9350,11 +9351,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:9353: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:9354: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:9357: \$? = $ac_status" >&5
+   echo "$as_me:9358: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -11718,7 +11719,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11721 "configure"
+#line 11722 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11814,7 +11815,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11817 "configure"
+#line 11818 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -13770,11 +13771,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:13773: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:13774: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:13777: \$? = $ac_status" >&5
+   echo "$as_me:13778: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -13869,11 +13870,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:13872: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:13873: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:13876: \$? = $ac_status" >&5
+   echo "$as_me:13877: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -13921,11 +13922,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:13924: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:13925: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:13928: \$? = $ac_status" >&5
+   echo "$as_me:13929: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -15112,19 +15113,6 @@ fi
 
 if $capi
 then
-	for ac_header in capi20.h capiutils.h capi_mod.h
-do :
-  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
-ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
-if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
-  cat >>confdefs.h <<_ACEOF
-#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
-_ACEOF
-
-fi
-
-done
-
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for capi20_isinstalled in -lcapi20" >&5
 $as_echo_n "checking for capi20_isinstalled in -lcapi20... " >&6; }
 if ${ac_cv_lib_capi20_capi20_isinstalled+:} false; then :
@@ -15162,12 +15150,41 @@ fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_capi20_capi20_isinstalled" >&5
 $as_echo "$ac_cv_lib_capi20_capi20_isinstalled" >&6; }
 if test "x$ac_cv_lib_capi20_capi20_isinstalled" = xyes; then :
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: found" >&5
-$as_echo "found" >&6; }
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: capi20 found" >&5
+$as_echo "capi20 found" >&6; }
 else
   as_fn_error $? "capi library not found" "$LINENO" 5
 
 fi
+
+	ac_fn_c_check_header_mongrel "$LINENO" "capi20.h" "ac_cv_header_capi20_h" "$ac_includes_default"
+if test "x$ac_cv_header_capi20_h" = xyes; then :
+  ac_fn_c_check_header_mongrel "$LINENO" "capi_mod.h" "ac_cv_header_capi_mod_h" "$ac_includes_default"
+if test "x$ac_cv_header_capi_mod_h" = xyes; then :
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: capi_mod.h found" >&5
+$as_echo "capi_mod.h found" >&6; }
+else
+  as_fn_error $? "capi_mod.h do not exist - update capi4linux" "$LINENO" 5
+fi
+
+
+else
+  as_fn_error $? "capi20.h do not exist - install capi4linux development files" "$LINENO" 5
+fi
+
+
+	if ac_fn_c_compute_int "$LINENO" "MODULE_LOADER_VERSION" "CAPI_MODULE_LOADER_VERSION"        "
+		#include <sys/types.h>
+		#include <capi_mod.h>
+		"; then :
+
+else
+  as_fn_error $? "capi library MODULE_LOADER_VERSION cannot calculated - update capi4linux" "$LINENO" 5
+
+fi
+
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: Capi library module loader version ${CAPI_MODULE_LOADER_VERSION} detected" >&5
+$as_echo "Capi library module loader version ${CAPI_MODULE_LOADER_VERSION} detected" >&6; }
 
 fi
 

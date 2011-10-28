@@ -75,7 +75,7 @@ listen_req_l_x(struct FsmInst *fi, int event, void *arg, int state)
 	lc->InfoMask = mc->cmsg.InfoMask;
 	lc->CIPmask = mc->cmsg.CIPmask;
 	lc->CIPmask2 = mc->cmsg.CIPmask2;
-
+	ListenController(lc->Contr);
 	capi_cmsg_answer(&mc->cmsg);
 	mc->cmsg.Info = CapiNoError;
 	FsmEvent(&lc->listen_m, EV_LISTEN_CONF, mc);

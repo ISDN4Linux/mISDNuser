@@ -66,7 +66,8 @@ AM_RECURSIVE_TARGETS = $(RECURSIVE_TARGETS:-recursive=) \
 	distdir dist dist-all distcheck
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = include lib tools bridge l1oip example guitools capi20
+DIST_SUBDIRS = include lib tools bridge l1oip example guitools capi20 \
+	capi20/module
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -111,6 +112,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+CAPI_MODULE_LOADER_VERSION = @CAPI_MODULE_LOADER_VERSION@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
@@ -226,7 +228,7 @@ top_srcdir = @top_srcdir@
 ACLOCAL_AMFLAGS = -I m4
 @OPT_EXAMPLE_TRUE@MAYBE_EXAMPLE = example
 @OPT_GUI_TRUE@MAYBE_GUI = guitools
-@OPT_CAPI_TRUE@MAYBE_CAPI = capi20
+@OPT_CAPI_TRUE@MAYBE_CAPI = capi20 capi20/module
 SUBDIRS = include lib tools bridge l1oip $(MAYBE_EXAMPLE) $(MAYBE_GUI) $(MAYBE_CAPI)
 CLEANFILES = *~
 all: all-recursive

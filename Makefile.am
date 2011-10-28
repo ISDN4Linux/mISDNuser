@@ -18,7 +18,7 @@ if OPT_GUI
 endif
 
 if OPT_CAPI
-    MAYBE_CAPI = capi20
+    MAYBE_CAPI = capi20 capi20/module
 endif
 
 SUBDIRS = include lib tools bridge l1oip $(MAYBE_EXAMPLE) $(MAYBE_GUI) $(MAYBE_CAPI)

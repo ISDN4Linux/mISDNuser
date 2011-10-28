@@ -97,11 +97,26 @@ AM_CONDITIONAL([OPT_CAPI], [test "x$capi" = xtrue])
 
 if $capi
 then
-	AC_CHECK_HEADERS([capi20.h capiutils.h capi_mod.h])
 	AC_CHECK_LIB(capi20, [capi20_isinstalled],
-		AC_MSG_RESULT(found),
+		AC_MSG_RESULT([capi20 found]),
 		AC_MSG_ERROR([capi library not found])
 	)
+	AC_CHECK_HEADER([capi20.h],
+		AC_CHECK_HEADER([capi_mod.h],
+			[AC_MSG_RESULT([capi_mod.h found])],
+			AC_MSG_ERROR([capi_mod.h do not exist - update capi4linux]),
+		),
+		AC_MSG_ERROR([capi20.h do not exist - install capi4linux development files]),
+	)
+	AC_COMPUTE_INT([CAPI_MODULE_LOADER_VERSION], [[MODULE_LOADER_VERSION]],
+		[
+		#include <sys/types.h>
+		#include <capi_mod.h>
+		],
+		[AC_MSG_ERROR([capi library MODULE_LOADER_VERSION cannot calculated - update capi4linux])]
+	)
+	AC_MSG_RESULT([Capi library module loader version ${CAPI_MODULE_LOADER_VERSION} detected]) 
+	AC_SUBST(CAPI_MODULE_LOADER_VERSION)
 fi
 
 # Checks for library functions.

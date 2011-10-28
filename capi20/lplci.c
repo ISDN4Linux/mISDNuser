@@ -1448,7 +1448,7 @@ plci_cc_ph_control_ind(struct FsmInst *fi, int event, void *arg)
 	__u8		tmp[2];
 
 	tt = (unsigned int *)(mc->rb + sizeof(struct mISDNhead));
-	dprint(MIDEBUG_PLCI, "PLCI:%04x tt(%x)", lp->plci, *tt);
+	dprint(MIDEBUG_PLCI, "PLCI:%04x tt(%x)\n", lp->plci, *tt);
 	if ((*tt & ~DTMF_TONE_MASK) != DTMF_TONE_VAL) {
 		wprint("PLCI:%04x PH_CONTROL but not a touchtone (%x) ?\n", lp->plci, *tt);
 	} else {

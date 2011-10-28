@@ -54,6 +54,9 @@ am_mISDNcapid_OBJECTS = daemon.$(OBJEXT) application.$(OBJEXT) \
 	listen.$(OBJEXT)
 mISDNcapid_OBJECTS = $(am_mISDNcapid_OBJECTS)
 mISDNcapid_DEPENDENCIES = ../lib/libmisdn.la
+mISDNcapid_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+	$(mISDNcapid_LDFLAGS) $(LDFLAGS) -o $@
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/include
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -80,6 +83,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+CAPI_MODULE_LOADER_VERSION = @CAPI_MODULE_LOADER_VERSION@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
@@ -196,8 +200,10 @@ mISDNcapid_SOURCES = daemon.c application.c lplci.c mplci.c ncci.c m_capi.h m_ca
 			mc_buffer.c mc_buffer.h SupplementaryService.h SupplementaryService.c listen.c
 
 mISDNcapid_LDADD = ../lib/libmisdn.la -lcapi20
+mISDNcapid_LDFLAGS = -shared
 AM_CPPFLAGS = -I$(top_srcdir)/include -Werror -Wall
 CLEANFILES = *~
+MISDN_SOCKET_DIR = /var/run/mISDNcapid
 all: all-am
 
 .SUFFIXES:
@@ -277,7 +283,7 @@ clean-sbinPROGRAMS:
 	rm -f $$list
 mISDNcapid$(EXEEXT): $(mISDNcapid_OBJECTS) $(mISDNcapid_DEPENDENCIES) 
 	@rm -f mISDNcapid$(EXEEXT)
-	$(LINK) $(mISDNcapid_OBJECTS) $(mISDNcapid_LDADD) $(LIBS)
+	$(mISDNcapid_LINK) $(mISDNcapid_OBJECTS) $(mISDNcapid_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -468,7 +474,7 @@ install-dvi: install-dvi-am
 
 install-dvi-am:
 
-install-exec-am: install-sbinPROGRAMS
+install-exec-am: install-exec-local install-sbinPROGRAMS
 
 install-html: install-html-am
 
@@ -517,15 +523,18 @@ uninstall-am: uninstall-sbinPROGRAMS
 	distclean-compile distclean-generic distclean-libtool \
 	distclean-tags distdir dvi dvi-am html html-am info info-am \
 	install install-am install-data install-data-am install-dvi \
-	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-sbinPROGRAMS install-strip installcheck \
+	install-dvi-am install-exec install-exec-am install-exec-local \
+	install-html install-html-am install-info install-info-am \
+	install-man install-pdf install-pdf-am install-ps \
+	install-ps-am install-sbinPROGRAMS install-strip installcheck \
 	installcheck-am installdirs maintainer-clean \
 	maintainer-clean-generic mostlyclean mostlyclean-compile \
 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
 	tags uninstall uninstall-am uninstall-sbinPROGRAMS
 
+
+install-exec-local:
+	mkdir -p $(DESTDIR)$(MISDN_SOCKET_DIR)
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
