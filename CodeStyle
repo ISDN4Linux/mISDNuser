@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# I would prefer, if the source code for the mISDNuser project
+# follow the some common style.
+#
+# This is the my prefered option but I also accept others - but maybe I will
+# reformat it.
+#
+# It is nearly the same style the Linux kernel is using, with the exception
+# that I allow 132 characters per line (kernel has a strict 80 character limit).
+#
+# To get your file reformatted with this style, simple run this file as script:
+#
+# ./CodeStyle <path to source file>
+#
+# The script part was copied from the linux kernel sources.
+#
+# Karsten Keil <kkeil@linux-pingi.de>
+#
+#
+PARAM="-npro -kr -i8 -ts8 -sob -l132 -ss -ncs -cp1"
+RES=`indent --version`
+V1=`echo $RES | cut -d' ' -f3 | cut -d'.' -f1`
+V2=`echo $RES | cut -d' ' -f3 | cut -d'.' -f2`
+V3=`echo $RES | cut -d' ' -f3 | cut -d'.' -f3`
+if [ $V1 -gt 2 ]; then
+  PARAM="$PARAM -il0"
+elif [ $V1 -eq 2 ]; then
+  if [ $V2 -gt 2 ]; then
+    PARAM="$PARAM -il0";
+  elif [ $V2 -eq 2 ]; then
+    if [ $V3 -ge 10 ]; then
+      PARAM="$PARAM -il0"
+    fi
+  fi
+fi
+indent $PARAM "$@"
