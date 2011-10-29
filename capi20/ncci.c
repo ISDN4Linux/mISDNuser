@@ -40,9 +40,7 @@ enum {
 	ST_NCCI_N_3,
 	ST_NCCI_N_4,
 	ST_NCCI_N_5,
-}
-
-const ST_NCCI_COUNT = ST_NCCI_N_5 + 1;
+} const ST_NCCI_COUNT = ST_NCCI_N_5 + 1;
 
 static char *str_st_ncci[] = {
 	"ST_NCCI_N_0",
@@ -53,7 +51,7 @@ static char *str_st_ncci[] = {
 	"ST_NCCI_N_3",
 	"ST_NCCI_N_4",
 	"ST_NCCI_N_5",
-}; 
+};
 
 enum {
 	EV_AP_CONNECT_B3_REQ,
@@ -80,11 +78,9 @@ enum {
 	EV_DL_DOWN_IND,
 	EV_NC_LINKDOWN,
 	EV_AP_RELEASE,
-}
+} const EV_NCCI_COUNT = EV_AP_RELEASE + 1;
 
-const EV_NCCI_COUNT = EV_AP_RELEASE + 1;
-
-static char* str_ev_ncci[] = {
+static char *str_ev_ncci[] = {
 	"EV_AP_CONNECT_B3_REQ",
 	"EV_NC_CONNECT_B3_CONF",
 	"EV_NC_CONNECT_B3_IND",
@@ -115,14 +111,13 @@ static struct Fsm ncci_fsm = { 0, 0, 0, 0, 0 };
 
 static int ncciL4L3(struct mNCCI *ncci, uint32_t, int, int, void *, struct mc_buf *);
 
-static void
-ncci_debug(struct FsmInst *fi, char *fmt, ...)
+static void ncci_debug(struct FsmInst *fi, char *fmt, ...)
 {
 	char tmp[128];
 	char *p = tmp;
 	va_list args;
 	struct mNCCI *ncci = fi->userdata;
-	
+
 	if (!ncci->ncci_m.debug)
 		return;
 	va_start(args, fmt);
@@ -133,24 +128,20 @@ ncci_debug(struct FsmInst *fi, char *fmt, ...)
 	va_end(args);
 }
 
-static inline void
-Send2Application(struct mNCCI *ncci, struct mc_buf *mc)
+static inline void Send2Application(struct mNCCI *ncci, struct mc_buf *mc)
 {
 	SendCmsg2Application(ncci->appl, mc);
 }
 
-static inline void
-ncciCmsgHeader(struct mNCCI *ncci, struct mc_buf *mc, __u8 cmd, __u8 subcmd)
+static inline void ncciCmsgHeader(struct mNCCI *ncci, struct mc_buf *mc, __u8 cmd, __u8 subcmd)
 {
-	capi_cmsg_header(&mc->cmsg, ncci->appl->AppId, cmd, subcmd, 
-			 ncci->appl->MsgId++, ncci->ncci);
+	capi_cmsg_header(&mc->cmsg, ncci->appl->AppId, cmd, subcmd, ncci->appl->MsgId++, ncci->ncci);
 }
 
-static void
-ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
+static void ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 {
-	struct mNCCI	*ncci = fi->userdata;
-	struct mc_buf	*mc = arg;
+	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = arg;
 
 	FsmChangeState(fi, ST_NCCI_N_0_1);
 	capi_cmsg_answer(&mc->cmsg);
@@ -161,19 +152,17 @@ ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 	FsmEvent(fi, EV_NC_CONNECT_B3_CONF, mc);
 }
 
-static void
-ncci_connect_b3_ind(struct FsmInst *fi, int event, void *arg)
+static void ncci_connect_b3_ind(struct FsmInst *fi, int event, void *arg)
 {
 	// from DL_ESTABLISH
 	FsmChangeState(fi, ST_NCCI_N_1);
 	Send2Application(fi->userdata, arg);
 }
 
-static void
-ncci_connect_b3_resp(struct FsmInst *fi, int event, void *arg)
+static void ncci_connect_b3_resp(struct FsmInst *fi, int event, void *arg)
 {
-	struct mNCCI	*ncci = fi->userdata;
-	struct mc_buf	*mc = arg;
+	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = arg;
 
 	if (mc->cmsg.Info == 0) {
 		FsmChangeState(fi, ST_NCCI_N_2);
@@ -188,12 +177,11 @@ ncci_connect_b3_resp(struct FsmInst *fi, int event, void *arg)
 	FsmEvent(&ncci->ncci_m, event, mc);
 }
 
-static void
-ncci_connect_b3_conf(struct FsmInst *fi, int event, void *arg)
+static void ncci_connect_b3_conf(struct FsmInst *fi, int event, void *arg)
 {
-	struct mNCCI	*ncci = fi->userdata;
-	struct mc_buf	*mc = arg;
-	unsigned int	pr;
+	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = arg;
+	unsigned int pr;
 
 	if (mc->cmsg.Info == 0) {
 		FsmChangeState(fi, ST_NCCI_N_2);
@@ -207,18 +195,17 @@ ncci_connect_b3_conf(struct FsmInst *fi, int event, void *arg)
 	}
 }
 
-static void
-ncci_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
+static void ncci_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
 {
-	struct mNCCI	*ncci = fi->userdata;
-	struct mc_buf	*mc = arg;
-	uint16_t	Info = 0;
-	int		prim;
+	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = arg;
+	uint16_t Info = 0;
+	int prim;
 
-	if (ncci->appl) { //FIXME
+	if (ncci->appl) {	//FIXME
 		/* TODO: handle NCPI and wait for all DATA_B3_REQ confirmed on
 		 * related protocols (voice, T30)
-		 */ 
+		 */
 		capi_cmsg_answer(&mc->cmsg);
 		mc->cmsg.Info = Info;
 		FsmEvent(fi, EV_NC_DISCONNECT_B3_CONF, mc);
@@ -229,8 +216,7 @@ ncci_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
 	ncciL4L3(ncci, prim, 0, 0, NULL, NULL);
 }
 
-static void
-ncci_disconnect_b3_conf(struct FsmInst *fi, int event, void *arg)
+static void ncci_disconnect_b3_conf(struct FsmInst *fi, int event, void *arg)
 {
 	struct mc_buf *mc = arg;
 
@@ -240,122 +226,117 @@ ncci_disconnect_b3_conf(struct FsmInst *fi, int event, void *arg)
 	Send2Application(fi->userdata, mc);
 }
 
-static void
-ncci_disconnect_b3_ind(struct FsmInst *fi, int event, void *arg)
+static void ncci_disconnect_b3_ind(struct FsmInst *fi, int event, void *arg)
 {
-	struct mNCCI	*ncci = fi->userdata;
+	struct mNCCI *ncci = fi->userdata;
 
 	FsmChangeState(fi, ST_NCCI_N_5);
 	Send2Application(ncci, arg);
 }
 
-static void
-ncci_disconnect_b3_resp(struct FsmInst *fi, int event, void *arg)
+static void ncci_disconnect_b3_resp(struct FsmInst *fi, int event, void *arg)
 {
 	FsmChangeState(fi, ST_NCCI_N_0);
 	ncciFree(fi->userdata);
 }
 
-static void
-ncci_facility_req(struct FsmInst *fi, int event, void *arg)
+static void ncci_facility_req(struct FsmInst *fi, int event, void *arg)
 {
-	struct mNCCI	*ncci = fi->userdata;
-	struct mc_buf	*mc = arg;
-	u_char		*p = mc->cmsg.FacilityRequestParameter;
-	uint16_t	func;
-	int		op;
+	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = arg;
+	u_char *p = mc->cmsg.FacilityRequestParameter;
+	uint16_t func;
+	int op;
 
 	capi_cmsg_answer(&mc->cmsg);
 	mc->cmsg.Info = CapiNoError;
-	if (mc->cmsg.FacilitySelector == 0) { // Handset
+	if (mc->cmsg.FacilitySelector == 0) {	// Handset
 #ifdef HANDSET_SERVICE
 		int err = ncciL4L3(ncci, PH_CONTROL_REQ, HW_POTS_ON, 0, NULL, NULL);
 		if (err)
 #endif
 			mc->cmsg.Info = CapiSupplementaryServiceNotSupported;
-	} else if (mc->cmsg.FacilitySelector != 1) { // not DTMF
+	} else if (mc->cmsg.FacilitySelector != 1) {	// not DTMF
 		mc->cmsg.Info = CapiIllMessageParmCoding;
 	} else if (p && p[0]) {
 		func = CAPIMSG_U16(p, 1);
-		ncci_debug(fi, "%s: p %02x %02x %02x func(%x)",
-			__FUNCTION__, p[0], p[1], p[2], func);
+		ncci_debug(fi, "%s: p %02x %02x %02x func(%x)", __FUNCTION__, p[0], p[1], p[2], func);
 		switch (func) {
-			case 1:
-				op = DTMF_TONE_START;
-				ncciL4L3(ncci, PH_CONTROL_REQ, 0, sizeof(int), &op, NULL);
-				break;
-			case 2:
-				op = DTMF_TONE_STOP;
-				ncciL4L3(ncci, PH_CONTROL_REQ, 0, sizeof(int), &op, NULL);
-				break;
-			default:
-				mc->cmsg.Info = CapiSupplementaryServiceNotSupported;
-				break;
+		case 1:
+			op = DTMF_TONE_START;
+			ncciL4L3(ncci, PH_CONTROL_REQ, 0, sizeof(int), &op, NULL);
+			break;
+		case 2:
+			op = DTMF_TONE_STOP;
+			ncciL4L3(ncci, PH_CONTROL_REQ, 0, sizeof(int), &op, NULL);
+			break;
+		default:
+			mc->cmsg.Info = CapiSupplementaryServiceNotSupported;
+			break;
 		}
 	} else
 		mc->cmsg.Info = CapiIllMessageParmCoding;
 
-	dprintf(MIDEBUG_NCCI, "NCCI %06x: fac\n", ncci->ncci);		
+	dprintf(MIDEBUG_NCCI, "NCCI %06x: fac\n", ncci->ncci);
 	Send2Application(ncci, mc);
 }
 
-static void
-ncci_manufacturer_req(struct FsmInst *fi, int event, void *arg)
+static void ncci_manufacturer_req(struct FsmInst *fi, int event, void *arg)
 {
-	struct mNCCI	*ncci = fi->userdata;
-	struct mc_buf	*mc = arg;
+	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = arg;
 #ifdef HANDSET_SERVICE
-	int	err, op;
-	struct  _manu_conf_para {
-			uint8_t		len;
-			uint16_t	Info;
-			uint16_t	vol;
-		}  __attribute__((packed)) mcp = {2, CapiNoError, 0};
+	int err, op;
+	struct _manu_conf_para {
+		uint8_t len;
+		uint16_t Info;
+		uint16_t vol;
+	} __attribute__ ((packed)) mcp = {
+	2, CapiNoError, 0};
 
-	struct  _manu_req_para {
-			uint8_t		len;
-			uint16_t	vol;
-		} __attribute__((packed)) *mrp;
+	struct _manu_req_para {
+		uint8_t len;
+		uint16_t vol;
+	} __attribute__ ((packed)) * mrp;
 
-	mrp = (struct  _manu_req_para *)cmsg->ManuData;
+	mrp = (struct _manu_req_para *)cmsg->ManuData;
 	capi_cmsg_answer(cmsg);
-	if (cmsg->Class == mISDN_MF_CLASS_HANDSET) { // Handset
-		switch(cmsg->Function) {
-			case mISDN_MF_HANDSET_ENABLE:
-				err = ncciL4L3(ncci, PH_CONTROL | REQUEST, HW_POTS_ON, 0, NULL, NULL);
-				if (err)
-					mcp.Info = CapiFacilityNotSupported;
-				break;
-			case mISDN_MF_HANDSET_DISABLE:
-				err = ncciL4L3(ncci, PH_CONTROL | REQUEST, HW_POTS_OFF, 0, NULL, NULL);
-				if (err)
-					mcp.Info = CapiSupplementaryServiceNotSupported;
-				break;
-			case mISDN_MF_HANDSET_SETMICVOLUME:
-			case mISDN_MF_HANDSET_SETSPKVOLUME:
-				if (!mrp || mrp->len != 2) {
-					mcp.Info = CapiIllMessageParmCoding;
-					break;
-				}
-				op = (cmsg->Function == mISDN_MF_HANDSET_SETSPKVOLUME) ?
-					HW_POTS_SETSPKVOL : HW_POTS_SETMICVOL;
-				err = ncciL4L3(ncci, PH_CONTROL | REQUEST, op, 2, &mrp->vol, NULL);
-				if (err == -ENODEV)
-					mcp.Info = CapiSupplementaryServiceNotSupported;
-				else if (err)
-					mcp.Info = CapiIllMessageParmCoding;
-				break;
-			/* not handled yet */
-			case mISDN_MF_HANDSET_GETMICVOLUME:
-			case mISDN_MF_HANDSET_GETSPKVOLUME:
-			default:
+	if (cmsg->Class == mISDN_MF_CLASS_HANDSET) {	// Handset
+		switch (cmsg->Function) {
+		case mISDN_MF_HANDSET_ENABLE:
+			err = ncciL4L3(ncci, PH_CONTROL | REQUEST, HW_POTS_ON, 0, NULL, NULL);
+			if (err)
+				mcp.Info = CapiFacilityNotSupported;
+			break;
+		case mISDN_MF_HANDSET_DISABLE:
+			err = ncciL4L3(ncci, PH_CONTROL | REQUEST, HW_POTS_OFF, 0, NULL, NULL);
+			if (err)
 				mcp.Info = CapiSupplementaryServiceNotSupported;
+			break;
+		case mISDN_MF_HANDSET_SETMICVOLUME:
+		case mISDN_MF_HANDSET_SETSPKVOLUME:
+			if (!mrp || mrp->len != 2) {
+				mcp.Info = CapiIllMessageParmCoding;
 				break;
+			}
+			op = (cmsg->Function == mISDN_MF_HANDSET_SETSPKVOLUME) ? HW_POTS_SETSPKVOL : HW_POTS_SETMICVOL;
+			err = ncciL4L3(ncci, PH_CONTROL | REQUEST, op, 2, &mrp->vol, NULL);
+			if (err == -ENODEV)
+				mcp.Info = CapiSupplementaryServiceNotSupported;
+			else if (err)
+				mcp.Info = CapiIllMessageParmCoding;
+			break;
+			/* not handled yet */
+		case mISDN_MF_HANDSET_GETMICVOLUME:
+		case mISDN_MF_HANDSET_GETSPKVOLUME:
+		default:
+			mcp.Info = CapiSupplementaryServiceNotSupported;
+			break;
 		}
 	} else
 		mcp.Info = CapiIllMessageParmCoding;
 
-	cmsg->ManuData = (_cstruct)&mcp;
+	cmsg->ManuData = (_cstruct) & mcp;
 #else
 	capi_cmsg_answer(&mc->cmsg);
 	mc->cmsg.Info = CapiSupplementaryServiceNotSupported;
@@ -363,11 +344,10 @@ ncci_manufacturer_req(struct FsmInst *fi, int event, void *arg)
 	Send2Application(ncci, mc);
 }
 
-static void
-ncci_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
+static void ncci_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
 {
-	struct mNCCI	*ncci = fi->userdata;
-	int	i;
+	struct mNCCI *ncci = fi->userdata;
+	int i;
 
 	FsmChangeState(fi, ST_NCCI_N_ACT);
 	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
@@ -377,70 +357,62 @@ ncci_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
 	Send2Application(ncci, arg);
 }
 
-static void
-ncci_connect_b3_active_resp(struct FsmInst *fi, int event, void *arg)
+static void ncci_connect_b3_active_resp(struct FsmInst *fi, int event, void *arg)
 {
 }
 
-static void
-ncci_n0_dl_establish_ind_conf(struct FsmInst *fi, int event, void *arg)
+static void ncci_n0_dl_establish_ind_conf(struct FsmInst *fi, int event, void *arg)
 {
-	struct mNCCI	*ncci = fi->userdata;
+	struct mNCCI *ncci = fi->userdata;
 
 	ncciCmsgHeader(ncci, arg, CAPI_CONNECT_B3, CAPI_IND);
 	FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_IND, arg);
 }
 
-static void
-ncci_dl_establish_conf(struct FsmInst *fi, int event, void *arg)
+static void ncci_dl_establish_conf(struct FsmInst *fi, int event, void *arg)
 {
-	struct mNCCI	*ncci = fi->userdata;
-	struct mc_buf	*mc = arg;
+	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = arg;
 
 	ncciCmsgHeader(ncci, mc, CAPI_CONNECT_B3_ACTIVE, CAPI_IND);
 	FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_ACTIVE_IND, mc);
 }
 
-static void
-ncci_dl_release_ind_conf(struct FsmInst *fi, int event, void *arg)
+static void ncci_dl_release_ind_conf(struct FsmInst *fi, int event, void *arg)
 {
-	struct mNCCI	*ncci = fi->userdata;
-	struct mc_buf	*mc = arg;
+	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = arg;
 
 	ncciCmsgHeader(ncci, mc, CAPI_DISCONNECT_B3, CAPI_IND);
 	FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, mc);
 }
 
-static void
-ncci_linkdown(struct FsmInst *fi, int event, void *arg)
+static void ncci_linkdown(struct FsmInst *fi, int event, void *arg)
 {
-	struct mNCCI	*ncci = fi->userdata;
-	struct mc_buf	*mc = arg;
+	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = arg;
 
 	ncciCmsgHeader(ncci, mc, CAPI_DISCONNECT_B3, CAPI_IND);
 	FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, mc);
 }
 
-static void
-ncci_dl_down_ind(struct FsmInst *fi, int event, void *arg)
+static void ncci_dl_down_ind(struct FsmInst *fi, int event, void *arg)
 {
-	struct mNCCI	*ncci = fi->userdata;
-	struct mc_buf	*mc = arg;
+	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = arg;
 
 	ncciCmsgHeader(ncci, mc, CAPI_DISCONNECT_B3, CAPI_IND);
 	mc->cmsg.Reason_B3 = CapiProtocolErrorLayer1;
 	FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, mc);
 }
 
-static void
-ncci_appl_release(struct FsmInst *fi, int event, void *arg)
+static void ncci_appl_release(struct FsmInst *fi, int event, void *arg)
 {
 	FsmChangeState(fi, ST_NCCI_N_0);
 	ncciFree(fi->userdata);
 }
 
-static void
-ncci_appl_release_disc(struct FsmInst *fi, int event, void *arg)
+static void ncci_appl_release_disc(struct FsmInst *fi, int event, void *arg)
 {
 	struct mNCCI *ncci = fi->userdata;
 	int prim;
@@ -449,71 +421,70 @@ ncci_appl_release_disc(struct FsmInst *fi, int event, void *arg)
 	ncciL4L3(ncci, prim, 0, 0, NULL, NULL);
 }
 
-static struct FsmNode fn_ncci_list[] =
-{
-  {ST_NCCI_N_0,		EV_AP_CONNECT_B3_REQ,		ncci_connect_b3_req},
-  {ST_NCCI_N_0,		EV_NC_CONNECT_B3_IND,		ncci_connect_b3_ind},
-  {ST_NCCI_N_0,		EV_DL_ESTABLISH_CONF,		ncci_n0_dl_establish_ind_conf},
-  {ST_NCCI_N_0,		EV_DL_ESTABLISH_IND,		ncci_n0_dl_establish_ind_conf},
-  {ST_NCCI_N_0,		EV_AP_RELEASE,			ncci_appl_release},
+static struct FsmNode fn_ncci_list[] = {
+	{ST_NCCI_N_0, EV_AP_CONNECT_B3_REQ, ncci_connect_b3_req},
+	{ST_NCCI_N_0, EV_NC_CONNECT_B3_IND, ncci_connect_b3_ind},
+	{ST_NCCI_N_0, EV_DL_ESTABLISH_CONF, ncci_n0_dl_establish_ind_conf},
+	{ST_NCCI_N_0, EV_DL_ESTABLISH_IND, ncci_n0_dl_establish_ind_conf},
+	{ST_NCCI_N_0, EV_AP_RELEASE, ncci_appl_release},
 
-  {ST_NCCI_N_0_1,	EV_NC_CONNECT_B3_CONF,		ncci_connect_b3_conf},
-  {ST_NCCI_N_0_1,	EV_AP_MANUFACTURER_REQ,		ncci_manufacturer_req},
-  {ST_NCCI_N_0_1,	EV_AP_RELEASE,			ncci_appl_release},
+	{ST_NCCI_N_0_1, EV_NC_CONNECT_B3_CONF, ncci_connect_b3_conf},
+	{ST_NCCI_N_0_1, EV_AP_MANUFACTURER_REQ, ncci_manufacturer_req},
+	{ST_NCCI_N_0_1, EV_AP_RELEASE, ncci_appl_release},
 
-  {ST_NCCI_N_1,		EV_AP_CONNECT_B3_RESP,		ncci_connect_b3_resp},
-  {ST_NCCI_N_1,		EV_AP_DISCONNECT_B3_REQ,	ncci_disconnect_b3_req},
-  {ST_NCCI_N_1,		EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
-  {ST_NCCI_N_1,		EV_AP_MANUFACTURER_REQ,		ncci_manufacturer_req},
-  {ST_NCCI_N_1,		EV_AP_RELEASE,			ncci_appl_release_disc},
-  {ST_NCCI_N_1,		EV_NC_LINKDOWN,			ncci_linkdown},
+	{ST_NCCI_N_1, EV_AP_CONNECT_B3_RESP, ncci_connect_b3_resp},
+	{ST_NCCI_N_1, EV_AP_DISCONNECT_B3_REQ, ncci_disconnect_b3_req},
+	{ST_NCCI_N_1, EV_NC_DISCONNECT_B3_IND, ncci_disconnect_b3_ind},
+	{ST_NCCI_N_1, EV_AP_MANUFACTURER_REQ, ncci_manufacturer_req},
+	{ST_NCCI_N_1, EV_AP_RELEASE, ncci_appl_release_disc},
+	{ST_NCCI_N_1, EV_NC_LINKDOWN, ncci_linkdown},
 
-  {ST_NCCI_N_2,		EV_NC_CONNECT_B3_ACTIVE_IND,	ncci_connect_b3_active_ind},
-  {ST_NCCI_N_2,		EV_AP_DISCONNECT_B3_REQ,	ncci_disconnect_b3_req},
-  {ST_NCCI_N_2,		EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
-  {ST_NCCI_N_2,		EV_DL_ESTABLISH_CONF,		ncci_dl_establish_conf},
-  {ST_NCCI_N_2,		EV_DL_RELEASE_IND,		ncci_dl_release_ind_conf},
-  {ST_NCCI_N_2,		EV_AP_MANUFACTURER_REQ,		ncci_manufacturer_req},
-  {ST_NCCI_N_2,		EV_AP_RELEASE,			ncci_appl_release_disc},
-  {ST_NCCI_N_2,		EV_NC_LINKDOWN,			ncci_linkdown},
-     
+	{ST_NCCI_N_2, EV_NC_CONNECT_B3_ACTIVE_IND, ncci_connect_b3_active_ind},
+	{ST_NCCI_N_2, EV_AP_DISCONNECT_B3_REQ, ncci_disconnect_b3_req},
+	{ST_NCCI_N_2, EV_NC_DISCONNECT_B3_IND, ncci_disconnect_b3_ind},
+	{ST_NCCI_N_2, EV_DL_ESTABLISH_CONF, ncci_dl_establish_conf},
+	{ST_NCCI_N_2, EV_DL_RELEASE_IND, ncci_dl_release_ind_conf},
+	{ST_NCCI_N_2, EV_AP_MANUFACTURER_REQ, ncci_manufacturer_req},
+	{ST_NCCI_N_2, EV_AP_RELEASE, ncci_appl_release_disc},
+	{ST_NCCI_N_2, EV_NC_LINKDOWN, ncci_linkdown},
+
 #if 0
-  {ST_NCCI_N_3,		EV_NC_RESET_B3_IND,		ncci_reset_b3_ind},
-  {ST_NCCI_N_3,		EV_DL_DOWN_IND,			ncci_dl_down_ind},
-  {ST_NCCI_N_3,		EV_AP_DISCONNECT_B3_REQ,	ncci_disconnect_b3_req},
-  {ST_NCCI_N_3,		EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
-  {ST_NCCI_N_3,		EV_AP_RELEASE,			ncci_appl_release_disc},
-  {ST_NCCI_N_3,		EV_NC_LINKDOWN,			ncci_linkdown},
+	{ST_NCCI_N_3, EV_NC_RESET_B3_IND, ncci_reset_b3_ind},
+	{ST_NCCI_N_3, EV_DL_DOWN_IND, ncci_dl_down_ind},
+	{ST_NCCI_N_3, EV_AP_DISCONNECT_B3_REQ, ncci_disconnect_b3_req},
+	{ST_NCCI_N_3, EV_NC_DISCONNECT_B3_IND, ncci_disconnect_b3_ind},
+	{ST_NCCI_N_3, EV_AP_RELEASE, ncci_appl_release_disc},
+	{ST_NCCI_N_3, EV_NC_LINKDOWN, ncci_linkdown},
 #endif
 
-  {ST_NCCI_N_ACT,	EV_AP_CONNECT_B3_ACTIVE_RESP,	ncci_connect_b3_active_resp},
-  {ST_NCCI_N_ACT,	EV_AP_DISCONNECT_B3_REQ,	ncci_disconnect_b3_req},
-  {ST_NCCI_N_ACT,	EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
-  {ST_NCCI_N_ACT,	EV_DL_RELEASE_IND,		ncci_dl_release_ind_conf},
-  {ST_NCCI_N_ACT,	EV_DL_RELEASE_CONF,		ncci_dl_release_ind_conf},
-  {ST_NCCI_N_ACT,	EV_DL_DOWN_IND,			ncci_dl_down_ind},
-  {ST_NCCI_N_ACT,	EV_AP_FACILITY_REQ,		ncci_facility_req},
-  {ST_NCCI_N_ACT,	EV_AP_MANUFACTURER_REQ,		ncci_manufacturer_req},
-  {ST_NCCI_N_ACT,	EV_AP_RELEASE,			ncci_appl_release_disc},
-  {ST_NCCI_N_ACT,	EV_NC_LINKDOWN,			ncci_linkdown},
+	{ST_NCCI_N_ACT, EV_AP_CONNECT_B3_ACTIVE_RESP, ncci_connect_b3_active_resp},
+	{ST_NCCI_N_ACT, EV_AP_DISCONNECT_B3_REQ, ncci_disconnect_b3_req},
+	{ST_NCCI_N_ACT, EV_NC_DISCONNECT_B3_IND, ncci_disconnect_b3_ind},
+	{ST_NCCI_N_ACT, EV_DL_RELEASE_IND, ncci_dl_release_ind_conf},
+	{ST_NCCI_N_ACT, EV_DL_RELEASE_CONF, ncci_dl_release_ind_conf},
+	{ST_NCCI_N_ACT, EV_DL_DOWN_IND, ncci_dl_down_ind},
+	{ST_NCCI_N_ACT, EV_AP_FACILITY_REQ, ncci_facility_req},
+	{ST_NCCI_N_ACT, EV_AP_MANUFACTURER_REQ, ncci_manufacturer_req},
+	{ST_NCCI_N_ACT, EV_AP_RELEASE, ncci_appl_release_disc},
+	{ST_NCCI_N_ACT, EV_NC_LINKDOWN, ncci_linkdown},
 #if 0
-  {ST_NCCI_N_ACT,	EV_AP_RESET_B3_REQ,		ncci_reset_b3_req},
-  {ST_NCCI_N_ACT,	EV_NC_RESET_B3_IND,		ncci_reset_b3_ind},
-  {ST_NCCI_N_ACT,	EV_NC_CONNECT_B3_T90_ACTIVE_IND,ncci_connect_b3_t90_active_ind},
+	{ST_NCCI_N_ACT, EV_AP_RESET_B3_REQ, ncci_reset_b3_req},
+	{ST_NCCI_N_ACT, EV_NC_RESET_B3_IND, ncci_reset_b3_ind},
+	{ST_NCCI_N_ACT, EV_NC_CONNECT_B3_T90_ACTIVE_IND, ncci_connect_b3_t90_active_ind},
 #endif
 
-  {ST_NCCI_N_4,		EV_NC_DISCONNECT_B3_CONF,	ncci_disconnect_b3_conf},
-  {ST_NCCI_N_4,		EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
-  {ST_NCCI_N_4,		EV_DL_RELEASE_CONF,		ncci_dl_release_ind_conf},
-  {ST_NCCI_N_4,		EV_DL_DOWN_IND,			ncci_dl_down_ind},
-  {ST_NCCI_N_4,		EV_AP_MANUFACTURER_REQ,		ncci_manufacturer_req},
-  {ST_NCCI_N_4,		EV_NC_LINKDOWN,			ncci_linkdown},
+	{ST_NCCI_N_4, EV_NC_DISCONNECT_B3_CONF, ncci_disconnect_b3_conf},
+	{ST_NCCI_N_4, EV_NC_DISCONNECT_B3_IND, ncci_disconnect_b3_ind},
+	{ST_NCCI_N_4, EV_DL_RELEASE_CONF, ncci_dl_release_ind_conf},
+	{ST_NCCI_N_4, EV_DL_DOWN_IND, ncci_dl_down_ind},
+	{ST_NCCI_N_4, EV_AP_MANUFACTURER_REQ, ncci_manufacturer_req},
+	{ST_NCCI_N_4, EV_NC_LINKDOWN, ncci_linkdown},
 
-  {ST_NCCI_N_5,		EV_AP_DISCONNECT_B3_RESP,	ncci_disconnect_b3_resp},
-  {ST_NCCI_N_5,		EV_AP_RELEASE,			ncci_appl_release},
+	{ST_NCCI_N_5, EV_AP_DISCONNECT_B3_RESP, ncci_disconnect_b3_resp},
+	{ST_NCCI_N_5, EV_AP_RELEASE, ncci_appl_release},
 };
-const int FN_NCCI_COUNT = sizeof(fn_ncci_list)/sizeof(struct FsmNode);
 
+const int FN_NCCI_COUNT = sizeof(fn_ncci_list) / sizeof(struct FsmNode);
 
 static void initNCCIHeaders(struct mNCCI *nc)
 {
@@ -531,7 +502,7 @@ static void initNCCIHeaders(struct mNCCI *nc)
 	nc->up_msg.msg_flags = 0;
 	nc->up_iv[0].iov_base = nc->up_header;
 	nc->up_iv[0].iov_len = CAPI_B3_DATA_IND_HEADER_SIZE;
-	
+
 	nc->down_header.prim = nc->l1direct ? PH_DATA_REQ : DL_DATA_REQ;
 	nc->down_msg.msg_name = NULL;
 	nc->down_msg.msg_namelen = 0;
@@ -542,10 +513,9 @@ static void initNCCIHeaders(struct mNCCI *nc)
 	nc->down_msg.msg_flags = 0;
 	nc->down_iv[0].iov_base = &nc->down_header;
 	nc->down_iv[0].iov_len = sizeof(nc->down_header);
-}                                                                                
+}
 
-struct mNCCI *
-ncciCreate(struct lPLCI *lp)
+struct mNCCI *ncciCreate(struct lPLCI *lp)
 {
 	struct mNCCI *nc, *old;
 
@@ -554,15 +524,15 @@ ncciCreate(struct lPLCI *lp)
 		eprint("No memory for NCCI on PLCI:%04x\n", lp->plci);
 		return NULL;
 	}
-	nc->ncci_m.state      = ST_NCCI_N_0;
-//	nc->ncci_m.debug      = aplci->plci->contr->debug & CAPI_DBG_NCCI_STATE;
-	nc->ncci_m.debug      = MIDEBUG_NCCI & mI_debug_mask;
-	nc->ncci_m.userdata   = nc;
+	nc->ncci_m.state = ST_NCCI_N_0;
+//      nc->ncci_m.debug      = aplci->plci->contr->debug & CAPI_DBG_NCCI_STATE;
+	nc->ncci_m.debug = MIDEBUG_NCCI & mI_debug_mask;
+	nc->ncci_m.userdata = nc;
 	nc->ncci_m.printdebug = ncci_debug;
 	/* unused NCCI */
 	lp->NcciCnt++;
 	nc->ncci = lp->plci;
-	nc->ncci |= (lp->NcciCnt <<16) & 0xFFFF0000;
+	nc->ncci |= (lp->NcciCnt << 16) & 0xFFFF0000;
 	nc->lp = lp;
 	nc->appl = lp->lc->Appl;
 	nc->BIlink = lp->BIlink;
@@ -576,7 +546,7 @@ ncciCreate(struct lPLCI *lp)
 			nc->flowmode = flmIndication;
 		}
 	}
-	if (lp->Bprotocol.B2 == 0) { /* X.75 has own flowctrl */
+	if (lp->Bprotocol.B2 == 0) {	/* X.75 has own flowctrl */
 		nc->l2trans = 1;
 		if (lp->Bprotocol.B1 == 0) {
 			nc->l1direct = 1;
@@ -588,7 +558,7 @@ ncciCreate(struct lPLCI *lp)
 		nc->ncci_m.fsm = &ncci_fsm;
 	} else
 		nc->ncci_m.fsm = &ncci_fsm;
-		// nc->ncci_m.fsm = &ncciD_fsm;
+	// nc->ncci_m.fsm = &ncciD_fsm;
 
 	if (nc->window > CAPI_MAXDATAWINDOW) {
 		wprint("NCCI %06x: Datawindow too big (%d) reduced to (%d)\n", nc->ncci, nc->window, CAPI_MAXDATAWINDOW);
@@ -607,13 +577,12 @@ ncciCreate(struct lPLCI *lp)
 	return nc;
 }
 
-void
-ncciFree(struct mNCCI *ncci)
+void ncciFree(struct mNCCI *ncci)
 {
-	int	i;
+	int i;
 
 	dprintf(MIDEBUG_NCCI, "NCCI %06x: free\n", ncci->ncci);
-	
+
 	/* cleanup data queues */
 	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
 		if (ncci->xmit_handles[i].pkt)
@@ -623,15 +592,13 @@ ncciFree(struct mNCCI *ncci)
 	free(ncci);
 }
 
-void
-ncciDel_lPlci(struct mNCCI *ncci)
+void ncciDel_lPlci(struct mNCCI *ncci)
 {
 	ncci->lp = NULL;
 	/* maybe we should release the NCCI here */
 }
 
-void
-ncciReleaseLink(struct mNCCI *ncci)
+void ncciReleaseLink(struct mNCCI *ncci)
 {
 	/* this is normal shutdown on speech and other transparent protocols */
 	struct mc_buf *mc = alloc_mc_buf();
@@ -641,7 +608,6 @@ ncciReleaseLink(struct mNCCI *ncci)
 		free_mc_buf(mc);
 	}
 }
-
 
 static void AnswerDataB3Req(struct mNCCI *ncci, struct mc_buf *mc, uint16_t Info)
 {
@@ -735,7 +701,7 @@ static void SendDataB3Down(struct mNCCI *ncci, uint16_t len)
 	ret = sendmsg(ncci->BIlink->fd, &ncci->down_msg, MSG_DONTWAIT);
 	if (ret != tot) {
 		wprint("NCCI %06x: send returned %d while sending %d bytes type %s id %d - %s\n", ncci->ncci, ret, tot,
-			_mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, strerror(errno));
+		       _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, strerror(errno));
 		if (ncci->flowmode != flmIndication) {
 			ncci->dlbusy = 0;
 			ncci->xmit_handles[ncci->oidx].pkt = NULL;
@@ -748,9 +714,9 @@ static void SendDataB3Down(struct mNCCI *ncci, uint16_t len)
 		pthread_mutex_unlock(&ncci->lock);
 		return;
 	} else
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send down %d bytes type %s id %d current oidx[%d] sent %d/%d\n", ncci->ncci, ret,
-			_mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, ncci->oidx,
-			ncci->xmit_handles[ncci->oidx].sent, ncci->xmit_handles[ncci->oidx].dlen);
+		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send down %d bytes type %s id %d current oidx[%d] sent %d/%d\n", ncci->ncci,
+		       ret, _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, ncci->oidx,
+		       ncci->xmit_handles[ncci->oidx].sent, ncci->xmit_handles[ncci->oidx].dlen);
 	ncci->dlbusy = 1;
 	if (ncci->flowmode == flmIndication) {
 		if (ncci->xmit_handles[ncci->oidx].sent == ncci->xmit_handles[ncci->oidx].dlen) {
@@ -786,7 +752,7 @@ static void SendDataB3Down(struct mNCCI *ncci, uint16_t len)
 
 static uint16_t ncciDataReq(struct mNCCI *ncci, struct mc_buf *mc)
 {
-	uint16_t	len, off;
+	uint16_t len, off;
 
 	off = CAPIMSG_LEN(mc->rb);
 	if (off != 22 && off != 30) {
@@ -816,9 +782,9 @@ static uint16_t ncciDataReq(struct mNCCI *ncci, struct mc_buf *mc)
 	mc->rp = mc->rb + off;
 	mc->len = len;
 	ncci->xmit_handles[ncci->iidx].sp = mc->rp;
-	
+
 	dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: handle = %d data offset %d totlen %d datalen %d flowmode:%d ncci->dlbusy:%d\n",
-		ncci->ncci, ncci->xmit_handles[ncci->iidx].DataHandle, off, mc->len, len, ncci->flowmode, ncci->dlbusy);
+	       ncci->ncci, ncci->xmit_handles[ncci->iidx].DataHandle, off, mc->len, len, ncci->flowmode, ncci->dlbusy);
 	ncci->iidx++;
 	if (ncci->iidx == ncci->window)
 		ncci->iidx = 0;
@@ -843,8 +809,8 @@ static int ncciDataInd(struct mNCCI *ncci, int pr, struct mc_buf *mc)
 	pthread_mutex_lock(&ncci->lock);
 	if (ncci->isize != dlen && (ncci->flowmode == flmIndication)) {
 		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: New isize (%d --> %d) set\n", ncci->ncci, ncci->isize, dlen);
-		ncci->isize =  dlen;
-		ncci->osize =  dlen;
+		ncci->isize = dlen;
+		ncci->osize = dlen;
 	}
 	if (!ncci->BIlink) {
 		pthread_mutex_unlock(&ncci->lock);
@@ -868,7 +834,7 @@ static int ncciDataInd(struct mNCCI *ncci, int pr, struct mc_buf *mc)
 		dh = ++ncci->BIlink->UpId;
 
 	ncci->recv_handles[i] = dh;
-	
+
 	CAPIMSG_SETMSGID(ncci->up_header, ncci->appl->MsgId++);
 	CAPIMSG_SETDATALEN(ncci->up_header, dlen);
 	capimsg_setu16(ncci->up_header, 18, dh);
@@ -885,11 +851,11 @@ static int ncciDataInd(struct mNCCI *ncci, int pr, struct mc_buf *mc)
 	pthread_mutex_unlock(&ncci->lock);
 	if (ret != tot) {
 		wprint("NCCI %06x: : frame with %d + %d bytes only %d bytes are sent - %s\n",
-			ncci->ncci, dlen, CAPI_B3_DATA_IND_HEADER_SIZE, ret, strerror(errno));
+		       ncci->ncci, dlen, CAPI_B3_DATA_IND_HEADER_SIZE, ret, strerror(errno));
 		ret = -EINVAL;
 	} else
 		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: frame with %d + %d bytes handle %d was sent ret %d\n",
-			ncci->ncci, CAPI_B3_DATA_IND_HEADER_SIZE, dlen, dh, ret);
+		       ncci->ncci, CAPI_B3_DATA_IND_HEADER_SIZE, dlen, dh, ret);
 	if (ncci->flowmode == flmIndication)
 		SendDataB3Down(ncci, dlen);
 	return ret;
@@ -922,7 +888,8 @@ static void ncciDataConf(struct mNCCI *ncci, struct mc_buf *mc)
 		free_mc_buf(mc);
 		return;
 	}
-	dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: confirm xmit_handles[%d] pktid=%x handle=%d\n", ncci->ncci, i, hh->id, ncci->xmit_handles[i].DataHandle);
+	dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: confirm xmit_handles[%d] pktid=%x handle=%d\n", ncci->ncci, i, hh->id,
+	       ncci->xmit_handles[i].DataHandle);
 	free_mc_buf(mc);
 	mc = ncci->xmit_handles[i].pkt;
 	ncci->xmit_handles[i].pkt = NULL;
@@ -934,8 +901,7 @@ static void ncciDataConf(struct mNCCI *ncci, struct mc_buf *mc)
 	return;
 }
 
-static void
-ncciDataResp(struct mNCCI *ncci, struct mc_buf *mc)
+static void ncciDataResp(struct mNCCI *ncci, struct mc_buf *mc)
 {
 	int i;
 	uint16_t dh = CAPIMSG_RESP_DATAHANDLE(mc->rb);
@@ -962,47 +928,48 @@ ncciDataResp(struct mNCCI *ncci, struct mc_buf *mc)
 
 static int ncciGetCmsg(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, struct mc_buf *mc)
 {
-	int	retval = CapiNoError;
+	int retval = CapiNoError;
 
 	if (!ncci->l3trans) {
 		eprint("NCCI %06x: Error L3 not transparent", ncci->ncci);
 		return -EINVAL;
 	}
 	switch (CAPICMD(cmd, subcmd)) {
-		case CAPI_CONNECT_B3_REQ:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_REQ, mc);
-			break;
-		case CAPI_CONNECT_B3_RESP:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_RESP, mc);
-			break;
-		case CAPI_CONNECT_B3_ACTIVE_RESP:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_ACTIVE_RESP, mc);
-			break;
-		case CAPI_DISCONNECT_B3_REQ:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_REQ, mc);
-			break;
-		case CAPI_DISCONNECT_B3_RESP:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_RESP, mc);
-			break;
-		case CAPI_FACILITY_REQ:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_FACILITY_REQ, mc);
-			break;
-		case CAPI_FACILITY_RESP:
-			/* no need to handle */
-			retval = 0;
-			break;
-		case CAPI_MANUFACTURER_REQ:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_MANUFACTURER_REQ, mc);
-			break;
-		default:
-			eprint("NCCI %06x: Error Unhandled command %02x/%02x\n", ncci->ncci, cmd, subcmd);
-			retval = CapiMessageNotSupportedInCurrentState;
+	case CAPI_CONNECT_B3_REQ:
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_REQ, mc);
+		break;
+	case CAPI_CONNECT_B3_RESP:
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_RESP, mc);
+		break;
+	case CAPI_CONNECT_B3_ACTIVE_RESP:
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_ACTIVE_RESP, mc);
+		break;
+	case CAPI_DISCONNECT_B3_REQ:
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_REQ, mc);
+		break;
+	case CAPI_DISCONNECT_B3_RESP:
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_RESP, mc);
+		break;
+	case CAPI_FACILITY_REQ:
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_FACILITY_REQ, mc);
+		break;
+	case CAPI_FACILITY_RESP:
+		/* no need to handle */
+		retval = 0;
+		break;
+	case CAPI_MANUFACTURER_REQ:
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_MANUFACTURER_REQ, mc);
+		break;
+	default:
+		eprint("NCCI %06x: Error Unhandled command %02x/%02x\n", ncci->ncci, cmd, subcmd);
+		retval = CapiMessageNotSupportedInCurrentState;
 	}
-	if (retval) { 
+	if (retval) {
 		if (subcmd == CAPI_REQ)
 			retval = CapiMessageNotSupportedInCurrentState;
-		else { /* RESP */
-			wprint("NCCI %06x: Error Message %02x/%02x not supported in state %s\n", ncci->ncci, cmd, subcmd, str_st_ncci[ncci->ncci_m.state]);
+		else {		/* RESP */
+			wprint("NCCI %06x: Error Message %02x/%02x not supported in state %s\n", ncci->ncci, cmd, subcmd,
+			       str_st_ncci[ncci->ncci_m.state]);
 			retval = CapiNoError;
 		}
 	}
@@ -1011,27 +978,26 @@ static int ncciGetCmsg(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, struct m
 	return retval;
 }
 
-
 int ncciSendMessage(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, struct mc_buf *mc)
 {
 	int ret = CapiNoError;
 #if 0
 	if (!ncci->l3trans) {
 		ret = ncci_l4l3_direct(ncci, mc);
-		switch(ret) {
-			case 0:
-				break;
-			case -EINVAL:
-			case -ENXIO:
-				int_error();
-				break;	/* (CAPI_MSGBUSY) */
-			case -EXFULL:
-				int_error();
-				break;	/* (CAPI_SENDQUEUEFULL) */
-			default:
-				int_errtxt("ncci_l4l3_direct return(%d)", ret);
-				dev_kfree_skb(skb);
-				break;
+		switch (ret) {
+		case 0:
+			break;
+		case -EINVAL:
+		case -ENXIO:
+			int_error();
+			break;	/* (CAPI_MSGBUSY) */
+		case -EXFULL:
+			int_error();
+			break;	/* (CAPI_SENDQUEUEFULL) */
+		default:
+			int_errtxt("ncci_l4l3_direct return(%d)", ret);
+			dev_kfree_skb(skb);
+			break;
 		}
 		return;
 	}
@@ -1043,7 +1009,8 @@ int ncciSendMessage(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, struct mc_b
 				ret = ncciDataReq(ncci, mc);
 			} else {
 				ret = CapiMessageNotSupportedInCurrentState;
-				wprint("NCCI %06x: DATA_B3_REQ - but but NCCI state %s\n", ncci->ncci, str_st_ncci[ncci->ncci_m.state]);
+				wprint("NCCI %06x: DATA_B3_REQ - but but NCCI state %s\n", ncci->ncci,
+				       str_st_ncci[ncci->ncci_m.state]);
 			}
 		} else if (subcmd == CAPI_RESP) {
 			ncciDataResp(ncci, mc);
@@ -1060,8 +1027,7 @@ int ncciSendMessage(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, struct mc_b
 	return ret;
 }
 
-static int
-ncciL4L3(struct mNCCI *ncci, uint32_t prim, int id, int len, void *data, struct mc_buf *mc)
+static int ncciL4L3(struct mNCCI *ncci, uint32_t prim, int id, int len, void *data, struct mc_buf *mc)
 {
 	struct mc_buf *loc = mc;
 	struct mISDNhead *hh;
@@ -1071,7 +1037,8 @@ ncciL4L3(struct mNCCI *ncci, uint32_t prim, int id, int len, void *data, struct 
 	if (!mc) {
 		loc = alloc_mc_buf();
 		if (!loc) {
-			eprint("NCCI %06x: prim %s id %x len %d cannot allocate buffer\n", ncci->ncci, _mi_msg_type2str(prim), id, len);
+			eprint("NCCI %06x: prim %s id %x len %d cannot allocate buffer\n", ncci->ncci, _mi_msg_type2str(prim), id,
+			       len);
 			return -ENOMEM;
 		}
 	}
@@ -1097,32 +1064,34 @@ ncciL4L3(struct mNCCI *ncci, uint32_t prim, int id, int len, void *data, struct 
 	return ret;
 }
 
-int recvB_L12(struct BInstance *bi, int pr, struct mc_buf *mc)
+int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 {
 	struct mISDNhead *hh;
 	int ret = 0;
 
 	hh = (struct mISDNhead *)mc->rb;
-	switch(pr) {
-	// we're not using the Fsm for DL_DATA for performance reasons
+	switch (hh->prim) {
+	// we're not using the Fsm and _cmesg coding for DL_DATA for performance reasons
 	case PH_DATA_IND:
 	case DL_DATA_IND:
 		if (!bi->nc) {
-			wprint("Controller%d ch%d: Got %s but but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr, _mi_msg_type2str(pr));
+			wprint("Controller%d ch%d: Got %s but but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr,
+				_mi_msg_type2str(hh->prim));
 			ret = -EINVAL;
 			break;
 		}
 		if (bi->nc->ncci_m.state == ST_NCCI_N_ACT) {
 			ret = ncciDataInd(bi->nc, hh->prim, mc);
 		} else {
-			wprint("Controller%d ch%d: Got %s but but NCCI state %s\n",
-				bi->pc->profile.ncontroller, bi->nr, _mi_msg_type2str(pr), str_st_ncci[bi->nc->ncci_m.state]);
+			wprint("Controller%d ch%d: Got %s but but NCCI state %s\n", bi->pc->profile.ncontroller, bi->nr,
+				_mi_msg_type2str(hh->prim), str_st_ncci[bi->nc->ncci_m.state]);
 			ret = 1;
 		}
 		break;
 	case PH_DATA_CNF:
 		if (!bi->nc) {
-			wprint("Controller%d ch%d: Got %s but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr, _mi_msg_type2str(pr));
+			wprint("Controller%d ch%d: Got %s but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr,
+				_mi_msg_type2str(hh->prim));
 			ret = -EINVAL;
 		} else {
 			ncciDataConf(bi->nc, mc);
@@ -1139,10 +1108,8 @@ int recvB_L12(struct BInstance *bi, int pr, struct mc_buf *mc)
 			}
 		}
 		FsmEvent(&bi->nc->ncci_m, EV_DL_ESTABLISH_CONF, mc);
-		/* send  dummy to allow better buffering */
-		hh->prim = PH_DATA_IND;
-		mc->len = 136;
-		memset(&mc->rb[8], 128, 128);
+		mc->len = 520;
+		memset(&mc->rb[8], 0x55, 512);
 		ncciDataInd(bi->nc, hh->prim, mc);
 		ret = 0;
 		break;
@@ -1161,7 +1128,8 @@ int recvB_L12(struct BInstance *bi, int pr, struct mc_buf *mc)
 	case DL_RELEASE_IND:
 	case PH_DEACTIVATE_IND:
 		if (!bi->nc) {
-			wprint("Controller%d ch%d: Got %s but but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr, _mi_msg_type2str(pr));
+			wprint("Controller%d ch%d: Got %s but but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr,
+				_mi_msg_type2str(hh->prim));
 			ret = -EINVAL;
 			break;
 		}
@@ -1171,34 +1139,35 @@ int recvB_L12(struct BInstance *bi, int pr, struct mc_buf *mc)
 	case DL_RELEASE_CNF:
 	case PH_DEACTIVATE_CNF:
 		if (!bi->nc) {
-			wprint("Controller%d ch%d: Got %s but but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr, _mi_msg_type2str(pr));
+			wprint("Controller%d ch%d: Got %s but but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr,
+				_mi_msg_type2str(hh->prim));
 			ret = -EINVAL;
 			break;
 		}
 		FsmEvent(&bi->nc->ncci_m, EV_DL_RELEASE_CONF, mc);
 		ret = 1;
 		break;
-	case PH_CONTROL_IND: /* e.g touch tones */
+	case PH_CONTROL_IND:	/* e.g touch tones */
 	case PH_CONTROL_CNF:
 		/* handled by AppPlci */
 		if (!bi->lp) {
-			wprint("Controller%d ch%d: Got %s but but no lPLCI set\n", bi->pc->profile.ncontroller, bi->nr, _mi_msg_type2str(pr));
+			wprint("Controller%d ch%d: Got %s but but no lPLCI set\n", bi->pc->profile.ncontroller, bi->nr,
+				_mi_msg_type2str(hh->prim));
 			ret = -EINVAL;
 		} else {
-			lPLCI_l3l4(bi->lp, pr, mc);
+			lPLCI_l3l4(bi->lp, hh->prim, mc);
 			ret = 1;
 		}
 		break;
 	default:
-		wprint("Controller%d ch%d: Got %s (%x) id=%x len %d\n",
-			bi->pc->profile.ncontroller, bi->nr, _mi_msg_type2str(pr), pr, hh->id, mc->len);
+		wprint("Controller%d ch%d: Got %s (%x) id=%x len %d\n", bi->pc->profile.ncontroller, bi->nr,
+			_mi_msg_type2str(hh->prim), hh->prim, hh->id, mc->len);
 		ret = -EINVAL;
 	}
 	return ret;
 }
 
-void
-init_ncci_fsm(void)
+void init_ncci_fsm(void)
 {
 	ncci_fsm.state_count = ST_NCCI_COUNT;
 	ncci_fsm.event_count = EV_NCCI_COUNT;
@@ -1207,8 +1176,7 @@ init_ncci_fsm(void)
 	FsmNew(&ncci_fsm, fn_ncci_list, FN_NCCI_COUNT);
 }
 
-void
-free_ncci_fsm(void)
+void free_ncci_fsm(void)
 {
 	FsmFree(&ncci_fsm);
 }

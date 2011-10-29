@@ -11,7 +11,7 @@
  * this package for more details.
  */
 
-#include <stdio.h> 
+#include <stdio.h>
 #include <getopt.h>
 #include <string.h>
 #include <stdarg.h>
@@ -31,7 +31,6 @@
 #define DEF_CONFIG_FILE	"/etc/capi20.conf"
 #endif
 
-
 typedef enum {
 	PIT_None = 0,
 	PIT_mISDNmain,
@@ -44,7 +43,7 @@ typedef enum {
 struct pollInfo {
 	pollInfo_t	type;
 	void		*data;
-}; 
+};
 
 static struct pollfd *mainpoll;
 static struct pollInfo *pollinfo;
@@ -75,8 +74,7 @@ void usage(void)
 	fprintf(stderr, "\n");
 }
 
-int
-opt_parse(int ac, char *av[])
+int opt_parse(int ac, char *av[])
 {
 	int c;
 
@@ -142,7 +140,7 @@ opt_parse(int ac, char *av[])
 	if (c != 0) {
 		fprintf(stderr, "unknown options: %s\n", av[optind]);
 		return -2;
-	} 
+	}
 	return 0;
 }
 
@@ -176,7 +174,7 @@ static int read_config_file(char *name)
 			switch (n) {
 			case 0:
 				nr_controller = -1;
-				fprintf(stderr, "error in config file %s:%d:%s\n", name, lnr, line); 
+				fprintf(stderr, "error in config file %s:%d:%s\n", name, lnr, line);
 				goto err;
 			case 1:
 				capicontr = contr + 1;
@@ -189,12 +187,14 @@ static int read_config_file(char *name)
 				continue;
 			}
 			if (contr < 0 || contr > 126) {
-				fprintf(stderr, "Invalid controller nr (%d)  in config file %s, line %d: %s\n", contr + 1, name, lnr, line);
+				fprintf(stderr, "Invalid controller nr (%d)  in config file %s, line %d: %s\n", contr + 1, name,
+					lnr, line);
 				nr_controller = -2;
 				goto err;
 			}
 			if (capicontr < 1 || capicontr > 127) {
-				fprintf(stderr, "Invalid capi controller nr (%d)  in config file %s, line %d: %s\n", capicontr, name, lnr, line);
+				fprintf(stderr, "Invalid capi controller nr (%d)  in config file %s, line %d: %s\n", capicontr,
+					name, lnr, line);
 				nr_controller = -3;
 				goto err;
 			}
@@ -258,7 +258,7 @@ static int add_mainpoll(int fd, pollInfo_t pit)
 			mainpoll_max++;
 		} else {
 			eprint("mainpoll full %d fds\n", mainpoll_size);
-			return -1; 
+			return -1;
 		}
 	}
 	mainpoll[i].fd = fd;
@@ -277,7 +277,7 @@ static int del_mainpoll(int fd)
 			mainpoll[i].revents = 0;
 			mainpoll[i].fd = -1;
 			j = i;
-			switch(pollinfo[i].type) {
+			switch (pollinfo[i].type) {
 			default:
 				if (pollinfo[i].data)
 					free(pollinfo[i].data);
@@ -287,7 +287,7 @@ static int del_mainpoll(int fd)
 				pollinfo[i].type = PIT_None;
 				break;
 			}
-			while(mainpoll_max && j == (mainpoll_max - 1) && mainpoll[j].fd == -1) {
+			while (mainpoll_max && j == (mainpoll_max - 1) && mainpoll[j].fd == -1) {
 				mainpoll_max--;
 				j--;
 			}
@@ -326,29 +326,28 @@ struct BInstance *ControllerSelChannel(struct pController *pc, int nr, int proto
 
 	if (nr >= pc->BImax) {
 		wprint("Request for channel number %d but controller %d only has %d channels\n",
-			nr, pc->profile.ncontroller, pc->BImax);
+		       nr, pc->profile.ncontroller, pc->BImax);
 		return NULL;
 	}
 	if (ISDN_P_B_START <= proto) {
 		pmask = 1 << (proto & ISDN_P_B_MASK);
 		if (!(pmask & pc->devinfo.Bprotocols)) {
 			wprint("Request for channel number %d on controller %d protocol 0x%02x not supported\n",
-				nr, pc->profile.ncontroller, proto);
+			       nr, pc->profile.ncontroller, proto);
 			return NULL;
 		}
 	} else {
 		pmask = 1 << proto;
 		if (!(pmask & pc->devinfo.Dprotocols)) {
 			wprint("Request for channel number %d on controller %d protocol 0x%02x not supported\n",
-				nr, pc->profile.ncontroller, proto);
+			       nr, pc->profile.ncontroller, proto);
 			return NULL;
 		}
 	}
 	bi = pc->BInstances + nr;
 	if (bi->usecnt) {
 		/* for now only one user allowed - this is not sufficient for X25 */
-		wprint("Request for channel number %d on controller %d but channel already in use\n",
-			nr, pc->profile.ncontroller);
+		wprint("Request for channel number %d on controller %d but channel already in use\n", nr, pc->profile.ncontroller);
 		return NULL;
 	} else {
 		bi->usecnt++;
@@ -357,18 +356,18 @@ struct BInstance *ControllerSelChannel(struct pController *pc, int nr, int proto
 	return bi;
 }
 
-int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
+int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, BDataTrans_t *fromd)
 {
-	int			sk;
-	int			ret;
-	struct sockaddr_mISDN	addr;
+	int sk;
+	int ret;
+	struct sockaddr_mISDN addr;
 
 	sk = socket(PF_ISDN, SOCK_DGRAM, bi->proto);
 	if (sk < 0) {
 		wprint("Cannot open socket for BInstance %d on controller %d protocol 0x%02x - %s\n",
-			bi->nr, bi->pc->profile.ncontroller, bi->proto, strerror(errno));
+		       bi->nr, bi->pc->profile.ncontroller, bi->proto, strerror(errno));
 		return -errno;
-  	}
+	}
 
 	ret = fcntl(sk, F_SETFL, O_NONBLOCK);
 	if (ret < 0) {
@@ -382,32 +381,43 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 	addr.dev = bi->pc->mNr;
 	addr.channel = bi->nr;
 
-	ret = bind(sk, (struct sockaddr *) &addr, sizeof(addr));
+	ret = bind(sk, (struct sockaddr *)&addr, sizeof(addr));
 	if (ret < 0) {
 		ret = -errno;
 		wprint("Cannot bind socket for BInstance %d on controller %d (mISDN nr %d) protocol 0x%02x - %s\n",
-			bi->nr, bi->pc->profile.ncontroller, bi->pc->mNr, bi->proto, strerror(errno));
+		       bi->nr, bi->pc->profile.ncontroller, bi->pc->mNr, bi->proto, strerror(errno));
 		close(sk);
 	} else {
 		bi->fd = sk;
 		ret = add_mainpoll(sk, PIT_Bchannel);
 		if (ret < 0) {
 			eprint("Error while adding mIsock to mainpoll (mainpoll_max %d)\n", mainpoll_max);
-	 	} else {
- 			dprint(MIDEBUG_CONTROLLER, "Controller%d: Bchannel %d socket %d added to poll idx %d\n",
- 				bi->pc->profile.ncontroller, bi->nr, sk, ret);
+		} else {
+			dprint(MIDEBUG_CONTROLLER, "Controller%d: Bchannel %d socket %d added to poll idx %d\n",
+			       bi->pc->profile.ncontroller, bi->nr, sk, ret);
 			bi->fd = sk;
 			pollinfo[ret].data = bi;
 			bi->lp = lp;
 			ret = 0;
 			bi->UpId = 0;
 			bi->DownId = 0;
+			bi->from_down = fromd;
 		}
 	}
 	return ret;
 }
 
-int CloseBInstance(struct BInstance *bi) {
+static int dummy_btrans(struct BInstance *bi, struct mc_buf *mc)
+{
+	struct mISDNhead *hh = (struct mISDNhead *)mc->rb;
+
+	wprint("Controller%d ch%d: Got %s id %x - but %s called\n", bi->pc->profile.ncontroller, bi->nr,
+		_mi_msg_type2str(hh->prim), hh->id, __func__);
+	return -EINVAL;
+}
+
+int CloseBInstance(struct BInstance *bi)
+{
 	int ret = 0;
 
 	if (bi->usecnt) {
@@ -422,9 +432,10 @@ int CloseBInstance(struct BInstance *bi) {
 			ncciReleaseLink(bi->nc);
 		bi->nc = NULL;
 		bi->lp = NULL;
+		bi->from_down = dummy_btrans;
 	} else {
-		 wprint("BInstance %d not active\n", bi->nr);
-		 ret = -1;
+		wprint("BInstance %d not active\n", bi->nr);
+		ret = -1;
 	}
 	return ret;
 };
@@ -434,7 +445,6 @@ int recvBchannel(int idx)
 	int ret;
 	struct BInstance *bi;
 	struct mc_buf *mc;
-	struct mISDNhead *hh;
 
 	mc = alloc_mc_buf();
 	if (!mc)
@@ -451,40 +461,19 @@ int recvBchannel(int idx)
 		ret = -ECONNABORTED;
 	} else if (ret < 8) {
 		eprint("Short message read len %d (%02x%02x%02x%02x%02x%02x%02x%02x)\n",
-			ret, mc->rb[0], mc->rb[1], mc->rb[2], mc->rb[3], mc->rb[4], mc->rb[5], mc->rb[6], mc->rb[7]);
+		       ret, mc->rb[0], mc->rb[1], mc->rb[2], mc->rb[3], mc->rb[4], mc->rb[5], mc->rb[6], mc->rb[7]);
 		ret = -EBADMSG;
 	} else if (ret == MC_RB_SIZE) {
 		eprint("Message too big %d (%02x%02x%02x%02x%02x%02x%02x%02x)\n",
-			ret, mc->rb[0], mc->rb[1], mc->rb[2], mc->rb[3], mc->rb[4], mc->rb[5], mc->rb[6], mc->rb[7]);
+		       ret, mc->rb[0], mc->rb[1], mc->rb[2], mc->rb[3], mc->rb[4], mc->rb[5], mc->rb[6], mc->rb[7]);
 		ret = -EMSGSIZE;
 	}
-	if (ret < 0)
-		goto end;
-	mc->len = ret;
-	hh = (struct mISDNhead *)mc->rb;
-	switch(hh->prim) {
-	case PH_ACTIVATE_IND:
-	case PH_ACTIVATE_CNF:
-	case PH_DEACTIVATE_IND:
-	case PH_DEACTIVATE_CNF:
-	case DL_ESTABLISH_IND:
-	case DL_ESTABLISH_CNF:
-	case DL_RELEASE_IND:
-	case DL_RELEASE_CNF:
-	case PH_DATA_IND:
-	case PH_DATA_CNF:
-	case DL_DATA_IND:
-	case PH_CONTROL_IND:
-	case PH_CONTROL_CNF:
-		ret = recvB_L12(bi, hh->prim, mc);
-		break;
-	default:
-		iprint("Controller%d ch%d: Got %s (%x) id=%x len %d - not handled\n",
-			bi->pc->profile.ncontroller, bi->nr, _mi_msg_type2str(hh->prim),
-			hh->prim, hh->id, ret);
+	if (ret > 0) {
+		mc->len = ret;
+		ret = bi->from_down(bi, mc);
 	}
-end:
-	if (ret != 0) /* if message is not queued or freed */
+
+	if (ret != 0)		/* if message is not queued or freed */
 		free_mc_buf(mc);
 	return ret;
 }
@@ -509,21 +498,21 @@ static int l3_callback(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, s
 	int ret = 0;
 
 	dprint(MIDEBUG_CONTROLLER, "Controller %d - got %s (%x) from layer3 pid(%x) msg(%p)\n",
-		pc->profile.ncontroller, _mi_msg_type2str(cmd), cmd, pid, l3m);
+	       pc->profile.ncontroller, _mi_msg_type2str(cmd), cmd, pid, l3m);
 
 	plci = getPLCI4pid(pc, pid);
 
-	switch(cmd) {
+	switch (cmd) {
 	case MT_SETUP:
 		if (plci) {
 			iprint("Controller %d - got %s but pid(%x) already in use\n",
-				pc->profile.ncontroller, _mi_msg_type2str(cmd), pid);
+			       pc->profile.ncontroller, _mi_msg_type2str(cmd), pid);
 			break;
 		}
 		plci = new_mPLCI(pc, pid, NULL);
 		if (!plci) {
 			wprint("Controller %d - got %s but could not allocate new PLCI\n",
-				pc->profile.ncontroller, _mi_msg_type2str(cmd));
+			       pc->profile.ncontroller, _mi_msg_type2str(cmd));
 			ret = -ENOMEM;
 		}
 		break;
@@ -548,13 +537,11 @@ static int l3_callback(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, s
 	case MT_RESUME_REJECT:
 	case MT_NOTIFY:
 		if (!plci)
-			wprint("Controller %d - got %s but no PLCI found\n",
-				pc->profile.ncontroller, _mi_msg_type2str(cmd));
+			wprint("Controller %d - got %s but no PLCI found\n", pc->profile.ncontroller, _mi_msg_type2str(cmd));
 		break;
 	case MT_FREE:
 		if (!plci)
-			wprint("Controller %d - got %s but no PLCI found\n",
-				pc->profile.ncontroller, _mi_msg_type2str(cmd));
+			wprint("Controller %d - got %s but no PLCI found\n", pc->profile.ncontroller, _mi_msg_type2str(cmd));
 		else
 			plci->pid = MISDN_PID_NONE;
 		break;
@@ -565,15 +552,15 @@ static int l3_callback(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, s
 		break;
 	case MT_TIMEOUT:
 		iprint("Controller %d - got %s from layer3 pid(%x) msg(%p) plci(%04x)\n",
-			pc->profile.ncontroller, _mi_msg_type2str(cmd), pid, l3m, plci ? plci->plci : 0xffff);
+		       pc->profile.ncontroller, _mi_msg_type2str(cmd), pid, l3m, plci ? plci->plci : 0xffff);
 		break;
-	case MT_ERROR :
+	case MT_ERROR:
 		wprint("Controller %d - got %s from layer3 pid(%x) msg(%p) plci(%04x)\n",
-			pc->profile.ncontroller, _mi_msg_type2str(cmd), pid, l3m, plci ? plci->plci : 0xffff);
+		       pc->profile.ncontroller, _mi_msg_type2str(cmd), pid, l3m, plci ? plci->plci : 0xffff);
 		break;
 	default:
 		wprint("Controller %d - got %s (%x) from layer3 pid(%x) msg(%p) plci(%04x) - not handled\n",
-			pc->profile.ncontroller, _mi_msg_type2str(cmd), cmd, pid, l3m, plci ? plci->plci : 0xffff);
+		       pc->profile.ncontroller, _mi_msg_type2str(cmd), cmd, pid, l3m, plci ? plci->plci : 0xffff);
 		ret = -EINVAL;
 	}
 	if (!ret && plci)
@@ -603,9 +590,11 @@ int ListenController(struct pController *pc)
 		if (!pc->l3) {
 			pc->l3 = open_layer3(pc->mNr, pc->L3Proto, pc->L3Flags, l3_callback, pc);
 			if (!pc->l3) {
-				eprint("Cannot open L3 for controller %d L3 protocol %x L3 flags %x\n", pc->mNr, pc->L3Proto, pc->L3Flags);
+				eprint("Cannot open L3 for controller %d L3 protocol %x L3 flags %x\n", pc->mNr, pc->L3Proto,
+				       pc->L3Flags);
 			} else
-				dprint(MIDEBUG_CONTROLLER, "Controller %d l3 open for protocol %x L3 flags %x\n", pc->mNr, pc->L3Proto, pc->L3Flags);
+				dprint(MIDEBUG_CONTROLLER, "Controller %d l3 open for protocol %x L3 flags %x\n", pc->mNr,
+				       pc->L3Proto, pc->L3Flags);
 		}
 	}
 	return 0;
@@ -635,7 +624,7 @@ static void get_profile(int fd, struct mc_buf *mc)
 	} else {
 		pc = get_cController(contr);
 		if (!pc) {
-			capimsg_setu16(mc->rb, 8, 0x2002); /* Illegal controller */
+			capimsg_setu16(mc->rb, 8, 0x2002);	/* Illegal controller */
 		} else {
 			capimsg_setu16(mc->rb, 8, CapiNoError);
 			capimsg_setu16(mc->rb, 10, contr);
@@ -731,10 +720,10 @@ static void get_capi_version(int fd, struct mc_buf *mc)
 
 	CAPIMSG_SETSUBCOMMAND(mc->rb, CAPI_CONF);
 	capimsg_setu16(mc->rb, 8, CapiNoError);
-	capimsg_setu32(mc->rb, 10, 2); /* major */
-	capimsg_setu32(mc->rb, 14, 0); /* minor */
-	capimsg_setu32(mc->rb, 18, 0); /* manu major */
-	capimsg_setu32(mc->rb, 22, 1); /* manu minor */
+	capimsg_setu32(mc->rb, 10, 2);	/* major */
+	capimsg_setu32(mc->rb, 14, 0);	/* minor */
+	capimsg_setu32(mc->rb, 18, 0);	/* manu major */
+	capimsg_setu32(mc->rb, 22, 1);	/* manu minor */
 	ret = send(fd, mc->rb, 26, 0);
 	if (ret != 26)
 		eprint("error send %d/%d  - %s\n", ret, 26, strerror(errno));
@@ -766,7 +755,6 @@ static void misdn_manufacturer_req(int fd, struct mc_buf *mc)
 		eprint("error send %d/%d  - %s\n", ret, 10, strerror(errno));
 }
 
-
 static int main_recv(int fd, int idx)
 {
 	int ret, len, cmd, dl;
@@ -784,11 +772,11 @@ static int main_recv(int fd, int idx)
 		ret = -ECONNABORTED;
 	} else if (ret < 8) {
 		eprint("Short message read len %d (%02x%02x%02x%02x%02x%02x%02x%02x)\n",
-			ret, mc->rb[0], mc->rb[1], mc->rb[2], mc->rb[3], mc->rb[4], mc->rb[5], mc->rb[6], mc->rb[7]);
+		       ret, mc->rb[0], mc->rb[1], mc->rb[2], mc->rb[3], mc->rb[4], mc->rb[5], mc->rb[6], mc->rb[7]);
 		ret = -EBADMSG;
 	} else if (ret == MC_RB_SIZE) {
 		eprint("Message too big %d (%02x%02x%02x%02x%02x%02x%02x%02x)\n",
-			ret, mc->rb[0], mc->rb[1], mc->rb[2], mc->rb[3], mc->rb[4], mc->rb[5], mc->rb[6], mc->rb[7]);
+		       ret, mc->rb[0], mc->rb[1], mc->rb[2], mc->rb[3], mc->rb[4], mc->rb[5], mc->rb[6], mc->rb[7]);
 		ret = -EMSGSIZE;
 	}
 	if (ret < 0)
@@ -841,7 +829,7 @@ static int main_recv(int fd, int idx)
 		break;
 	}
 end:
-	if (ret != 0) /* if message is not queued or freed */
+	if (ret != 0)		/* if message is not queued or freed */
 		free_mc_buf(mc);
 	return ret;
 }
@@ -860,16 +848,16 @@ int main_loop(void)
 	if (ret < 0) {
 		eprint("Error while adding mIsock to mainpoll (mainpoll_max %d)\n", mainpoll_max);
 		return -1;
- 	} else
- 		iprint("mIsock added to idx %d\n", ret);
+	} else
+		iprint("mIsock added to idx %d\n", ret);
 	ret = add_mainpoll(mCsock, PIT_CAPImain);
 	if (ret < 0) {
 		eprint("Error while adding mCsock to mainpoll (mainpoll_max %d)\n", mainpoll_max);
 		return -1;
- 	} else
- 		iprint("mCsock added to idx %d\n", ret);
+	} else
+		iprint("mCsock added to idx %d\n", ret);
 
-	while(running) {
+	while (running) {
 		ret = poll(mainpoll, mainpoll_max, -1);
 		if (ret < 0) {
 			wprint("Error on poll - %s\n", strerror(errno));
@@ -879,7 +867,7 @@ int main_loop(void)
 		for (i = 0; i < mainpoll_max; i++) {
 			if (ret && mainpoll[i].revents) {
 				dprint(MIDEBUG_POLL, "Poll return %d for idx %d ev %x fd %d\n", ret,
-					i, mainpoll[i].revents, mainpoll[i].fd);
+				       i, mainpoll[i].revents, mainpoll[i].fd);
 				switch (pollinfo[i].type) {
 				case PIT_Bchannel:
 					if (mainpoll[i].revents & POLLIN) {
@@ -889,12 +877,12 @@ int main_loop(void)
 						ReleaseBchannel(i);
 					}
 					break;
-				case PIT_CAPImain: /* new connect */
+				case PIT_CAPImain:	/* new connect */
 					if (mainpoll[i].revents & POLLIN) {
 						caddr.sun_family = AF_UNIX;
 						caddr.sun_path[0] = 0;
 						alen = sizeof(caddr);
-						nconn = accept(mCsock, (struct sockaddr*)&caddr, &alen);
+						nconn = accept(mCsock, (struct sockaddr *)&caddr, &alen);
 						if (nconn < 0) {
 							eprint("Error on accept - %s\n", strerror(errno));
 						} else {
@@ -903,7 +891,7 @@ int main_loop(void)
 							if (idx < 0)
 								eprint("Cannot add fd=%d to mainpoll\n", nconn);
 							else
-						 		dprint(MIDEBUG_POLL, "nconn added to idx %d\n", idx);
+								dprint(MIDEBUG_POLL, "nconn added to idx %d\n", idx);
 						}
 					}
 					break;
@@ -926,7 +914,7 @@ int main_loop(void)
 						res = del_mainpoll(mainpoll[i].fd);
 						if (res < 0) {
 							eprint("Cannot delete fd=%d from mainpoll result %d\n",
-								mainpoll[i].fd, res);
+							       mainpoll[i].fd, res);
 						}
 					}
 					res = main_recv(mainpoll[i].fd, i);
@@ -938,24 +926,23 @@ int main_loop(void)
 						close(mainpoll[i].fd);
 						res = del_mainpoll(mainpoll[i].fd);
 						if (res < 0) {
-							eprint("Cannot delete fd=%d from mainpoll result %d\n",
-								fd, res);
+							eprint("Cannot delete fd=%d from mainpoll result %d\n", fd, res);
 						} else
 							dprint(MIDEBUG_POLL, "Deleted fd=%d from mainpoll\n", fd);
 					}
 					break;
 				default:
 					wprint("Unexpected poll event %x on fd %d type %d\n", mainpoll[i].revents,
-						mainpoll[i].fd, pollinfo[i].type);
-					break; 
+					       mainpoll[i].fd, pollinfo[i].type);
+					break;
 				}
-				ret--;	
+				ret--;
 			}
 			if (ret == 0)
 				break;
 		}
 	}
-	return error;	
+	return error;
 }
 
 static int my_lib_debug(const char *file, int line, const char *func, int level, const char *fmt, va_list va)
@@ -984,7 +971,6 @@ static int my_lib_debug(const char *file, int line, const char *func, int level,
 		fprintf(stderr, "%s %20s:%4d %22s():%s", date, file, line, func, log);
 	return ret;
 }
-
 
 static int my_capilib_dbg(const char *file, int line, const char *func, const char *fmt, va_list va)
 {
@@ -1021,7 +1007,7 @@ int main(int argc, char *argv[])
 	ver = init_layer3(4, &l3dbg);
 	mISDN_set_debug_level(libdebug);
 	iprint("Init mISDN lib version %x, debug = %x (%x)\n", ver, debugmask, libdebug);
-	
+
 	/* open mISDN */
 	mIsock = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (mIsock < 0) {
@@ -1048,7 +1034,7 @@ int main(int argc, char *argv[])
 		pc = &mI_Controller[i];
 		pc->mNr = i;
 		pc->devinfo.id = i;
-		pc->enable = 1; /* default all controllers are enabled */
+		pc->enable = 1;	/* default all controllers are enabled */
 		pc->L3Proto = L3_PROTOCOL_DSS1_USER;
 		pc->L3Flags = 0;
 		ret = ioctl(mIsock, IMGETDEVINFO, &pc->devinfo);
@@ -1058,8 +1044,7 @@ int main(int argc, char *argv[])
 		}
 		c = 0;
 		nb = 0;
-		while(c <= MISDN_MAX_CHANNEL + 1)
-		{
+		while (c <= MISDN_MAX_CHANNEL + 1) {
 			if (c <= MISDN_MAX_CHANNEL && test_channelmap(c, pc->devinfo.channelmap)) {
 				nb++;
 				pc->BImax = c;
@@ -1079,7 +1064,7 @@ int main(int argc, char *argv[])
 		}
 		pc->profile.ncontroller = i + 1;
 		pc->profile.nbchannel = nb;
-		pc->profile.goptions = 1; /* internal controller */
+		pc->profile.goptions = 1;	/* internal controller */
 		pc->profile.support1 = 0;
 		pc->profile.support2 = 0;
 		pc->profile.support3 = 0x01;
@@ -1120,11 +1105,11 @@ retry_Csock:
 	}
 	mcaddr.sun_family = AF_UNIX;
 	sprintf(mcaddr.sun_path, MISDN_CAPI_SOCKET_PATH);
-	ret = bind(mCsock, (struct sockaddr*)&mcaddr, sizeof(mcaddr));
+	ret = bind(mCsock, (struct sockaddr *)&mcaddr, sizeof(mcaddr));
 	if (ret < 0) {
 		fprintf(stderr, "cannot bind socket to %s - %s\n", mcaddr.sun_path, strerror(errno));
-		if (errno == EADDRINUSE) { /* old socket file exist */
-			ret = connect(mCsock, (struct sockaddr*)&mcaddr, sizeof(mcaddr));
+		if (errno == EADDRINUSE) {	/* old socket file exist */
+			ret = connect(mCsock, (struct sockaddr *)&mcaddr, sizeof(mcaddr));
 			if (ret < 0) {
 				/* seems the socket file is not in use */
 				ret = unlink(MISDN_CAPI_SOCKET_PATH);
@@ -1139,7 +1124,7 @@ retry_Csock:
 				fprintf(stderr, "mISDNcapid is already running - only one instance can be used\n");
 				goto errout;
 			}
-			
+
 		}
 	}
 	if (listen(mCsock, 15)) {

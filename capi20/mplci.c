@@ -20,10 +20,9 @@
 #include "mc_buffer.h"
 #include <mISDN/q931.h>
 
-
 struct mPLCI *new_mPLCI(struct pController *pc, int pid, struct lPLCI *lp)
 {
-	struct mPLCI	*plci;
+	struct mPLCI *plci;
 	int plci_nr = 1;
 
 	plci = pc->plciL;
@@ -61,7 +60,7 @@ int free_mPLCI(struct mPLCI *plci)
 	if (p == plci)
 		pc->plciL = plci->next;
 	else {
-		while(p && p->next) {
+		while (p && p->next) {
 			if (p->next == plci) {
 				p->next = plci->next;
 				break;
@@ -117,19 +116,18 @@ void plciDetachlPLCI(struct lPLCI *lp)
 
 static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 {
-	uint16_t		CIPValue;
-	uint32_t		CIPmask;
-	struct pController	*pc;
-	struct lController	*lc;
-	struct lPLCI		*lp;
-	uint8_t			found = 0;
-	int			ret;
+	uint16_t CIPValue;
+	uint32_t CIPmask;
+	struct pController *pc;
+	struct lController *lc;
+	struct lPLCI *lp;
+	uint8_t found = 0;
+	int ret;
 
 	CIPValue = q931CIPValue(mc);
 	pc = plci->pc;
 	CIPmask = 1 << CIPValue;
-	dprint(MIDEBUG_PLCI, "PLCI %04x: Check CIPvalue %d (%08x) with CIPmask %08x\n",
-		plci->plci, CIPValue, CIPmask, pc->CIPmask);
+	dprint(MIDEBUG_PLCI, "PLCI %04x: Check CIPvalue %d (%08x) with CIPmask %08x\n", plci->plci, CIPValue, CIPmask, pc->CIPmask);
 	if (CIPValue && ((CIPmask & pc->CIPmask) || (pc->CIPmask & 1))) {
 		/* at least one Application is listen for this service */
 		lc = pc->lClist;
@@ -161,7 +159,7 @@ static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 				ret = pc->l3->to_layer3(pc->l3, MT_RELEASE_COMPLETE, plci->pid, l3m);
 				if (ret) {
 					wprint("Error %d -  %s on sending %s to pid %x\n", ret, strerror(-ret),
-						_mi_msg_type2str(MT_RELEASE_COMPLETE), plci->pid);
+					       _mi_msg_type2str(MT_RELEASE_COMPLETE), plci->pid);
 					free_l3_msg(l3m);
 				}
 			}
@@ -173,13 +171,12 @@ static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 
 int plci_l3l4(struct mPLCI *plci, int pr, struct l3_msg *l3m)
 {
-	struct lPLCI	*lp;
-	struct mc_buf	*mc;
+	struct lPLCI *lp;
+	struct mc_buf *mc;
 
 	mc = alloc_mc_buf();
 	if (!mc) {
-		wprint("PLCI %04x: Cannot allocate mc_buf for %s\n",
-			plci->plci, _mi_msg_type2str(pr));
+		wprint("PLCI %04x: Cannot allocate mc_buf for %s\n", plci->plci, _mi_msg_type2str(pr));
 		return -ENOMEM;
 	}
 	mc->l3m = l3m;
@@ -189,7 +186,7 @@ int plci_l3l4(struct mPLCI *plci, int pr, struct l3_msg *l3m)
 		break;
 	default:
 		lp = plci->lPLCIs;
-		while(lp) {
+		while (lp) {
 			lPLCI_l3l4(lp, pr, mc);
 			lp = lp->next;
 		}
@@ -201,9 +198,9 @@ int plci_l3l4(struct mPLCI *plci, int pr, struct l3_msg *l3m)
 
 int mPLCISendMessage(struct lController *lc, struct mc_buf *mc)
 {
-	struct mPLCI		*plci;
-	struct lPLCI		*lp;
-	int			ret;
+	struct mPLCI *plci;
+	struct lPLCI *lp;
+	int ret;
 
 	switch (mc->cmsg.Command) {
 	case CAPI_CONNECT:
@@ -242,7 +239,7 @@ struct lPLCI *get_lPLCI4Id(struct mPLCI *plci, uint16_t appId)
 	if (!plci)
 		return NULL;
 	lp = plci->lPLCIs;
-	while(lp) {
+	while (lp) {
 		if (appId == lp->lc->Appl->AppId)
 			break;
 		lp = lp->next;
@@ -252,9 +249,13 @@ struct lPLCI *get_lPLCI4Id(struct mPLCI *plci, uint16_t appId)
 
 struct mPLCI *getPLCI4pid(struct pController *pc, int pid)
 {
-	struct mPLCI *plci = pc->plciL;
+	struct mPLCI *plci;
 
-	while(plci) {
+	if (pc)
+		plci = pc->plciL;
+	else
+		plci = NULL;
+	while (plci) {
 		if (plci->pid == pid)
 			break;
 		plci = plci->next;
@@ -264,9 +265,13 @@ struct mPLCI *getPLCI4pid(struct pController *pc, int pid)
 
 struct mPLCI *getPLCI4Id(struct pController *pc, uint32_t id)
 {
-	struct mPLCI *plci = pc->plciL;
+	struct mPLCI *plci;
 
-	while(plci) {
+	if (pc)
+		plci = pc->plciL;
+	else
+		plci = NULL;
+	while (plci) {
 		if (plci->plci == id)
 			break;
 		plci = plci->next;
@@ -274,19 +279,18 @@ struct mPLCI *getPLCI4Id(struct pController *pc, uint32_t id)
 	return plci;
 }
 
-int
-plciL4L3(struct mPLCI *plci, int mt, struct l3_msg *l3m)
+int plciL4L3(struct mPLCI *plci, int mt, struct l3_msg *l3m)
 {
 	int ret;
 
 	ret = plci->pc->l3->to_layer3(plci->pc->l3, mt, plci->pid, l3m);
 	if (ret < 0) {
 		wprint("Error sending %s to controller %d pid %x %s msg\n", _mi_msg_type2str(mt),
-			plci->pc->profile.ncontroller, plci->pid, l3m ? "with" : "no");
+		       plci->pc->profile.ncontroller, plci->pid, l3m ? "with" : "no");
 		if (l3m)
 			free_l3_msg(l3m);
 	}
 	dprint(MIDEBUG_PLCI, "Sending %s to layer3 pid %x controller %d %s msg\n", _mi_msg_type2str(mt),
-		plci->pc->profile.ncontroller, plci->pid, l3m ? "with" : "no");
+	       plci->pc->profile.ncontroller, plci->pid, l3m ? "with" : "no");
 	return ret;
 }
