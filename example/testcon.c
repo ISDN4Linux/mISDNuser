@@ -66,6 +66,9 @@ char *pname;
 	fprintf(stderr,"                   10 set loop back D permanent\n");
 	fprintf(stderr,"                   11 clear all loopbacks\n");
 	fprintf(stderr,"                   12 L1 Timer3 value to given -n value (allowed values 5-30)\n");
+	fprintf(stderr,"                   13 L1 Test AIS set)\n");
+	fprintf(stderr,"                   14 L1 Test AIS cleared)\n");
+	fprintf(stderr,"                   15 L1 Test set state machine  to given -n value (allowed values 0-7, 7 - auto state enabled)\n");
 	fprintf(stderr,"  -n <phone nr>   Phonenumber to dial or on -F12 T3 value\n");
 	fprintf(stderr,"  -vn             Printing debug info level n\n");
 	fprintf(stderr,"\n");
@@ -80,6 +83,7 @@ typedef struct _devinfo {
 	int			bchan;
 	struct sockaddr_mISDN	baddr;
 	int			nds;
+	int			dproto;
 	int			bproto;
 	int			used_bchannel;
 	int			save;
@@ -701,7 +705,7 @@ int do_connection(devinfo_t *di) {
 
 	if (di->setloopback)
 	        return 0;
-        if (di->func == 12)
+        if (di->func > 12)
                 return 0;
 	hh = (struct  mISDNhead *)buf;
 	if (strlen(di->phonenr)) {
@@ -875,6 +879,7 @@ int do_setup(devinfo_t *di) {
 	unsigned char		buffer[300];
 	struct mISDN_ctrl_req	creq;
 
+	di->dproto = ISDN_P_LAPD_TE;
 	switch (di->func) {
 		case 0:
 		case 5:
@@ -914,6 +919,10 @@ int do_setup(devinfo_t *di) {
                         di->setloopback = di->func - 7;
                         break;
                 case 12:
+                case 13:
+                case 14:
+                case 15:
+                        di->dproto = ISDN_P_LAPD_NT;
                         break;
 		default:
 			fprintf(stdout,"unknown program function %d\n",
@@ -950,7 +959,7 @@ int do_setup(devinfo_t *di) {
 
 	close(sk);
 
-	di->layer2 = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_LAPD_TE);
+	di->layer2 = socket(PF_ISDN, SOCK_DGRAM, di->dproto);
 	if (di->layer2 < 0) {
 		fprintf(stdout, "could not open layer2 socket %s\n", strerror(errno));
 		return 5;
@@ -1026,6 +1035,43 @@ int do_setup(devinfo_t *di) {
                 close(di->layer2);
                 return ret;
 	}
+	if (di->func == 13) {
+		creq.op = MISDN_CTRL_L1_AIS_TEST;
+		creq.channel = 0;
+		creq.p1 = 1;
+		ret = ioctl(di->layer2, IMCTRLREQ, &creq);
+		if (ret < 0)
+			fprintf(stdout,"AIS ioctl error %s\n", strerror(errno));
+		else
+		        fprintf(stdout,"AIS ioctl enable successful\n");
+                close(di->layer2);
+                return ret;
+	}
+	if (di->func == 14) {
+		creq.op = MISDN_CTRL_L1_AIS_TEST;
+		creq.channel = 0;
+		creq.p1 = 0;
+		ret = ioctl(di->layer2, IMCTRLREQ, &creq);
+		if (ret < 0)
+			fprintf(stdout,"AIS ioctl error %s\n", strerror(errno));
+		else
+		        fprintf(stdout,"AIS ioctl disable successful\n");
+                close(di->layer2);
+                return ret;
+	}
+	if (di->func == 15) {
+		creq.op = MISDN_CTRL_L1_STATE_TEST;
+		creq.channel = 0;
+		creq.p1 = atol(di->phonenr);
+		ret = ioctl(di->layer2, IMCTRLREQ, &creq);
+		if (ret < 0)
+			fprintf(stdout,"L1 state set ioctl error %s\n", strerror(errno));
+		else
+		        fprintf(stdout,"L1 set state(%ld) ioctl successful\n", atol(di->phonenr));
+                close(di->layer2);
+                return ret;
+	}
+
 	hh = (struct mISDNhead *)buffer;
 
 	while (1) {

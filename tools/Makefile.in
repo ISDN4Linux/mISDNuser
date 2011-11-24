@@ -34,7 +34,8 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-bin_PROGRAMS = misdn_info$(EXEEXT) misdn_log$(EXEEXT)
+bin_PROGRAMS = misdn_info$(EXEEXT) misdn_log$(EXEEXT) \
+	misdn_E1test$(EXEEXT)
 sbin_PROGRAMS = misdn_rename$(EXEEXT) misdn_cleanl2$(EXEEXT)
 subdir = tools
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
@@ -49,6 +50,9 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(sbindir)"
 PROGRAMS = $(bin_PROGRAMS) $(sbin_PROGRAMS)
+am_misdn_E1test_OBJECTS = E1test.$(OBJEXT)
+misdn_E1test_OBJECTS = $(am_misdn_E1test_OBJECTS)
+misdn_E1test_LDADD = $(LDADD)
 am_misdn_cleanl2_OBJECTS = cleanl2.$(OBJEXT)
 misdn_cleanl2_OBJECTS = $(am_misdn_cleanl2_OBJECTS)
 misdn_cleanl2_LDADD = $(LDADD)
@@ -74,10 +78,12 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(misdn_cleanl2_SOURCES) $(misdn_info_SOURCES) \
-	$(misdn_log_SOURCES) $(misdn_rename_SOURCES)
-DIST_SOURCES = $(misdn_cleanl2_SOURCES) $(misdn_info_SOURCES) \
-	$(misdn_log_SOURCES) $(misdn_rename_SOURCES)
+SOURCES = $(misdn_E1test_SOURCES) $(misdn_cleanl2_SOURCES) \
+	$(misdn_info_SOURCES) $(misdn_log_SOURCES) \
+	$(misdn_rename_SOURCES)
+DIST_SOURCES = $(misdn_E1test_SOURCES) $(misdn_cleanl2_SOURCES) \
+	$(misdn_info_SOURCES) $(misdn_log_SOURCES) \
+	$(misdn_rename_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -205,7 +211,8 @@ misdn_info_SOURCES = info.c
 misdn_log_SOURCES = loghex.c
 misdn_rename_SOURCES = rename.c
 misdn_cleanl2_SOURCES = cleanl2.c
-AM_CPPFLAGS = -I$(top_srcdir)/include
+misdn_E1test_SOURCES = E1test.c
+AM_CPPFLAGS = -Wall -I$(top_srcdir)/include
 CLEANFILES = *~
 all: all-am
 
@@ -327,6 +334,9 @@ clean-sbinPROGRAMS:
 	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
 	echo " rm -f" $$list; \
 	rm -f $$list
+misdn_E1test$(EXEEXT): $(misdn_E1test_OBJECTS) $(misdn_E1test_DEPENDENCIES) 
+	@rm -f misdn_E1test$(EXEEXT)
+	$(LINK) $(misdn_E1test_OBJECTS) $(misdn_E1test_LDADD) $(LIBS)
 misdn_cleanl2$(EXEEXT): $(misdn_cleanl2_OBJECTS) $(misdn_cleanl2_DEPENDENCIES) 
 	@rm -f misdn_cleanl2$(EXEEXT)
 	$(LINK) $(misdn_cleanl2_OBJECTS) $(misdn_cleanl2_LDADD) $(LIBS)
@@ -346,6 +356,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/E1test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cleanl2.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/info.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/loghex.Po@am__quote@

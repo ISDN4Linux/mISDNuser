@@ -258,6 +258,7 @@ int ParseAOCEChargingUnitInfo(struct asn1_parm *pc, u_char * p, u_char * end, st
 
 	XSEQUENCE_1(ParseAOCEChargingUnitInfoChoice, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, chu);
 	XSEQUENCE_OPT_1(ParseChargingAssociation, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &chu->chargeAssoc);
+	return p - beg;
 }
 
 // AOCEBillingId
