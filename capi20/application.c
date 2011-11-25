@@ -151,6 +151,8 @@ void SendMessage2Application(struct mApplication *appl, struct mc_buf *mc)
 	ret = send(appl->fd, mc->rb, mc->len, 0);
 	if (ret != mc->len)
 		wprint("Message send error len=%d ret=%d - %s\n", mc->len, ret, strerror(errno));
+	if (mI_debug_mask & MIDEBUG_CAPIMSG)
+		 mCapi_message2str(mc);
 }
 
 void SendCmsg2Application(struct mApplication *appl, struct mc_buf *mc)
@@ -162,9 +164,8 @@ void SendCmsg2Application(struct mApplication *appl, struct mc_buf *mc)
 	ret = send(appl->fd, mc->rb, mc->len, 0);
 	if (ret != mc->len)
 		eprint("Message send error len=%d ret=%d - %s\n", mc->len, ret, strerror(errno));
-	else
-		dprint(MIDEBUG_NCCI_DATA, "Msg: %02x/%02x %s addr %x len %d/%d\n", mc->rb[4], mc->rb[5],
-		       capi20_cmd2str(mc->rb[4], mc->rb[5]), CAPIMSG_CONTROL(mc->rb), mc->len, ret);
+	else if (mI_debug_mask & MIDEBUG_CAPIMSG)
+		mCapi_message2str(mc);
 }
 
 void SendCmsgAnswer2Application(struct mApplication *appl, struct mc_buf *mc, __u16 Info)
@@ -181,7 +182,7 @@ static int FacilityMessage(struct mApplication *appl, struct pController *pc, st
 	int ret = CapiNoError;
 	struct mPLCI *plci;
 	struct lPLCI *lp;
-	struct mNCCI *ncci;
+	struct BInstance *bi;
 	unsigned char tmp[64], *p;
 
 	p = tmp;
@@ -193,14 +194,9 @@ static int FacilityMessage(struct mApplication *appl, struct pController *pc, st
 		dprint(MIDEBUG_CONTROLLER, "DTMF addr %06x\n", mc->cmsg.adr.adrNCCI);
 		plci = getPLCI4Id(pc, mc->cmsg.adr.adrPLCI & 0xFFFF);
 		lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
-		if (lp) {
-			ncci = getNCCI4addr(lp, mc->cmsg.adr.adrNCCI, GET_NCCI_PLCI);
-			if (ncci) {
-				ret = ncciSendMessage(ncci, mc->cmsg.Command, mc->cmsg.Subcommand, mc);
-			} else {
-				wprint("DTMF addr %06x NCCI not found\n", mc->cmsg.adr.adrNCCI);
-				ret = CapiIllController;
-			}
+		bi = lp ? lp->BIlink : NULL;
+		if  (bi) {
+			ret = bi->from_up(bi, mc);
 		} else {
 			wprint("DTMF addr %06x lPLCI not found\n", mc->cmsg.adr.adrNCCI);
 			ret = CapiIllController;
@@ -232,12 +228,14 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 	struct lController *lc;
 	struct mPLCI *plci;
 	struct lPLCI *lp;
-	struct mNCCI *ncci;
+	struct BInstance *bi;
 	uint8_t cmd, subcmd;
 	int ret = CapiNoError;
 
 	cmd = CAPIMSG_COMMAND(mc->rb);
 	subcmd = CAPIMSG_SUBCOMMAND(mc->rb);
+	if (cmd != CAPI_DATA_B3 && mI_debug_mask & MIDEBUG_CAPIMSG)
+		mCapi_message2str(mc);
 	if (mc->len < 12) {
 		eprint("message %02x/%02x %s too short (%d)\n", cmd, subcmd, capi20_cmd2str(cmd, subcmd), mc->len);
 		ret = CapiIllCmdOrSubcmdOrMsgToSmall;
@@ -264,11 +262,11 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 		if ((subcmd == CAPI_REQ) || (subcmd == CAPI_RESP)) {
 			plci = getPLCI4Id(pc, mc->cmsg.adr.adrPLCI & 0xFFFF);
 			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
-			ncci = getNCCI4addr(lp, mc->cmsg.adr.adrNCCI, GET_NCCI_EXACT);
-			if (ncci)
-				ret = ncciSendMessage(ncci, cmd, subcmd, mc);
-			else {
-				wprint("Application%d: cmd %x (%s) plci %04x lplci %04x NCCI not found\n", appl->AppId, cmd,
+			bi = lp ? lp->BIlink : NULL;
+			if (bi) {
+				ret = bi->from_up(bi, mc);
+			} else {
+				wprint("Application%d: cmd %x (%s) plci %04x lplci %04x BIlink not found\n", appl->AppId, cmd,
 				       capi20_cmd2str(mc->cmsg.Command, mc->cmsg.Subcommand),
 				       plci ? plci->plci : 0xffff, lp ? lp->plci : 0xffff);
 				ret = CapiIllController;
@@ -280,20 +278,11 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 		mcbuf_rb2cmsg(mc);
 		plci = getPLCI4Id(pc, mc->cmsg.adr.adrPLCI & 0xFFFF);
 		lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
-		if (subcmd == CAPI_REQ) {
-			if (lp) {
-				ncci = ConnectB3Request(lp, mc);
-			} else
-				ncci = NULL;
-		} else if (subcmd != CAPI_RESP) {
-			ret = CapiIllCmdOrSubcmdOrMsgToSmall;
-			break;
-		} else
-			ncci = getNCCI4addr(lp, mc->cmsg.adr.adrNCCI, GET_NCCI_EXACT);
-		if (ncci)
-			ret = ncciSendMessage(ncci, cmd, subcmd, mc);
-		else {
-			wprint("Application%d: cmd %x (%s) plci %04x lplci %04x NCCI not found\n", appl->AppId, cmd,
+		bi = lp ? lp->BIlink : NULL;
+		if (bi) {
+			ret = bi->from_up(bi, mc);
+		} else {
+			wprint("Application%d: cmd %x (%s) plci %04x lplci %04x BIlink not found\n", appl->AppId, cmd,
 			       capi20_cmd2str(mc->cmsg.Command, mc->cmsg.Subcommand),
 			       plci ? plci->plci : 0xffff, lp ? lp->plci : 0xffff);
 			ret = CapiIllController;
@@ -319,7 +308,7 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 			} else {
 				if (!lc) {
 					if (pc) {
-						lc = addlController(appl, pc);
+						lc = addlController(appl, pc, 1);
 						if (!lc) {
 							ret = CapiMsgOSResourceErr;
 							break;
@@ -368,7 +357,7 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 		mcbuf_rb2cmsg(mc);
 		if (!lc) {
 			if (pc) {
-				lc = addlController(appl, pc);
+				lc = addlController(appl, pc, 0);
 				if (!lc) {
 					ret = CapiMsgOSResourceErr;
 					break;
@@ -393,4 +382,32 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 	if (ret && subcmd != CAPI_RESP)
 		SendCmsgAnswer2Application(appl, mc, ret);
 	return ret;
+}
+
+void mCapi_cmsg2str(struct mc_buf *mc)
+{
+	char *decmsg, *line;
+
+	if (mI_debug_mask & MIDEBUG_CAPIMSG) {
+		decmsg = capi_cmsg2str(&mc->cmsg);
+		while (decmsg) {
+			line = strsep(&decmsg, "\n");
+			if (line)
+				dprint(MIDEBUG_CAPIMSG, "%s\n", line);
+		}
+	}
+}
+
+void mCapi_message2str(struct mc_buf *mc)
+{
+	char *decmsg, *line;
+
+	if (mI_debug_mask & MIDEBUG_CAPIMSG) {
+		decmsg = capi_message2str(mc->rb);
+		while (decmsg) {
+			line = strsep(&decmsg, "\n");
+			if (line)
+				dprint(MIDEBUG_CAPIMSG, "%s\n", line);
+		}
+	}
 }

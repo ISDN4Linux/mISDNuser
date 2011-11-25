@@ -171,7 +171,7 @@ static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 
 int plci_l3l4(struct mPLCI *plci, int pr, struct l3_msg *l3m)
 {
-	struct lPLCI *lp;
+	struct lPLCI *lp, *nxt;
 	struct mc_buf *mc;
 
 	mc = alloc_mc_buf();
@@ -187,8 +187,10 @@ int plci_l3l4(struct mPLCI *plci, int pr, struct l3_msg *l3m)
 	default:
 		lp = plci->lPLCIs;
 		while (lp) {
+		        /* maybe lPLCI_l3l4() will free lp, so get the next now */
+		        nxt = lp->next;
 			lPLCI_l3l4(lp, pr, mc);
-			lp = lp->next;
+			lp = nxt;
 		}
 		break;
 	}

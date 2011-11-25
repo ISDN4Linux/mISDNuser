@@ -24,6 +24,9 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <string.h>
+#include <pthread.h>
+#include <poll.h>
+#include <semaphore.h>
 #include <mISDN/mISDNif.h>
 #include <mISDN/mlayer3.h>
 #include <mISDN/q931.h>
@@ -46,25 +49,39 @@ struct Bprotocol {
 	uint16_t	B3;
 	unsigned char	B1cfg[16];
 	unsigned char	B2cfg[16];
-	unsigned char	B3cfg[80];
+	unsigned char	B3cfg[132];
 };
 
 typedef int (BDataTrans_t)(struct BInstance *, struct mc_buf *);
+
+enum BType {
+	BType_None = 0,
+	BType_Direct = 1,
+	BType_Fax = 2
+};
 
 struct BInstance {
 	int 			nr;
 	int			usecnt;
 	int			proto;
 	int			fd;
+	enum BType		type;
 	uint16_t		DownId;	/* Ids for send down messages */
 	uint16_t		UpId;	/* Ids for send up messages */
 	struct pController	*pc;
 	struct lPLCI		*lp;
-	struct mNCCI		*nc;
+	void			*b3data;
 	BDataTrans_t		*from_down;
+	BDataTrans_t		*from_up;
+	pthread_t		tid;
+	struct pollfd		pfd[2];
+	int			cpipe[2];
+	sem_t			wait;
+	unsigned int		running:1;
+	unsigned int		waiting:1;
 };
 
-int OpenBInstance(struct BInstance *, struct lPLCI *, BDataTrans_t *);
+int OpenBInstance(struct BInstance *, struct lPLCI *, enum BType);
 int CloseBInstance(struct BInstance *);
 
 struct capi_profile {
@@ -100,6 +117,7 @@ struct pController {
 struct pController *get_mController(int);
 struct pController *get_cController(int);
 struct BInstance *ControllerSelChannel(struct pController *, int, int);
+int OpenLayer3(struct pController *);
 
 /* This is a struct for the logical controller per application, also has the listen statemachine */
 struct lController {
@@ -118,7 +136,7 @@ struct lController {
 struct lController *get_lController(struct mApplication *, int);
 void init_listen(void);
 void free_listen(void);
-struct lController *addlController(struct mApplication *, struct pController *);
+struct lController *addlController(struct mApplication *, struct pController *, int);
 void rm_lController(struct lController *lc);
 int listenRequest(struct lController *, struct mc_buf *);
 
@@ -180,6 +198,7 @@ struct lPLCI {
 	struct misdn_channel_info	chid;
 	struct Bprotocol		Bprotocol;
 	unsigned int			l1dtmf:1;
+	unsigned int			autohangup:1;
 };
 
 void init_lPLCI_fsm(void);
@@ -192,6 +211,7 @@ uint16_t q931CIPValue(struct mc_buf *);
 struct mNCCI *getNCCI4addr(struct lPLCI *, uint32_t, int);
 void lPLCIDelNCCI(struct mNCCI *);
 struct mNCCI *ConnectB3Request(struct lPLCI *, struct mc_buf *);
+void B3ReleaseLink(struct lPLCI *, struct BInstance *);
 
 #define GET_NCCI_EXACT		1
 #define GET_NCCI_ONLY_PLCI	2
@@ -227,10 +247,11 @@ struct mNCCI {
 	struct _ConfQueue	xmit_handles[CAPI_MAXDATAWINDOW];
 	uint32_t		recv_handles[CAPI_MAXDATAWINDOW];
 	enum _flowmode		flowmode;
-	uint16_t isize;
-	uint16_t osize;
-	uint16_t iidx;
-	uint16_t oidx;
+	uint16_t		isize;
+	uint16_t		osize;
+	uint16_t		iidx;
+	uint16_t		oidx;
+	int			ridx;
 	struct msghdr		down_msg;
 	struct iovec		down_iv[3];
 	struct mISDNhead	down_header;
@@ -248,10 +269,20 @@ void init_ncci_fsm(void);
 void free_ncci_fsm(void);
 struct mNCCI *ncciCreate(struct lPLCI *);
 void ncciFree(struct mNCCI *);
-int ncciSendMessage(struct mNCCI *, uint8_t, uint8_t, struct mc_buf *);
+void ncciCmsgHeader(struct mNCCI *ncci, struct mc_buf *mc, uint8_t, uint8_t);
 int recvBdirect(struct BInstance *, struct mc_buf *);
+int ncciB3Data(struct BInstance *, struct mc_buf *);
+int ncciB3Message(struct mNCCI *, struct mc_buf *);
 void ncciReleaseLink(struct mNCCI *);
 void ncciDel_lPlci(struct mNCCI *);
+int ncciL4L3(struct mNCCI *, uint32_t, int, int, void *, struct mc_buf *);
+void AnswerDataB3Req(struct mNCCI *, struct mc_buf *, uint16_t);
+
+#ifdef USE_SOFTFAX
+int FaxRecvBData(struct BInstance *, struct mc_buf *);
+int FaxB3Message(struct BInstance *, struct mc_buf *);
+void FaxReleaseLink(struct BInstance *);
+#endif
 
 #define MC_BUF_ALLOC(a) if (!(a = alloc_mc_buf())) {eprint("Cannot allocate mc_buff\n");return;}
 
@@ -260,17 +291,22 @@ void ncciDel_lPlci(struct mNCCI *);
 /* Debug MASK */
 #define MC_DEBUG_POLL		0x01
 #define MC_DEBUG_CONTROLLER	0x02
-#define MC_DEBUG_STATES		0x04
-#define MC_DEBUG_PLCI		0x08
-#define MC_DEBUG_NCCI		0x10
-#define MC_DEBUG_NCCI_DATA	0x20
+#define MC_DEBUG_CAPIMSG	0x04
+#define MC_DEBUG_STATES		0x08
+#define MC_DEBUG_PLCI		0x10
+#define MC_DEBUG_NCCI		0x20
+#define MC_DEBUG_NCCI_DATA	0x40
 
 #define MIDEBUG_POLL		(MC_DEBUG_POLL << 24)
 #define MIDEBUG_CONTROLLER	(MC_DEBUG_CONTROLLER << 24)
+#define MIDEBUG_CAPIMSG		(MC_DEBUG_CAPIMSG << 24)
 #define MIDEBUG_STATES		(MC_DEBUG_STATES << 24)
 #define MIDEBUG_PLCI		(MC_DEBUG_PLCI << 24)
 #define MIDEBUG_NCCI		(MC_DEBUG_NCCI << 24)
 #define MIDEBUG_NCCI_DATA	(MC_DEBUG_NCCI_DATA << 24)
+
+void mCapi_cmsg2str(struct mc_buf *);
+void mCapi_message2str(struct mc_buf *);
 
 /* missing capi errors */
 #define CapiMessageNotSupportedInCurrentState	0x2001
@@ -284,10 +320,22 @@ void ncciDel_lPlci(struct mNCCI *);
 #define CapiB1ProtocolParameterNotSupported	0x3004
 #define CapiB2ProtocolParameterNotSupported	0x3005
 #define CapiB3ProtocolParameterNotSupported	0x3006
+#define CapiProtocolCombinationNotSupported	0x3007
+#define CapiNCPINotSupported			0x3008
 
 #define CapiProtocolErrorLayer1			0x3301
 #define CapiProtocolErrorLayer2			0x3302
 #define CapiProtocolErrorLayer3			0x3303
+
+#define FAX_B3_FORMAT_SFF	0
+#define FAX_B3_FORMAT_PLAIN	1
+#define FAX_B3_FORMAT_PCX	2
+#define FAX_B3_FORMAT_DCX	3
+#define FAX_B3_FORMAT_TIFF	4
+#define FAX_B3_FORMAT_ASCII	5
+#define FAX_B3_FORMAT_EXT_ANSI	6
+#define FAX_B3_FORMAT_BINARY	7
+
 
 /* Info mask bits */
 #define CAPI_INFOMASK_CAUSE	0x0001
@@ -305,6 +353,7 @@ void ncciDel_lPlci(struct mNCCI *);
 
 #define CAPIMSG_REQ_DATAHANDLE(m)	(m[18] | (m[19]<<8))
 #define CAPIMSG_RESP_DATAHANDLE(m)	(m[12] | (m[13]<<8))
+#define CAPIMSG_REQ_FLAGS(m)		(m[20] | (m[21]<<8))
 
 #define CAPI_B3_DATA_IND_HEADER_SIZE	((4 == sizeof(void *)) ? 22 : 30)
 

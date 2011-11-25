@@ -109,8 +109,6 @@ static char *str_ev_ncci[] = {
 
 static struct Fsm ncci_fsm = { 0, 0, 0, 0, 0 };
 
-static int ncciL4L3(struct mNCCI *ncci, uint32_t, int, int, void *, struct mc_buf *);
-
 static void ncci_debug(struct FsmInst *fi, char *fmt, ...)
 {
 	char tmp[128];
@@ -133,7 +131,7 @@ static inline void Send2Application(struct mNCCI *ncci, struct mc_buf *mc)
 	SendCmsg2Application(ncci->appl, mc);
 }
 
-static inline void ncciCmsgHeader(struct mNCCI *ncci, struct mc_buf *mc, __u8 cmd, __u8 subcmd)
+void ncciCmsgHeader(struct mNCCI *ncci, struct mc_buf *mc, uint8_t cmd, uint8_t subcmd)
 {
 	capi_cmsg_header(&mc->cmsg, ncci->appl->AppId, cmd, subcmd, ncci->appl->MsgId++, ncci->ncci);
 }
@@ -186,8 +184,10 @@ static void ncci_connect_b3_conf(struct FsmInst *fi, int event, void *arg)
 	if (mc->cmsg.Info == 0) {
 		FsmChangeState(fi, ST_NCCI_N_2);
 		Send2Application(ncci, mc);
-		pr = ncci->l1direct ? PH_ACTIVATE_REQ : DL_ESTABLISH_REQ;
-		ncciL4L3(ncci, pr, 0, 0, NULL, NULL);
+		if (ncci->l3trans && ncci->l2trans) {
+			pr = ncci->l1direct ? PH_ACTIVATE_REQ : DL_ESTABLISH_REQ;
+			ncciL4L3(ncci, pr, 0, 0, NULL, NULL);
+		}
 	} else {
 		FsmChangeState(fi, ST_NCCI_N_0);
 		Send2Application(ncci, mc);
@@ -350,15 +350,24 @@ static void ncci_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
 	int i;
 
 	FsmChangeState(fi, ST_NCCI_N_ACT);
-	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
-		ncci->xmit_handles[i].PktId = 0;
-		ncci->recv_handles[i] = 0;
+	if (ncci->l3trans && ncci->l2trans) {
+		for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
+			ncci->xmit_handles[i].PktId = 0;
+			ncci->recv_handles[i] = 0;
+		}
 	}
 	Send2Application(ncci, arg);
 }
 
 static void ncci_connect_b3_active_resp(struct FsmInst *fi, int event, void *arg)
 {
+	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = arg;
+
+	if (mc->cmsg.Info != 0) {
+		ncciCmsgHeader(ncci, arg, CAPI_DISCONNECT_B3, CAPI_IND);
+		FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, mc);
+	}
 }
 
 static void ncci_n0_dl_establish_ind_conf(struct FsmInst *fi, int event, void *arg)
@@ -435,6 +444,7 @@ static struct FsmNode fn_ncci_list[] = {
 	{ST_NCCI_N_1, EV_AP_CONNECT_B3_RESP, ncci_connect_b3_resp},
 	{ST_NCCI_N_1, EV_AP_DISCONNECT_B3_REQ, ncci_disconnect_b3_req},
 	{ST_NCCI_N_1, EV_NC_DISCONNECT_B3_IND, ncci_disconnect_b3_ind},
+	{ST_NCCI_N_1, EV_NC_DISCONNECT_B3_CONF, ncci_disconnect_b3_conf},
 	{ST_NCCI_N_1, EV_AP_MANUFACTURER_REQ, ncci_manufacturer_req},
 	{ST_NCCI_N_1, EV_AP_RELEASE, ncci_appl_release_disc},
 	{ST_NCCI_N_1, EV_NC_LINKDOWN, ncci_linkdown},
@@ -442,6 +452,7 @@ static struct FsmNode fn_ncci_list[] = {
 	{ST_NCCI_N_2, EV_NC_CONNECT_B3_ACTIVE_IND, ncci_connect_b3_active_ind},
 	{ST_NCCI_N_2, EV_AP_DISCONNECT_B3_REQ, ncci_disconnect_b3_req},
 	{ST_NCCI_N_2, EV_NC_DISCONNECT_B3_IND, ncci_disconnect_b3_ind},
+	{ST_NCCI_N_2, EV_NC_DISCONNECT_B3_CONF, ncci_disconnect_b3_conf},
 	{ST_NCCI_N_2, EV_DL_ESTABLISH_CONF, ncci_dl_establish_conf},
 	{ST_NCCI_N_2, EV_DL_RELEASE_IND, ncci_dl_release_ind_conf},
 	{ST_NCCI_N_2, EV_AP_MANUFACTURER_REQ, ncci_manufacturer_req},
@@ -453,6 +464,7 @@ static struct FsmNode fn_ncci_list[] = {
 	{ST_NCCI_N_3, EV_DL_DOWN_IND, ncci_dl_down_ind},
 	{ST_NCCI_N_3, EV_AP_DISCONNECT_B3_REQ, ncci_disconnect_b3_req},
 	{ST_NCCI_N_3, EV_NC_DISCONNECT_B3_IND, ncci_disconnect_b3_ind},
+	{ST_NCCI_N_3, EV_NC_DISCONNECT_B3_CONF, ncci_disconnect_b3_conf},
 	{ST_NCCI_N_3, EV_AP_RELEASE, ncci_appl_release_disc},
 	{ST_NCCI_N_3, EV_NC_LINKDOWN, ncci_linkdown},
 #endif
@@ -460,6 +472,7 @@ static struct FsmNode fn_ncci_list[] = {
 	{ST_NCCI_N_ACT, EV_AP_CONNECT_B3_ACTIVE_RESP, ncci_connect_b3_active_resp},
 	{ST_NCCI_N_ACT, EV_AP_DISCONNECT_B3_REQ, ncci_disconnect_b3_req},
 	{ST_NCCI_N_ACT, EV_NC_DISCONNECT_B3_IND, ncci_disconnect_b3_ind},
+	{ST_NCCI_N_ACT, EV_NC_DISCONNECT_B3_CONF, ncci_disconnect_b3_conf},
 	{ST_NCCI_N_ACT, EV_DL_RELEASE_IND, ncci_dl_release_ind_conf},
 	{ST_NCCI_N_ACT, EV_DL_RELEASE_CONF, ncci_dl_release_ind_conf},
 	{ST_NCCI_N_ACT, EV_DL_DOWN_IND, ncci_dl_down_ind},
@@ -472,7 +485,6 @@ static struct FsmNode fn_ncci_list[] = {
 	{ST_NCCI_N_ACT, EV_NC_RESET_B3_IND, ncci_reset_b3_ind},
 	{ST_NCCI_N_ACT, EV_NC_CONNECT_B3_T90_ACTIVE_IND, ncci_connect_b3_t90_active_ind},
 #endif
-
 	{ST_NCCI_N_4, EV_NC_DISCONNECT_B3_CONF, ncci_disconnect_b3_conf},
 	{ST_NCCI_N_4, EV_NC_DISCONNECT_B3_IND, ncci_disconnect_b3_ind},
 	{ST_NCCI_N_4, EV_DL_RELEASE_CONF, ncci_dl_release_ind_conf},
@@ -538,14 +550,23 @@ struct mNCCI *ncciCreate(struct lPLCI *lp)
 	nc->BIlink = lp->BIlink;
 	nc->window = lp->lc->Appl->MaxB3Blk;
 	pthread_mutex_init(&nc->lock, NULL);
-	if (lp->Bprotocol.B1 == 1) {
+	switch (lp->Bprotocol.B1) {
+	case 1:
 		if (!lp->l1dtmf) {
 			nc->flowmode = flmPHDATA;
 			nc->l1direct = 1;
 		} else {
 			nc->flowmode = flmIndication;
 		}
+		break;
+	case 4:
+		nc->flowmode = flmPHDATA;
+		nc->l1direct = 1;
+		break;
+	default:
+		break;
 	}
+
 	if (lp->Bprotocol.B2 == 0) {	/* X.75 has own flowctrl */
 		nc->l2trans = 1;
 		if (lp->Bprotocol.B1 == 0) {
@@ -609,7 +630,7 @@ void ncciReleaseLink(struct mNCCI *ncci)
 	}
 }
 
-static void AnswerDataB3Req(struct mNCCI *ncci, struct mc_buf *mc, uint16_t Info)
+void AnswerDataB3Req(struct mNCCI *ncci, struct mc_buf *mc, uint16_t Info)
 {
 	uint16_t dh = CAPIMSG_U16(mc->rb, 18);
 
@@ -978,7 +999,9 @@ static int ncciGetCmsg(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, struct m
 	return retval;
 }
 
-int ncciSendMessage(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, struct mc_buf *mc)
+
+
+static int ncciSendMessage(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, struct mc_buf *mc)
 {
 	int ret = CapiNoError;
 #if 0
@@ -1027,7 +1050,71 @@ int ncciSendMessage(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, struct mc_b
 	return ret;
 }
 
-static int ncciL4L3(struct mNCCI *ncci, uint32_t prim, int id, int len, void *data, struct mc_buf *mc)
+int ncciB3Data(struct BInstance *bi, struct mc_buf *mc)
+{
+	return ncciSendMessage(bi->b3data, mc->cmsg.Command,  mc->cmsg.Subcommand, mc);
+}
+
+int ncciB3Message(struct mNCCI *ncci, struct mc_buf *mc)
+{
+	int retval = CapiNoError;
+	uint8_t cmd, subcmd;
+
+	cmd = mc->cmsg.Command;
+	subcmd = mc->cmsg.Subcommand;
+
+	switch (CAPICMD(cmd, subcmd)) {
+	case CAPI_CONNECT_B3_REQ:
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_REQ, mc);
+		break;
+	case CAPI_CONNECT_B3_RESP:
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_RESP, mc);
+		break;
+	case CAPI_CONNECT_B3_CONF:
+		FsmChangeState(&ncci->ncci_m, ST_NCCI_N_0_1);
+		retval = FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_CONF, mc);
+		break;
+	case CAPI_CONNECT_B3_IND:
+		retval = FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_IND, mc);
+		break;
+	case CAPI_CONNECT_B3_ACTIVE_RESP:
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_ACTIVE_RESP, mc);
+		break;
+	case CAPI_CONNECT_B3_ACTIVE_IND:
+		retval = FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_ACTIVE_IND, mc);
+		break;
+	case CAPI_DISCONNECT_B3_IND:
+		retval = FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, mc);
+		break;
+	case CAPI_DISCONNECT_B3_REQ:
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_REQ, mc);
+		break;
+	case CAPI_DISCONNECT_B3_CONF:
+		retval = FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_CONF, mc);
+		break;
+	case CAPI_DISCONNECT_B3_RESP:
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_RESP, mc);
+		break;
+	case CAPI_MANUFACTURER_REQ:
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_MANUFACTURER_REQ, mc);
+		break;
+	default:
+		eprint("NCCI %06x: Error Unhandled command %02x/%02x\n", ncci->ncci, cmd, subcmd);
+		retval = CapiMessageNotSupportedInCurrentState;
+	}
+	if (retval) {
+		if (subcmd == CAPI_REQ)
+			retval = CapiMessageNotSupportedInCurrentState;
+		else {		/* RESP */
+			wprint("NCCI %06x: Error Message %02x/%02x not supported in state %s\n", ncci->ncci, cmd, subcmd,
+			       str_st_ncci[ncci->ncci_m.state]);
+			retval = CapiNoError;
+		}
+	}
+	return retval;
+}
+
+int ncciL4L3(struct mNCCI *ncci, uint32_t prim, int id, int len, void *data, struct mc_buf *mc)
 {
 	struct mc_buf *loc = mc;
 	struct mISDNhead *hh;
@@ -1067,6 +1154,7 @@ static int ncciL4L3(struct mNCCI *ncci, uint32_t prim, int id, int len, void *da
 int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 {
 	struct mISDNhead *hh;
+	struct mNCCI *ncci = bi->b3data;
 	int ret = 0;
 
 	hh = (struct mISDNhead *)mc->rb;
@@ -1074,77 +1162,79 @@ int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 	// we're not using the Fsm and _cmesg coding for DL_DATA for performance reasons
 	case PH_DATA_IND:
 	case DL_DATA_IND:
-		if (!bi->nc) {
+		if (!ncci) {
 			wprint("Controller%d ch%d: Got %s but but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr,
 				_mi_msg_type2str(hh->prim));
 			ret = -EINVAL;
 			break;
 		}
-		if (bi->nc->ncci_m.state == ST_NCCI_N_ACT) {
-			ret = ncciDataInd(bi->nc, hh->prim, mc);
+		if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
+			ret = ncciDataInd(ncci, hh->prim, mc);
 		} else {
 			wprint("Controller%d ch%d: Got %s but but NCCI state %s\n", bi->pc->profile.ncontroller, bi->nr,
-				_mi_msg_type2str(hh->prim), str_st_ncci[bi->nc->ncci_m.state]);
+				_mi_msg_type2str(hh->prim), str_st_ncci[ncci->ncci_m.state]);
 			ret = 1;
 		}
 		break;
 	case PH_DATA_CNF:
-		if (!bi->nc) {
+		if (!ncci) {
 			wprint("Controller%d ch%d: Got %s but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr,
 				_mi_msg_type2str(hh->prim));
 			ret = -EINVAL;
 		} else {
-			ncciDataConf(bi->nc, mc);
+			ncciDataConf(ncci, mc);
 			ret = 0;
 		}
 		break;
 	case PH_ACTIVATE_CNF:
 	case DL_ESTABLISH_CNF:
-		if (!bi->nc) {
-			bi->nc = ncciCreate(bi->lp);
-			if (!bi->nc) {
+		if (!ncci) {
+			ncci = ncciCreate(bi->lp);
+			if (!ncci) {
 				eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
 				return -ENOMEM;
-			}
+			} else
+				bi->b3data = ncci;
 		}
-		FsmEvent(&bi->nc->ncci_m, EV_DL_ESTABLISH_CONF, mc);
+		FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_CONF, mc);
 		mc->len = 520;
 		memset(&mc->rb[8], 0x55, 512);
-		ncciDataInd(bi->nc, hh->prim, mc);
+		ncciDataInd(ncci, hh->prim, mc);
 		ret = 0;
 		break;
 	case PH_ACTIVATE_IND:
 	case DL_ESTABLISH_IND:
-		if (!bi->nc) {
-			bi->nc = ncciCreate(bi->lp);
-			if (!bi->nc) {
+		if (!ncci) {
+			ncci = ncciCreate(bi->lp);
+			if (!ncci) {
 				eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
 				return -ENOMEM;
-			}
+			} else
+				bi->b3data = ncci;
 		}
-		FsmEvent(&bi->nc->ncci_m, EV_DL_ESTABLISH_IND, mc);
+		FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_IND, mc);
 		ret = 1;
 		break;
 	case DL_RELEASE_IND:
 	case PH_DEACTIVATE_IND:
-		if (!bi->nc) {
+		if (!ncci) {
 			wprint("Controller%d ch%d: Got %s but but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr,
 				_mi_msg_type2str(hh->prim));
 			ret = -EINVAL;
 			break;
 		}
-		FsmEvent(&bi->nc->ncci_m, EV_DL_RELEASE_IND, mc);
+		FsmEvent(&ncci->ncci_m, EV_DL_RELEASE_IND, mc);
 		ret = 1;
 		break;
 	case DL_RELEASE_CNF:
 	case PH_DEACTIVATE_CNF:
-		if (!bi->nc) {
+		if (!ncci) {
 			wprint("Controller%d ch%d: Got %s but but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr,
 				_mi_msg_type2str(hh->prim));
 			ret = -EINVAL;
 			break;
 		}
-		FsmEvent(&bi->nc->ncci_m, EV_DL_RELEASE_CONF, mc);
+		FsmEvent(&ncci->ncci_m, EV_DL_RELEASE_CONF, mc);
 		ret = 1;
 		break;
 	case PH_CONTROL_IND:	/* e.g touch tones */

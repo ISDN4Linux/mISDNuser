@@ -95,15 +95,24 @@ AC_ARG_ENABLE([capi],
                          	
 AM_CONDITIONAL([OPT_CAPI], [test "x$capi" = xtrue])
 
+AC_ARG_ENABLE([softdsp],
+	[  --enable-softdsp   Include CAPI2.0 softdsp support for analog FAX],
+	[case "${enableval}" in
+		yes) softdsp=true ;;
+		no)  softdsp=false ;;
+		*) AC_MSG_ERROR([bad value ${enableval} for --enable-softdsp]) ;;
+	  esac],
+	  [softdsp=false])
+                         	
+AM_CONDITIONAL([OPT_SOFTDSP], [test "x$softdsp" = xtrue])
+
 if $capi
 then
-	AC_CHECK_LIB(capi20, [capi20_isinstalled],
-		AC_MSG_RESULT([capi20 found]),
+	AC_CHECK_LIB(capi20, [capi20_isinstalled],,
 		AC_MSG_ERROR([capi library not found])
 	)
 	AC_CHECK_HEADER([capi20.h],
-		AC_CHECK_HEADER([capi_mod.h],
-			[AC_MSG_RESULT([capi_mod.h found])],
+		AC_CHECK_HEADER([capi_mod.h],,
 			AC_MSG_ERROR([capi_mod.h do not exist - update capi4linux]),
 		),
 		AC_MSG_ERROR([capi20.h do not exist - install capi4linux development files]),
@@ -117,6 +126,12 @@ then
 	)
 	AC_MSG_RESULT([Capi library module loader version ${CAPI_MODULE_LOADER_VERSION} detected]) 
 	AC_SUBST(CAPI_MODULE_LOADER_VERSION)
+	if $softdsp
+	then
+		AC_CHECK_HEADER([spandsp.h],,
+			AC_MSG_ERROR([spandsp header file not found - install spandsp development files])
+		)
+	fi
 fi
 
 # Checks for library functions.

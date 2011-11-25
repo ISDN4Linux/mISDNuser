@@ -35,6 +35,7 @@ struct mc_buf {
 	int		len;
 	unsigned char	rb[MC_RB_SIZE];
 	unsigned char	*rp;
+	struct mc_buf	*next;
 };
 
 #ifdef MEMLEAK_DEBUG

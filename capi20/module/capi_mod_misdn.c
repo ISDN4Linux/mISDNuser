@@ -412,8 +412,13 @@ static unsigned misdnGetProfile(int nHandle, unsigned nController, unsigned char
 		return CapiMsgOSResourceErr;
 
 	err = CAPIMSG_U16(anBuf, 8);
-	if (err == CapiNoError)
-		memcpy(pnBuf, &anBuf[10], 64);
+	if (err == CapiNoError) {
+		/* Important !!! Only copy 2 bytes if the number of controllers is requested */
+		if (nController)
+			memcpy(pnBuf, &anBuf[10], 64);
+		else
+			memcpy(pnBuf, &anBuf[10], 2);
+	}
 	return err;
 }
 

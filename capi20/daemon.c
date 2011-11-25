@@ -23,7 +23,10 @@
 #include "m_capi.h"
 #include "mc_buffer.h"
 #include "m_capi_sock.h"
-
+#include "alaw.h"
+#ifdef USE_SOFTFAX
+#include "g3_mh.h"
+#endif
 /* should be moved to capi_debug.h */
 #include <capi_debug.h>
 
@@ -62,7 +65,7 @@ static int mI_count;
 static FILE *DebugFile = NULL;
 static char *DebugFileName = NULL;
 
-void usage(void)
+static void usage(void)
 {
 	fprintf(stderr, "Usage: mISDNcapid [OPTIONS]\n");
 	fprintf(stderr, "  Options are\n");
@@ -74,7 +77,7 @@ void usage(void)
 	fprintf(stderr, "\n");
 }
 
-int opt_parse(int ac, char *av[])
+static int opt_parse(int ac, char *av[])
 {
 	int c;
 
@@ -356,7 +359,104 @@ struct BInstance *ControllerSelChannel(struct pController *pc, int nr, int proto
 	return bi;
 }
 
-int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, BDataTrans_t *fromd)
+static int recvBchannel(struct BInstance *);
+
+static void *BCthread(void *arg)
+{
+	struct BInstance *bi = arg;
+	unsigned char cmd;
+	int ret;
+
+	bi->running = 1;
+	while (bi->running) {
+		ret = poll(bi->pfd, 2, -1);
+		if (ret < 0) {
+			wprint("Bchannel%d Error on poll - %s\n", bi->nr, strerror(errno));
+			continue;
+		}
+		if (bi->pfd[0].revents & POLLIN) {
+			ret = recvBchannel(bi);
+		} else if (bi->pfd[1].revents & POLLIN) {
+			ret = read(bi->pfd[1].fd, &cmd, 1);
+			if (cmd == 42) {
+				bi->running = 0;
+			}
+		} else {
+			wprint("Bchannel%d no POLLIN event\n", bi->nr);
+		}
+	}
+	return NULL;
+}
+
+static int CreateBchannelThread(struct BInstance *bi)
+{
+	int ret;
+
+	ret = pipe(bi->cpipe);
+	if (ret) {
+		eprint("error - %s\n", strerror(errno));
+		return ret;
+	}
+	ret = fcntl(bi->cpipe[0], F_SETFL, O_NONBLOCK);
+	if (ret) {
+		eprint("error - %s\n", strerror(errno));
+		return ret;
+	}
+	ret = fcntl(bi->cpipe[1], F_SETFL, O_NONBLOCK);
+	if (ret) {
+		eprint("error - %s\n", strerror(errno));
+		return ret;
+	}
+	bi->pfd[0].fd = bi->fd;
+	bi->pfd[0].events = POLLIN | POLLPRI;
+	bi->pfd[1].fd = bi->cpipe[0];
+	bi->pfd[1].events = POLLIN | POLLPRI;
+	ret = pthread_create(&bi->tid, NULL, BCthread, bi);
+	if (ret) {
+		eprint("Cannot create thread error - %s\n", strerror(errno));
+		close(bi->cpipe[0]);
+		close(bi->cpipe[1]);
+		bi->cpipe[0] = -1;
+		bi->cpipe[1] = -1;
+		bi->pfd[0].fd = -1;
+		bi->pfd[1].fd = -1;
+	} else
+		iprint("Created Bchannel tread %d\n", (int)bi->tid);
+	return ret;
+}
+
+static int StopBchannelThread(struct BInstance *bi)
+{
+	int ret;
+	unsigned char cmd;
+
+	if (bi->running) {
+		cmd = 42;
+		if (bi->waiting)
+			sem_post(&bi->wait);
+		write(bi->cpipe[1], &cmd, 1);
+		ret = pthread_join(bi->tid, NULL);
+		iprint("Thread %d joined\n", (int)bi->tid);
+		close(bi->cpipe[0]);
+		close(bi->cpipe[1]);
+		bi->pfd[0].fd = -1;
+		bi->pfd[1].fd = -1;
+		bi->cpipe[0] = -1;
+		bi->cpipe[1] = -1;
+	}
+	return 0;
+}
+
+static int dummy_btrans(struct BInstance *bi, struct mc_buf *mc)
+{
+	struct mISDNhead *hh = (struct mISDNhead *)mc->rb;
+
+	wprint("Controller%d ch%d: Got %s id %x - but %s called\n", bi->pc->profile.ncontroller, bi->nr,
+		_mi_msg_type2str(hh->prim), hh->id, __func__);
+	return -EINVAL;
+}
+
+int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, enum BType btype)
 {
 	int sk;
 	int ret;
@@ -377,6 +477,24 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, BDataTrans_t *fromd)
 		return ret;
 	}
 
+	switch (btype) {
+	case BType_Direct:
+		bi->from_down = recvBdirect;
+		bi->from_up = ncciB3Data;
+		break;
+#ifdef USE_SOFTFAX
+	case  BType_Fax:
+		bi->from_down = FaxRecvBData;
+		bi->from_up = FaxB3Message;
+		break;
+#endif
+	default:
+		eprint("Error unnkown BType %d\n",  btype);
+		close(sk);
+		return -EINVAL;
+	}
+	bi->type = btype;
+
 	addr.family = AF_ISDN;
 	addr.dev = bi->pc->mNr;
 	addr.channel = bi->nr;
@@ -387,33 +505,41 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, BDataTrans_t *fromd)
 		wprint("Cannot bind socket for BInstance %d on controller %d (mISDN nr %d) protocol 0x%02x - %s\n",
 		       bi->nr, bi->pc->profile.ncontroller, bi->pc->mNr, bi->proto, strerror(errno));
 		close(sk);
+		bi->from_down = dummy_btrans;
+		bi->from_up = dummy_btrans;
 	} else {
 		bi->fd = sk;
-		ret = add_mainpoll(sk, PIT_Bchannel);
-		if (ret < 0) {
-			eprint("Error while adding mIsock to mainpoll (mainpoll_max %d)\n", mainpoll_max);
+		bi->lp = lp;
+		if (btype == BType_Direct) {
+			ret = add_mainpoll(sk, PIT_Bchannel);
+			if (ret < 0) {
+				eprint("Error while adding mIsock to mainpoll (mainpoll_max %d)\n", mainpoll_max);
+				close(sk);
+				bi->fd = -1;
+				bi->lp = NULL;
+			} else {
+				dprint(MIDEBUG_CONTROLLER, "Controller%d: Bchannel %d socket %d added to poll idx %d\n",
+				       bi->pc->profile.ncontroller, bi->nr, sk, ret);
+				pollinfo[ret].data = bi;
+				ret = 0;
+				bi->UpId = 0;
+				bi->DownId = 0;
+			}
 		} else {
-			dprint(MIDEBUG_CONTROLLER, "Controller%d: Bchannel %d socket %d added to poll idx %d\n",
-			       bi->pc->profile.ncontroller, bi->nr, sk, ret);
-			bi->fd = sk;
-			pollinfo[ret].data = bi;
-			bi->lp = lp;
-			ret = 0;
-			bi->UpId = 0;
-			bi->DownId = 0;
-			bi->from_down = fromd;
+			ret = CreateBchannelThread(bi);
+			if (ret < 0) {
+				eprint("Error while creating B-channel thread)\n");
+				close(sk);
+				bi->fd = -1;
+				bi->lp = NULL;
+			} else {
+				ret = 0;
+				bi->UpId = 0;
+				bi->DownId = 0;
+			}
 		}
 	}
 	return ret;
-}
-
-static int dummy_btrans(struct BInstance *bi, struct mc_buf *mc)
-{
-	struct mISDNhead *hh = (struct mISDNhead *)mc->rb;
-
-	wprint("Controller%d ch%d: Got %s id %x - but %s called\n", bi->pc->profile.ncontroller, bi->nr,
-		_mi_msg_type2str(hh->prim), hh->id, __func__);
-	return -EINVAL;
 }
 
 int CloseBInstance(struct BInstance *bi)
@@ -421,18 +547,31 @@ int CloseBInstance(struct BInstance *bi)
 	int ret = 0;
 
 	if (bi->usecnt) {
-		if (bi->fd >= 0) {
-			del_mainpoll(bi->fd);
-			close(bi->fd);
+		switch (bi->type) {
+		case BType_Direct:
+			if (bi->fd >= 0)
+				del_mainpoll(bi->fd);
+			break;
+#ifdef USE_SOFTFAX
+		case  BType_Fax:
+			StopBchannelThread(bi);
+			break;
+#endif
+		default:
+			break;
 		}
+		if (bi->fd >= 0)
+			close(bi->fd);
 		bi->fd = -1;
 		bi->proto = ISDN_P_NONE;
 		bi->usecnt--;
-		if (bi->nc)
-			ncciReleaseLink(bi->nc);
-		bi->nc = NULL;
+		if (bi->b3data && bi->lp)
+			B3ReleaseLink(bi->lp, bi);
+		bi->b3data = NULL;
 		bi->lp = NULL;
+		bi->type = BType_None;
 		bi->from_down = dummy_btrans;
+		bi->from_up = dummy_btrans;
 	} else {
 		wprint("BInstance %d not active\n", bi->nr);
 		ret = -1;
@@ -440,16 +579,14 @@ int CloseBInstance(struct BInstance *bi)
 	return ret;
 };
 
-int recvBchannel(int idx)
+static int recvBchannel(struct BInstance *bi)
 {
 	int ret;
-	struct BInstance *bi;
 	struct mc_buf *mc;
 
 	mc = alloc_mc_buf();
 	if (!mc)
 		return -ENOMEM;
-	bi = pollinfo[idx].data;
 	if (!bi)
 		return -EINVAL;
 	ret = recv(bi->fd, mc->rb, MC_RB_SIZE, MSG_DONTWAIT);
@@ -568,10 +705,28 @@ static int l3_callback(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, s
 	return ret;
 }
 
+int OpenLayer3(struct pController *pc)
+{
+	int ret = 0;
+
+	if (!pc->l3) {
+		pc->l3 = open_layer3(pc->mNr, pc->L3Proto, pc->L3Flags, l3_callback, pc);
+		if (!pc->l3) {
+			eprint("Cannot open L3 for controller %d L3 protocol %x L3 flags %x\n", pc->mNr, pc->L3Proto,
+				pc->L3Flags);
+			ret = -EINVAL;
+		} else
+			dprint(MIDEBUG_CONTROLLER, "Controller %d l3 open for protocol %x L3 flags %x\n", pc->mNr,
+			       pc->L3Proto, pc->L3Flags);
+	}
+	return ret;
+}
+
 int ListenController(struct pController *pc)
 {
 	struct lController *lc;
 	uint32_t InfoMask = 0, CIPMask = 0, CIPMask2 = 0;
+	int ret = 0;
 
 	lc = pc->lClist;
 	while (lc) {
@@ -586,18 +741,10 @@ int ListenController(struct pController *pc)
 	pc->InfoMask = InfoMask;
 	pc->CIPmask = CIPMask;
 	pc->CIPmask2 = CIPMask2;
-	if (pc->CIPmask || pc->InfoMask) {
-		if (!pc->l3) {
-			pc->l3 = open_layer3(pc->mNr, pc->L3Proto, pc->L3Flags, l3_callback, pc);
-			if (!pc->l3) {
-				eprint("Cannot open L3 for controller %d L3 protocol %x L3 flags %x\n", pc->mNr, pc->L3Proto,
-				       pc->L3Flags);
-			} else
-				dprint(MIDEBUG_CONTROLLER, "Controller %d l3 open for protocol %x L3 flags %x\n", pc->mNr,
-				       pc->L3Proto, pc->L3Flags);
-		}
+	if ((pc->CIPmask || pc->InfoMask) && !pc->l3) {
+		ret = OpenLayer3(pc);
 	}
-	return 0;
+	return ret;
 }
 
 void capi_dump_shared(void);
@@ -871,7 +1018,7 @@ int main_loop(void)
 				switch (pollinfo[i].type) {
 				case PIT_Bchannel:
 					if (mainpoll[i].revents & POLLIN) {
-						res = recvBchannel(i);
+						res = recvBchannel(pollinfo[i].data);
 					} else if (mainpoll[i].revents == POLLHUP) {
 						dprint(MIDEBUG_POLL, "Bchannel socket %d closed\n", mainpoll[i].fd);
 						ReleaseBchannel(i);
@@ -1061,6 +1208,7 @@ int main(int argc, char *argv[])
 			pc->BInstances[j].nr = j;
 			pc->BInstances[j].pc = pc;
 			pc->BInstances[j].fd = -1;
+			sem_init(&pc->BInstances[j].wait, 0, 0);
 		}
 		pc->profile.ncontroller = i + 1;
 		pc->profile.nbchannel = nb;
@@ -1071,6 +1219,11 @@ int main(int argc, char *argv[])
 		if (pc->devinfo.Bprotocols & (1 << (ISDN_P_B_RAW & ISDN_P_B_MASK))) {
 			pc->profile.support1 |= 0x02;
 			pc->profile.support2 |= 0x02;
+#ifdef USE_SOFTFAX
+			pc->profile.support1 |= 0x10;
+			pc->profile.support2 |= 0x10;
+			pc->profile.support3 |= 0x30;
+#endif
 		}
 		if (pc->devinfo.Bprotocols & (1 << (ISDN_P_B_HDLC & ISDN_P_B_MASK))) {
 			pc->profile.support1 |= 0x01;
@@ -1142,6 +1295,10 @@ retry_Csock:
 	init_listen();
 	init_lPLCI_fsm();
 	init_ncci_fsm();
+#ifdef USE_SOFTFAX
+	create_lin2alaw_table();
+	g3_gen_tables();
+#endif
 	exitcode = main_loop();
 	free_ncci_fsm();
 	free_lPLCI_fsm();

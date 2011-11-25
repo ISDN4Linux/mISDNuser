@@ -1,12 +1,20 @@
+export _USE_SOFTFAX
+
 sbin_PROGRAMS = mISDNcapid
-
 mISDNcapid_SOURCES = daemon.c application.c lplci.c mplci.c ncci.c m_capi.h m_capi_sock.h \
-			mc_buffer.c mc_buffer.h SupplementaryService.h SupplementaryService.c listen.c
-
+			mc_buffer.c mc_buffer.h SupplementaryService.h SupplementaryService.c listen.c faxl3.c alaw.c alaw.h \
+			sff.h sff.c g3_mh.h g3_mh.c
 mISDNcapid_LDADD = ../lib/libmisdn.la -lcapi20
 mISDNcapid_LDFLAGS = -shared
 
-AM_CPPFLAGS = -I$(top_srcdir)/include -Werror -Wall
+if OPT_SOFTDSP
+	_USE_SOFTFAX = "-DUSE_SOFTFAX"
+	mISDNcapid_LDADD += -lspandsp -ltiff
+else
+	_USE_SOFTFAX =
+endif
+
+AM_CPPFLAGS = -I$(top_srcdir)/include -Werror -Wall $(_USE_SOFTFAX)
 
 CLEANFILES = *~
 

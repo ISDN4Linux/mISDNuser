@@ -119,10 +119,16 @@ static struct FsmNode fn_listen_list[] = {
 
 const int FN_LISTEN_COUNT = sizeof(fn_listen_list) / sizeof(struct FsmNode);
 
-struct lController *addlController(struct mApplication *app, struct pController *pc)
+struct lController *addlController(struct mApplication *app, struct pController *pc, int openl3)
 {
 	struct lController *lc, *old;
 
+	if (openl3) {
+		if (OpenLayer3(pc)) {
+			eprint("Controller%d: Application %d - cannot open L3 instance\n", pc->profile.ncontroller, app->AppId);
+			return NULL;
+		}
+	}
 	lc = calloc(1, sizeof(*lc));
 	if (lc) {
 		lc->Appl = app;

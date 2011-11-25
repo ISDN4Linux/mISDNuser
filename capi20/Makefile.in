@@ -51,7 +51,8 @@ PROGRAMS = $(sbin_PROGRAMS)
 am_mISDNcapid_OBJECTS = daemon.$(OBJEXT) application.$(OBJEXT) \
 	lplci.$(OBJEXT) mplci.$(OBJEXT) ncci.$(OBJEXT) \
 	mc_buffer.$(OBJEXT) SupplementaryService.$(OBJEXT) \
-	listen.$(OBJEXT)
+	listen.$(OBJEXT) faxl3.$(OBJEXT) alaw.$(OBJEXT) sff.$(OBJEXT) \
+	g3_mh.$(OBJEXT)
 mISDNcapid_OBJECTS = $(am_mISDNcapid_OBJECTS)
 mISDNcapid_DEPENDENCIES = ../lib/libmisdn.la
 mISDNcapid_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -197,11 +198,12 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 mISDNcapid_SOURCES = daemon.c application.c lplci.c mplci.c ncci.c m_capi.h m_capi_sock.h \
-			mc_buffer.c mc_buffer.h SupplementaryService.h SupplementaryService.c listen.c
+			mc_buffer.c mc_buffer.h SupplementaryService.h SupplementaryService.c listen.c faxl3.c alaw.c alaw.h \
+			sff.h sff.c g3_mh.h g3_mh.c
 
 mISDNcapid_LDADD = ../lib/libmisdn.la -lcapi20
 mISDNcapid_LDFLAGS = -shared
-AM_CPPFLAGS = -I$(top_srcdir)/include -Werror -Wall
+AM_CPPFLAGS = -I$(top_srcdir)/include -Werror -Wall $(_USE_SOFTFAX)
 CLEANFILES = *~
 MISDN_SOCKET_DIR = /var/run/mISDNcapid
 all: all-am
@@ -292,13 +294,17 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/SupplementaryService.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/alaw.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/application.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/daemon.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/faxl3.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/g3_mh.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/listen.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lplci.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mc_buffer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mplci.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ncci.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sff.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
@@ -532,6 +538,11 @@ uninstall-am: uninstall-sbinPROGRAMS
 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
 	tags uninstall uninstall-am uninstall-sbinPROGRAMS
 
+export _USE_SOFTFAX
+
+@OPT_SOFTDSP_TRUE@	_USE_SOFTFAX = "-DUSE_SOFTFAX"
+@OPT_SOFTDSP_TRUE@	mISDNcapid_LDADD += -lspandsp -ltiff
+@OPT_SOFTDSP_FALSE@	_USE_SOFTFAX =
 
 install-exec-local:
 	mkdir -p $(DESTDIR)$(MISDN_SOCKET_DIR)

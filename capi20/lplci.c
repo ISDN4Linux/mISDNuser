@@ -477,6 +477,7 @@ uint16_t lPLCICheckBprotocol(struct lPLCI * lp, _cmsg * cmsg)
 {
 	struct pController *pc = lp->PLCI->pc;
 	unsigned long sprot;
+	int val;
 
 	/* no endian translation */
 	sprot = pc->profile.support1;
@@ -515,6 +516,39 @@ uint16_t lPLCICheckBprotocol(struct lPLCI * lp, _cmsg * cmsg)
 		memcpy(&lp->Bprotocol.B3cfg[0], cmsg->B3configuration, cmsg->B3configuration[0] + 1);
 	} else
 		lp->Bprotocol.B3cfg[0] = 0;
+	if (lp->Bprotocol.B1 == 4) {
+		if (lp->Bprotocol.B2 != 4 || ((lp->Bprotocol.B3 != 4 && lp->Bprotocol.B3 != 5))) {
+			wprint("B1 Fax but B2(%d) or B3(%d) not\n", lp->Bprotocol.B2, lp->Bprotocol.B3);
+			return CapiProtocolCombinationNotSupported;
+		}
+		/* valid Fax combination */
+		if (lp->Bprotocol.B3cfg[0]) {
+			val = CAPIMSG_U16(lp->Bprotocol.B3cfg, 3);
+			switch (val) {
+			case FAX_B3_FORMAT_SFF:
+			case FAX_B3_FORMAT_TIFF:
+				break;
+			default: /* Others not suported yet */
+				wprint("B3cfg Fax format %d not supported\n", val);
+				return CapiB3ProtocolParameterNotSupported;
+			}
+		}
+		if (lp->Bprotocol.B1cfg[0]) {
+			val = CAPIMSG_U16(lp->Bprotocol.B3cfg, 1);
+			switch (val) {
+			case 0: /* Adaptive */
+			case 4800:
+			case 7200:
+			case 9600:
+			case 12000:
+			case 14400:
+				break;
+			default: /* Others not suported */
+				wprint("B1cfg Fax bitrate %d not supported\n", val);
+				return CapiB1ProtocolParameterNotSupported;
+			}
+		}
+	}
 	return 0;
 }
 
@@ -997,11 +1031,14 @@ static void plci_cc_disconnect_ind(struct FsmInst *fi, int event, void *arg)
 			       lp->plci, lp->cause, lp->cause, lp->cause_loc);
 	} else
 		iprint("PLCI %04x: Got Disconnect without cause info\n", lp->plci);
-	if (lp->lc->InfoMask & CAPI_INFOMASK_EARLYB3)
-		return;
 
-	lPLCILinkDown(lp);
-	plciL4L3(lp->PLCI, MT_RELEASE, NULL);
+	if (lp->autohangup) {
+		if (lp->lc->InfoMask & CAPI_INFOMASK_EARLYB3)
+			return;
+
+		lPLCILinkDown(lp);
+		plciL4L3(lp->PLCI, MT_RELEASE, NULL);
+	}
 }
 
 static void plci_cc_release_ind(struct FsmInst *fi, int event, void *arg)
@@ -1547,6 +1584,7 @@ int lPLCICreate(struct lPLCI **lpp, struct lController *lc, struct mPLCI *plci)
 	lp->plci_m.userdata = lp;
 	lp->plci_m.printdebug = lPLCI_debug;
 	lp->chid.nr = MI_CHAN_NONE;
+	lp->autohangup = 1;
 	*lpp = lp;
 	return 0;
 }
@@ -1588,12 +1626,14 @@ void lPLCIRelease(struct lPLCI *lp)
 
 static int lPLCILinkUp(struct lPLCI *lp)
 {
-	int proto = -1, ret = 0;
+	int proto = -1, ret = 0, act_l1;
 	struct mISDNhead mh;
-	BDataTrans_t *from_down = NULL;
+	enum BType btype = BType_None;
 
 	mh.id = 1;
 	mh.prim = 0;
+	act_l1 = !lp->PLCI->outgoing;
+
 	if (lp->chid.nr == MI_CHAN_NONE || lp->chid.nr == MI_CHAN_ANY) {
 		/* no valid channel set */
 		wprint("PLCI:%04x no channel selected (0x%x)\n", lp->plci, lp->chid.nr);
@@ -1614,6 +1654,14 @@ static int lPLCILinkUp(struct lPLCI *lp)
 			mh.prim = PH_ACTIVATE_REQ;
 		}
 		break;
+#ifdef USE_SOFTFAX
+	case 4:
+		proto = ISDN_P_B_RAW;
+		mh.prim = PH_ACTIVATE_REQ;
+		act_l1 = 1;
+		lp->autohangup = 0;
+		break;
+#endif
 	default:
 		wprint("Unsupported B1 prot %x\n", lp->Bprotocol.B1);
 		ret = 0x3001;
@@ -1626,6 +1674,9 @@ static int lPLCILinkUp(struct lPLCI *lp)
 		mh.prim = DL_ESTABLISH_REQ;
 		break;
 	case 1:		/* trans */
+#ifdef USE_SOFTFAX
+	case 4:
+#endif
 		break;
 	default:
 		wprint("Unsupported B2 prot %x\n", lp->Bprotocol.B2);
@@ -1635,8 +1686,14 @@ static int lPLCILinkUp(struct lPLCI *lp)
 
 	switch (lp->Bprotocol.B3) {
 	case 0:	/* trans */
-		from_down = recvBdirect;
+		btype = BType_Direct;
 		break;
+#ifdef USE_SOFTFAX
+	case 4:
+	case 5:
+		btype = BType_Fax;
+		break;
+#endif
 	default:
 		wprint("Unsupported B3 prot %x\n", lp->Bprotocol.B3);
 		ret = 0x3003;
@@ -1648,22 +1705,15 @@ static int lPLCILinkUp(struct lPLCI *lp)
 
 	dprint(MIDEBUG_PLCI, "lPLCILinkUp B1(%x) B2(%x) B3(%x) ch(%d) proto(%x)\n",
 	       lp->Bprotocol.B1, lp->Bprotocol.B2, lp->Bprotocol.B3, lp->chid.nr, proto);
-/*
-	capidebug(CAPI_DBG_PLCI, "lPLCILinkUp B1cfg(%d) B2cfg(%d) B3cfg(%d) maxplen(%d)",
-		lp->Bprotocol.B1cfg[0], lp->Bprotocol.B2cfg[0],
-		lp->Bprotocol.B3cfg[0], pid.maxplen);
-	capidebug(CAPI_DBG_PLCI, "lPLCILinkUp ch(%d) lp->contr->linklist(%p)",
-		lp->channel & 3, lp->contr->linklist);
-*/
+
 	lp->BIlink = ControllerSelChannel(lp->lc->Contr, lp->chid.nr, proto);
 	if (!lp->BIlink) {
 		wprint("PLCI:%04x channel %d busy\n", lp->plci, lp->chid.nr);
 		return CapiMsgOSResourceErr;
 	}
 	dprint(MIDEBUG_PLCI, "lPLCILinkUp lp->link(%p)\n", lp->BIlink);
-	/* TODO open the B-channel */
-	if (!OpenBInstance(lp->BIlink, lp, from_down)) {
-		if (!lp->PLCI->outgoing) {
+	if (!OpenBInstance(lp->BIlink, lp, btype)) {
+		if (act_l1) {
 			ret = send(lp->BIlink->fd, &mh, 8, 0);
 			if (ret < 0) {
 				wprint("Cannot send to Bchannel socket\n");
@@ -1720,11 +1770,27 @@ void lPLCIDelNCCI(struct mNCCI *ncci)
 	lp->NcciCnt = 0;
 
 	if (ncci->BIlink) {
-		ncci->BIlink->nc = NULL;
+		ncci->BIlink->b3data = NULL;
 		if (ncci->BIlink->fd > 0)
 			CloseBInstance(ncci->BIlink);
 		ncci->BIlink = NULL;
 		lp->BIlink = NULL;
+	}
+}
+
+void B3ReleaseLink(struct lPLCI *lp, struct BInstance *bi)
+{
+	switch(bi->type) {
+	case BType_Direct:
+		ncciReleaseLink(bi->b3data);
+		break;
+#ifdef USE_SOFTFAX
+	case BType_Fax:
+		FaxReleaseLink(bi);
+		break;
+#endif
+	default:
+		eprint("Unknown BType %d\n", bi->type);
 	}
 }
 
