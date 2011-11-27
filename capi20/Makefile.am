@@ -19,6 +19,12 @@ AM_CPPFLAGS = -I$(top_srcdir)/include -Werror -Wall $(_USE_SOFTFAX)
 CLEANFILES = *~
 
 MISDN_SOCKET_DIR = /var/run/mISDNcapid
+MISDN_CAPI_GROUP = dialout
 
-install-exec-local:
+install-exec-hook:
 	mkdir -p $(DESTDIR)$(MISDN_SOCKET_DIR)
+	chmod 775 $(DESTDIR)$(MISDN_SOCKET_DIR)
+	chgrp $(MISDN_CAPI_GROUP) $(DESTDIR)$(MISDN_SOCKET_DIR)
+	chgrp $(MISDN_CAPI_GROUP) $(DESTDIR)$(sbindir)/mISDNcapid
+	chmod 2755 $(DESTDIR)$(sbindir)/mISDNcapid
+

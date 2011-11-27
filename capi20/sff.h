@@ -73,8 +73,8 @@ struct sff_state {
 	int			page_cnt;
 	struct sff_page		*firstpage;
 	struct sff_page		*lastpage;
-	int			data_size;
-	int			size;
+	size_t			data_size;
+	size_t			size;
 	unsigned char		*data;
 	unsigned char		*dp;	/* current byte */
 	unsigned char		*ep;	/* last byte */

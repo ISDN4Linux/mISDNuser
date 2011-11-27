@@ -22,6 +22,9 @@
 #include "m_capi.h"
 #include "g3_mh.h"
 
+/* This debug will generate huge amount of data and slow down the process a lot */
+//#define G3_VERBOSE_DEBUG 1
+
 struct g3_mh_code tr_white[64] = {
 	{  0, 0x0ac, 0x0ff,  8, 0},
 	{  1, 0x038, 0x03f,  6, 0},
@@ -415,14 +418,18 @@ int g3_decode_line(struct g3_mh_line_s *ls)
 	ls->bitcnt = 0;
 	ls->bitpos = 0;
 	memset(ls->rawline, 0, ((ls->linelen + 7) >> 3));
+#ifdef G3_VERBOSE_DEBUG
 	dprint(MIDEBUG_NCCI_DATA, "Start decoding line %d, len=%d\n", ls->nr, ls->len);
+#endif
 	while (ls->bitcnt <= ls->linelen) {
 		cc = g3_lookup_code(ls->sreg, col);
 		if (cc) {
 			ls->bitcnt += cc->rl;
+#ifdef G3_VERBOSE_DEBUG
 			dprint(MIDEBUG_NCCI_DATA, "sreg = %04x %s %s code %x %d bits runlen %d  sum %4d\n",
 				ls->sreg, col ? "black" : "white", code_type_str[cc->type],
 				cc->val, cc->bits, cc->rl, ls->bitcnt);
+#endif
 			advance_sreg(ls, cc->bits);
 			switch(cc->type) {
 			case G3_CWTYPE_TERMINATION:
@@ -447,7 +454,9 @@ int g3_decode_line(struct g3_mh_line_s *ls)
 		if (ls->bitcnt == ls->linelen && ls->sreg == 0)
 			break;
 	}
+#ifdef G3_VERBOSE_DEBUG
 	dprint(MIDEBUG_NCCI_DATA, "Stop decoding line %d, len=%d\n", ls->nr, ls->bitcnt);
+#endif
 	// g3_print_hex(stdout, ls->rawline, (ls->bitcnt +7)>>3);
 #if 0
 	if (ls->fd >= 0) {
@@ -507,9 +516,11 @@ static void write_mh_code(struct g3_mh_line_s *ls, struct g3_mh_code *cc, int co
 	ls->line[idx] = ls->sreg & 0xff;
 	ls->bitpos += bits;
 	bits += bitoff;
+#ifdef G3_VERBOSE_DEBUG
 	dprint(MIDEBUG_NCCI_DATA, "sreg = %04x %s %s code %x %d bits runlen %d  sum %4d\n",
 		ls->sreg, col ? "black" : "white", code_type_str[cc->type],
 		cc->val, cc->bits, cc->rl, ls->bitpos);
+#endif
 	while (bits > 7) {
 		ls->line[idx] = ls->sreg & 0xff;
 		idx++;
@@ -550,14 +561,18 @@ int g3_encode_line(struct g3_mh_line_s *ls)
 	ls->bitpos = 0;
 	ls->bitcnt = 0;
 	ls->sreg = 0;
+#ifdef G3_VERBOSE_DEBUG
 	dprint(MIDEBUG_NCCI_DATA, "Start encoding line %d, len=%d\n", ls->nr, ls->linelen);
+#endif
 	while (ls->bitcnt < ls->linelen) {
 		rl = calc_current_runlen(ls, col);
 		put_runlen(ls, rl, col);
 		col = !col;
 	}
 	ls->len = (ls->bitpos + 7) >> 3;
+#ifdef G3_VERBOSE_DEBUG
 	dprint(MIDEBUG_NCCI_DATA, "Stop encoding line %d, compressed bits: %d len %d\n", ls->nr, ls->bitpos, ls->len);
+#endif
 	return ls->len;
 }
 

@@ -50,8 +50,8 @@ struct fax {
 	int			b3transfer_error;
 	int			b3_format;
 	unsigned char		*b3data;
-	int			b3data_size;
-	int			b3data_pos;
+	size_t			b3data_size;
+	size_t			b3data_pos;
 	struct sff_state	sff;
 	char			file_name[80];
 	int			file_d;
@@ -143,9 +143,11 @@ static void FaxB3Ind(struct fax *fax)
 		wprint("NCCI %06x: Send FaxInd queue full\n", ncci->ncci);
 		return;
 	}
-	dlen = fax->b3data_size	- fax->b3data_pos;
-	if (dlen > MAX_DATA_SIZE)
+	tot = fax->b3data_size	- fax->b3data_pos;
+	if (tot > MAX_DATA_SIZE)
 		dlen = MAX_DATA_SIZE;
+	else
+		dlen = tot;
 	dp = &fax->b3data[fax->b3data_pos];
 	fax->b3data_pos += dlen;
 	if (dlen == 0) {
@@ -285,6 +287,7 @@ static int phaseB_handler(t30_state_t *t30, void *user_data, int result)
 	unsigned char ncpi[132];
 	struct mc_buf *mc;
 	int ret;
+	struct mISDN_ctrl_req creq;
 
 	if (fax->outgoing)
 		ident = t30_get_tx_ident(t30);
@@ -300,11 +303,52 @@ static int phaseB_handler(t30_state_t *t30, void *user_data, int result)
 			FaxConnectActiveB3(fax, NULL);
 			if (fax->binst) {
 				fax->binst->waiting = 1;
+				/* Send silence when Underrun */
+				creq.op = MISDN_CTRL_FILL_EMPTY;
+				creq.channel = fax->binst->nr;
+				creq.p1 = 1;
+				creq.p2 = 0;
+				creq.p2 |= 0xff & slin2alaw[0];
+				creq.p3 = 0;
+				ret = ioctl(fax->binst->fd, IMCTRLREQ, &creq);
+				/* MISDN_CTRL_FILL_EMPTY is not mandatory warn if not supported */
+				if (ret < 0)
+					wprint("Error on MISDN_CTRL_FILL_EMPTY ioctl - %s\n", strerror(errno));
+				creq.op = MISDN_CTRL_RX_OFF;
+				creq.channel = fax->binst->nr;
+				creq.p1 = 1;
+				creq.p2 = 0;
+				creq.p3 = 0;
+				ret = ioctl(fax->binst->fd, IMCTRLREQ, &creq);
+				/* RX OFF is not mandatory warn if not supported */
+				if (ret < 0)
+					wprint("Error on MISDN_CTRL_RX_OFF ioctl - %s\n", strerror(errno));
 				while ((ret = sem_wait(&fax->binst->wait))) {
 					wprint("sem_wait - %s\n", strerror(errno));
 				}
-				if (fax->binst)
+				if (fax->binst) {
 					fax->binst->waiting = 0;
+					creq.op = MISDN_CTRL_RX_OFF;
+					creq.channel = fax->binst->nr;
+					creq.p1 = 0;
+					creq.p2 = 0;
+					creq.p3 = 0;
+					ret = ioctl(fax->binst->fd, IMCTRLREQ, &creq);
+					if (ret < 0)
+						wprint("Error on MISDN_CTRL_RX_OFF ioctl - %s\n", strerror(errno));
+					else
+						dprint(MIDEBUG_NCCI, "Dropped %d bytes during waiting\n", creq.p2);
+					creq.op = MISDN_CTRL_FILL_EMPTY;
+					creq.channel = fax->binst->nr;
+					creq.p1 = 0;
+					creq.p2 = 0;
+					creq.p2 = -1;
+					creq.p3 = 0;
+					ret = ioctl(fax->binst->fd, IMCTRLREQ, &creq);
+					/* MISDN_CTRL_FILL_EMPTY is not mandatory warn if not supported */
+					if (ret < 0)
+						wprint("Error on MISDN_CTRL_FILL_EMPTY ioctl - %s\n", strerror(errno));
+				}
 			}
 			iprint("PhaseB wait resumed %d (%d)\n", (int)pthread_self(), (int)fax->binst->tid);
 		}
@@ -501,6 +545,8 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 	struct fax *nf;
 	int ret, val;
 	time_t cur_time;
+	struct mISDN_ctrl_req creq;
+	
 
 	nf = calloc(1, sizeof(*nf));
 	if (nf) {
@@ -538,6 +584,19 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 					nf = NULL;
 				}
 			}
+			ncciL4L3(nf->ncci, PH_CONTROL_REQ, HW_FIFO_STATUS_ON, 0, NULL, NULL);
+			/* Set buffersize */
+			creq.op = MISDN_CTRL_RX_BUFFER;
+			creq.channel = bi->nr;
+			creq.p1 = 256; // minimum
+			creq.p2 = MISDN_CTRL_RX_SIZE_IGNORE; // do not change max
+			creq.p3 = 0;
+			ret = ioctl(bi->fd, IMCTRLREQ, &creq);
+			/* MISDN_CTRL_RX_BUFFER is not mandatory warn if not supported */
+			if (ret < 0)
+				wprint("Error on MISDN_CTRL_RX_BUFFER  ioctl - %s\n", strerror(errno));
+			else
+				dprint(MIDEBUG_NCCI, "MISDN_CTRL_RX_BUFFER  old values: min=%d max=%d\n", creq.p1, creq.p2 );
 		} else {
 			eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
 			free(nf);
@@ -599,7 +658,7 @@ void FaxReleaseLink(struct BInstance *bi)
 	mFaxRelease(fax);
 }
 
-static void FaxSendDown(struct fax *fax)
+static void FaxSendDown(struct fax *fax, int ind)
 {
 	int pktid, l, tot, ret;
 	struct mNCCI *ncci = fax->ncci;
@@ -608,6 +667,7 @@ static void FaxSendDown(struct fax *fax)
 	pthread_mutex_lock(&ncci->lock);
 	if (!ncci->xmit_handles[ncci->oidx].pkt) {
 		ncci->dlbusy = 0;
+		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: no data\n", ncci->ncci);
 		pthread_mutex_unlock(&ncci->lock);
 		return;
 	}
@@ -652,9 +712,10 @@ static void FaxSendDown(struct fax *fax)
 		pthread_mutex_unlock(&ncci->lock);
 		return;
 	} else
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send down %d bytes type %s id %d current oidx[%d] sent %d/%d\n", ncci->ncci,
-		       ret, _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, ncci->oidx,
-		       ncci->xmit_handles[ncci->oidx].sent, ncci->xmit_handles[ncci->oidx].dlen);
+		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send down %d bytes type %s id %d current oidx[%d] sent %d/%d %s\n",
+			ncci->ncci, ret, _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, ncci->oidx,
+			ncci->xmit_handles[ncci->oidx].sent, ncci->xmit_handles[ncci->oidx].dlen,
+			ind ? "ind" : "cnf");
 	ncci->dlbusy = 1;
 	ncci->oidx++;
 	if (ncci->oidx == ncci->window)
@@ -728,7 +789,7 @@ static int FaxDataInd(struct fax *fax, struct mc_buf *mc)
 		ret = 0;
 	pthread_mutex_unlock(&ncci->lock);
 	if (ret)
-		FaxSendDown(fax);
+		FaxSendDown(fax, 1);
 	return 0;
 }
 
@@ -769,7 +830,7 @@ static void FaxDataConf(struct fax *fax, struct mc_buf *mc)
 	ncci->dlbusy = 0;
 	free_mc_buf(mc);
 	pthread_mutex_unlock(&ncci->lock);
-	FaxSendDown(fax);
+	FaxSendDown(fax, 0);
 	return;
 }
 
@@ -1170,6 +1231,22 @@ int FaxRecvBData(struct BInstance *bi, struct mc_buf *mc)
 		fax->modem_end = 1;
 		fax->modem_active = 0;
 		ret = 1;
+		break;
+	case PH_CONTROL_CNF:
+		if (!fax) {
+			wprint("Controller%d ch%d: Got %s id %x but but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr,
+				_mi_msg_type2str(hh->prim), hh->id);
+			ret = -EINVAL;
+		} else
+			dprint(MIDEBUG_NCCI, "NCCI %06x: got %s id %x\n", fax->ncci->ncci, _mi_msg_type2str(hh->prim), hh->id);
+		break;
+	case PH_CONTROL_IND:
+		if (!fax) {
+			wprint("Controller%d ch%d: Got %s id %x but but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr,
+				_mi_msg_type2str(hh->prim), hh->id);
+			ret = -EINVAL;
+		} else
+			dprint(MIDEBUG_NCCI, "NCCI %06x: got %s id %x\n", fax->ncci->ncci, _mi_msg_type2str(hh->prim), hh->id);
 		break;
 	default:
 		wprint("Controller%d ch%d: Got %s (%x) id=%x len %d\n", bi->pc->profile.ncontroller, bi->nr,

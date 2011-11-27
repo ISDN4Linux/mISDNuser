@@ -719,6 +719,8 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 	}
 	// ignore, reject 
 	switch (mc->cmsg.Reject) {
+	case 1:
+		break;		// Ignore - no message should be sent
 	case 2:
 		cause = 0x90;
 		break;		// normal call clearing
@@ -754,25 +756,27 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 	//      lPLCIClearOtherApps(lp);
 	// }
 	// plciDetachlPLCI(plci, lp);
-	if (plci->nAppl == 1) {
-		int mt;
+	if (mc->cmsg.Reject != 1) {
+		if (plci->nAppl == 1) {
+			int mt;
 
-		l3m = alloc_l3_msg();
-		if (!l3m) {
-			wprint("disconnect not send no l3m\n");
-		} else {
-			if (plci->alerting)
-				mt = MT_DISCONNECT;
-			else
-				mt = MT_RELEASE_COMPLETE;
-			mi_encode_cause(l3m, cause, CAUSE_LOC_USER, 0, NULL);
-			plciL4L3(plci, mt, l3m);
+			l3m = alloc_l3_msg();
+			if (!l3m) {
+				wprint("disconnect not send no l3m\n");
+			} else {
+				if (plci->alerting)
+					mt = MT_DISCONNECT;
+				else
+					mt = MT_RELEASE_COMPLETE;
+				mi_encode_cause(l3m, cause, CAUSE_LOC_USER, 0, NULL);
+				plciL4L3(plci, mt, l3m);
+			}
 		}
 	}
 	mc->cmsg.Command = CAPI_DISCONNECT;
 	mc->cmsg.Subcommand = CAPI_IND;
 	mc->cmsg.Messagenumber = lp->lc->Appl->MsgId++;
-	mc->cmsg.Reject = 0x3400 | cause;
+	mc->cmsg.Reason = 0;
 	FsmEvent(&lp->plci_m, EV_PI_DISCONNECT_IND, mc);
 }
 
@@ -799,14 +803,16 @@ static void plci_disconnect_req(struct FsmInst *fi, int event, void *arg)
 
 	FsmChangeState(fi, ST_PLCI_P_5);
 
-	// FIXME handle additional Inf
+	// FIXME handle additional Info
 	capi_cmsg_answer(&mc->cmsg);
 	mc->cmsg.Reason = 0;	// disconnect initiated
 	Send2Application(lp, mc);
 
 	lPLCILinkDown(lp);
 
+	lp->disc_req = 1;
 	if (lp->cause == 0) {
+		dprint(MIDEBUG_PLCI, "Disconnect send to card\n");
 		l3m = alloc_l3_msg();
 		if (!l3m) {
 			wprint("disconnect not send no l3m\n");
@@ -818,6 +824,7 @@ static void plci_disconnect_req(struct FsmInst *fi, int event, void *arg)
 	} else {
 		/* release physical link */
 		// FIXME
+		dprint(MIDEBUG_PLCI, "Connection was disconnected with cause %02x - send RELEASE\n", lp->cause);
 		plciL4L3(plci, MT_RELEASE, NULL);
 	}
 }
@@ -1066,11 +1073,17 @@ static void plci_cc_release_ind(struct FsmInst *fi, int event, void *arg)
 			}
 		}
 	}
-	if (lp->cause > 0)
-		cause = lp->cause;
-	if (cause > 0)
-		mc->cmsg.Reason = 0x3400 | (cause & 0x7f);
-	else
+	if (!lp->disc_req) {
+		/* We only should send causes from RELEASE when we did not request the RELEASE 
+		 * Some applications will see Reasons not 00 as error - maybe thats a bug
+		 */
+		if (lp->cause > 0)
+			cause = lp->cause;
+		if (cause > 0)
+			mc->cmsg.Reason = 0x3400 | (cause & 0x7f);
+		else
+			mc->cmsg.Reason = 0;
+	} else
 		mc->cmsg.Reason = 0;
 	FsmEvent(&lp->plci_m, EV_PI_DISCONNECT_IND, mc);
 	if (!arg)		/* if allocated local */

@@ -199,6 +199,7 @@ struct lPLCI {
 	struct Bprotocol		Bprotocol;
 	unsigned int			l1dtmf:1;
 	unsigned int			autohangup:1;
+	unsigned int			disc_req:1;
 };
 
 void init_lPLCI_fsm(void);

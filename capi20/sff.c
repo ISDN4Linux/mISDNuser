@@ -1,5 +1,5 @@
 /*
- * G3 decoding 
+ * SFF to TIFF and TIFF to SFF 
  *
  * Written by Karsten Keil <kkeil@linux-pingi.de>
  *
@@ -17,6 +17,9 @@
 #include "mc_buffer.h"
 #include "sff.h"
 #include "g3_mh.h"
+
+/* This debug will generate huge amount of data and slow down the process a lot */
+//#define SFF_VERBOSE_DEBUG 1
 
 #define SFF_DATA_BLOCK_SIZE	4096
 
@@ -92,7 +95,7 @@ static int sff_read_file_header(struct sff_state *sf)
 {
 	sf->dp = sf->data;
 	if (sf->size < SFF_FILE_HEADER_SIZE) {
-		wprint("SFF too small(%d/%zd\n", sf->size, sizeof(sf->fh));
+		wprint("SFF too small(%zu/%zu\n", sf->size, sizeof(sf->fh));
 		return 1;
 	}
 	sf->fh.magic = CAPIMSG_U32(sf->dp, 0);
@@ -235,17 +238,23 @@ int  sff_decode_page_data(struct sff_page *pg)
 			/* escape 2 byte len */
 			l = CAPIMSG_U16(pg->dp, 0);
 			pg->dp += 2;
+#ifdef SFF_VERBOSE_DEBUG 
 			dprint(MIDEBUG_NCCI_DATA, "Line %d with %d bytes found in page %d\n", nr, l, pg->nr);
+#endif
 			add_raw_line(pg, pg->dp, l, nr);
 			nr++;
 		} else if (rt < 217) {
 			l = rt;
+#ifdef SFF_VERBOSE_DEBUG 
 			dprint(MIDEBUG_NCCI_DATA, "Line %d with %d bytes found in page %d\n", nr, l, pg->nr);
+#endif
 			add_raw_line(pg, pg->dp, l, nr);
 			nr++;
 		} else if (rt < 254) {
 			l = 0;
+#ifdef SFF_VERBOSE_DEBUG 
 			dprint(MIDEBUG_NCCI_DATA, "Skip %d empty lines (line %d)  in page %d\n", rt - 216, nr, pg->nr);
+#endif
 			add_raw_empty_lines(pg,  rt - 216, nr);
 			nr += (rt - 216);
 		} else if (rt == 254) {
@@ -260,6 +269,7 @@ int  sff_decode_page_data(struct sff_page *pg)
 				dprint(MIDEBUG_NCCI_DATA, "Illegal Line %d in page %d found\n", nr, pg->nr);
 			} else
 				dprint(MIDEBUG_NCCI_DATA, "%d bytes userdata found in page %d\n", l, pg->nr);
+			
 		}
 		pg->dp += l;
 		rt = *pg->dp;
@@ -338,7 +348,7 @@ static void adjust_memory(struct sff_state *sff, unsigned char *np)
 	struct sff_page *pg;
 
 	offset = np - sff->data;
-	iprint("Adjust data offset %zd\n", offset);
+	iprint("Adjust data offset old=%p new=%p offset=%zu data_size=%zu\n", sff->data, np, offset, sff->data_size);
 
 	if (sff->dp)
 		sff->dp += offset;
@@ -373,7 +383,8 @@ int SFF_Put_Data(struct sff_state *sff, unsigned char *data, int len)
 		sff->data_size += inc;
 		if (sff->data && sff->data != dp) {
 			adjust_memory(sff, dp);
-		}
+		} else
+			iprint("Adjust data_size=%zu data=%p dp=%p\n", sff->data_size, sff->data, dp);
 		sff->data = dp;
 		if (!sff->dp)
 			sff->dp = dp;
@@ -401,7 +412,8 @@ static int sff_copy_data(struct sff_state *sff, unsigned char *data, int len)
 		sff->data_size += inc;
 		if (sff->data && sff->data != dp) {
 			adjust_memory(sff, dp);
-		}
+		} else
+			iprint("Adjust data_size=%zu data=%p dp=%p\n", sff->data_size, sff->data, dp);
 		sff->data = dp;
 		if (!sff->dp)
 			sff->dp = dp;
@@ -580,7 +592,7 @@ int SFF_ReadTiff(struct sff_state *sff, char *name)
 	int i, ret;
 	unsigned char *rawbuf = NULL;
 	unsigned char *cbuf = NULL;
-	struct sff_page *pg;
+	struct sff_page *pg, *prevpg;
 	struct g3_mh_line_s ls;
 	float resV;
 
@@ -624,6 +636,10 @@ int SFF_ReadTiff(struct sff_state *sff, char *name)
 		}
 		if (!sff->firstpage)
 			sff->firstpage = pg;
+		prevpg = sff->lastpage;
+		if (sff->lastpage)
+			sff->lastpage->next = pg;
+		sff->lastpage = pg;
 		sff->page_cnt++;
 		if (!TIFFGetField(tf, TIFFTAG_IMAGEWIDTH, &linelen))
 			wprint("TIFFTAG_IMAGEWIDTH not set\n");
@@ -681,19 +697,18 @@ int SFF_ReadTiff(struct sff_state *sff, char *name)
 					goto end;
 				}
 			}
+#ifdef SFF_VERBOSE_DEBUG 
 			dprint(MIDEBUG_NCCI_DATA, "Line %d encode %d bytes %x %x %x %x %x %x %x %x\n", i, ret,
 				cbuf[0], cbuf[1], cbuf[2], cbuf[3], cbuf[4], cbuf[5], cbuf[6], cbuf[7]);
+#endif
 		}
-		if (sff->lastpage) {
-			sff->lastpage->head.o_next_page = pg->headp - sff->data;
-			pg->head.o_previous_page = sff->lastpage->headp - sff->data;
-			sff_put_page(sff, sff->lastpage);
+		if (prevpg) {
+			prevpg->head.o_next_page = pg->headp - sff->data;
+			pg->head.o_previous_page = prevpg->headp - sff->data;
+			sff_put_page(sff, prevpg);
 		} else
 			pg->head.o_previous_page = 1;
 		pg->head.o_next_page = 1;
-		if (sff->lastpage)
-			sff->lastpage->next = pg;
-		sff->lastpage = pg;
 		sff_put_page(sff, pg);
 		newpg = TIFFReadDirectory(tf);
 		if (!newpg) {
@@ -719,6 +734,7 @@ end:
 		sff->firstpage = pg;
 	}
 	TIFFClose(tf);
+	iprint("Recoded %d pages as SFF size %zu (allocated %zu)\n", sff->page_cnt, sff->size, sff->data_size);
 	return retval;
 }
 /* USE_SOFTFAX */
