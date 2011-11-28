@@ -35,6 +35,10 @@
 #include "../lib/include/fsm.h"
 #include "../lib/include/debug.h"
 
+/* SOme globals */
+extern int	KeepTemporaryFiles;
+extern char	*TempDirectory;
+
 struct mApplication;
 struct mPLCI;
 struct lPLCI;

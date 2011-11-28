@@ -64,6 +64,11 @@ static struct pController *mI_Controller;
 static int mI_count;
 static FILE *DebugFile = NULL;
 static char *DebugFileName = NULL;
+int KeepTemporaryFiles;
+static char _TempDirectory[80];
+char *TempDirectory;
+
+#define MISDND_TEMP_DIR	"/tmp"
 
 static void usage(void)
 {
@@ -74,6 +79,7 @@ static void usage(void)
 	fprintf(stderr, "   -d, --debug <level>                   set debug level\n");
 	fprintf(stderr, "   -D, --debug-file <debug file>         use debug file (default stdout/stderr)\n");
 	fprintf(stderr, "   -f, --foreground                      run in forground, not as daemon\n");
+	fprintf(stderr, "   -k, --keeptemp                        do not delete temporary files (e.g. TIFF for fax)\n");
 	fprintf(stderr, "\n");
 }
 
@@ -89,10 +95,11 @@ static int opt_parse(int ac, char *av[])
 			{"debug-file", 1, 0, 'D'},
 			{"debug", 1, 0, 'd'},
 			{"foreground", 0, 0, 'f'},
+			{"keeptemp", 0, 0, 'k'},
 			{0, 0, 0, 0}
 		};
 
-		c = getopt_long(ac, av, "?c:D:d:f", long_options, &option_index);
+		c = getopt_long(ac, av, "?c:D:d:fk", long_options, &option_index);
 		if (c == -1)
 			break;
 		switch (c) {
@@ -133,6 +140,9 @@ static int opt_parse(int ac, char *av[])
 			break;
 		case 'f':
 			do_daemon = 0;
+			break;
+		case 'k':
+			KeepTemporaryFiles = 1;
 			break;
 		case '?':
 			usage();
@@ -1134,6 +1144,7 @@ int main(int argc, char *argv[])
 	struct sockaddr_un mcaddr;
 	struct pController *pc;
 
+	KeepTemporaryFiles = 0;
 	config_file = def_config;
 	ret = opt_parse(argc, argv);
 	if (ret)
@@ -1155,7 +1166,21 @@ int main(int argc, char *argv[])
 	mISDN_set_debug_level(libdebug);
 	iprint("Init mISDN lib version %x, debug = %x (%x)\n", ver, debugmask, libdebug);
 
+	snprintf(_TempDirectory, 80, "%s/mISDNd_XXXXXX", MISDND_TEMP_DIR);
+	TempDirectory = mkdtemp(_TempDirectory);
+	if (!TempDirectory) {
+		fprintf(stderr, "Cannot create temporary directory %s - %s\n", _TempDirectory, strerror(errno));
+		return 1;
+	}
 	/* open mISDN */
+	/* test if /dev/mISDNtimer is accessible */
+	ret = open("/dev/mISDNtimer", O_RDWR);
+	if (ret < 0) {
+		fprintf(stderr, "Cannot access /dev/mISDNtimer - %s\n", strerror(errno));
+		return 1;
+	}
+	close(ret);
+	
 	mIsock = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (mIsock < 0) {
 		fprintf(stderr, "mISDNv2 not installed - %s\n", strerror(errno));

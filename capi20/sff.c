@@ -21,7 +21,7 @@
 /* This debug will generate huge amount of data and slow down the process a lot */
 //#define SFF_VERBOSE_DEBUG 1
 
-#define SFF_DATA_BLOCK_SIZE	4096
+#define SFF_DATA_BLOCK_SIZE	(64 * 1024)
 
 struct sff_page {
 	enum SFFState		state;
@@ -348,8 +348,8 @@ static void adjust_memory(struct sff_state *sff, unsigned char *np)
 	struct sff_page *pg;
 
 	offset = np - sff->data;
-	iprint("Adjust data offset old=%p new=%p offset=%zu data_size=%zu\n", sff->data, np, offset, sff->data_size);
-
+	dprint(MIDEBUG_NCCI_DATA, "Adjust data offset old=%p new=%p offset=%zu data_size=%zu\n",
+		sff->data, np, offset, sff->data_size);
 	if (sff->dp)
 		sff->dp += offset;
 	pg = sff->firstpage;
@@ -384,7 +384,7 @@ int SFF_Put_Data(struct sff_state *sff, unsigned char *data, int len)
 		if (sff->data && sff->data != dp) {
 			adjust_memory(sff, dp);
 		} else
-			iprint("Adjust data_size=%zu data=%p dp=%p\n", sff->data_size, sff->data, dp);
+			dprint(MIDEBUG_NCCI_DATA, "Adjust data_size=%zu data=%p dp=%p\n", sff->data_size, sff->data, dp);
 		sff->data = dp;
 		if (!sff->dp)
 			sff->dp = dp;
@@ -413,7 +413,7 @@ static int sff_copy_data(struct sff_state *sff, unsigned char *data, int len)
 		if (sff->data && sff->data != dp) {
 			adjust_memory(sff, dp);
 		} else
-			iprint("Adjust data_size=%zu data=%p dp=%p\n", sff->data_size, sff->data, dp);
+			dprint(MIDEBUG_NCCI_DATA, "Adjust data_size=%zu data=%p dp=%p\n", sff->data_size, sff->data, dp);
 		sff->data = dp;
 		if (!sff->dp)
 			sff->dp = dp;
@@ -576,7 +576,7 @@ int SFF_WriteTiff(struct sff_state *sff, char *name)
 		TIFFSetField(tf, TIFFTAG_PAGENUMBER, sff->page_cnt, pg->nr);
 		pg->tiff = tf;
 		sff_decode_page_data(pg);
-		iprint("SFF wrote page %d with %d lines\n", pg->nr, pg->lines);
+		dprint(MIDEBUG_NCCI, "SFF wrote page %d with %d lines\n", pg->nr, pg->lines);
 		TIFFSetField(tf, TIFFTAG_IMAGELENGTH, pg->lines);
 		TIFFWriteDirectory(tf);
 		pg = pg->next;
@@ -734,7 +734,7 @@ end:
 		sff->firstpage = pg;
 	}
 	TIFFClose(tf);
-	iprint("Recoded %d pages as SFF size %zu (allocated %zu)\n", sff->page_cnt, sff->size, sff->data_size);
+	dprint(MIDEBUG_NCCI, "Recoded %d pages as SFF size %zu (allocated %zu)\n", sff->page_cnt, sff->size, sff->data_size);
 	return retval;
 }
 /* USE_SOFTFAX */
