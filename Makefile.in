@@ -34,8 +34,9 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 subdir = .
-DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
-	$(srcdir)/Makefile.in $(top_srcdir)/configure \
+DIST_COMMON = README $(am__configure_deps) $(srcdir)/45-misdn.rules.in \
+	$(srcdir)/Makefile.am $(srcdir)/Makefile.in \
+	$(top_srcdir)/configure \
 	$(top_srcdir)/include/mISDN/mISDNcompat.h.in AUTHORS \
 	COPYING.LIB ChangeLog INSTALL NEWS config.guess config.sub \
 	depcomp install-sh ltmain.sh missing
@@ -50,7 +51,7 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno config.status.lineno
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/include/config.h
-CONFIG_CLEAN_FILES = include/mISDN/mISDNcompat.h
+CONFIG_CLEAN_FILES = 45-misdn.rules include/mISDN/mISDNcompat.h
 CONFIG_CLEAN_VPATH_FILES =
 SOURCES =
 DIST_SOURCES =
@@ -152,6 +153,7 @@ LTLIBOBJS = @LTLIBOBJS@
 MAKEINFO = @MAKEINFO@
 MEMLEAKDEBUG_COMPILE = @MEMLEAKDEBUG_COMPILE@
 MISDN_AF_ISDN_VAL = @MISDN_AF_ISDN_VAL@
+MISDN_GROUP = @MISDN_GROUP@
 MKDIR_P = @MKDIR_P@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -228,11 +230,13 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 ACLOCAL_AMFLAGS = -I m4
+MISDN_CAPI_GROUP = @MISDN_GROUP@
 @OPT_EXAMPLE_TRUE@MAYBE_EXAMPLE = example
 @OPT_GUI_TRUE@MAYBE_GUI = guitools
 @OPT_CAPI_TRUE@MAYBE_CAPI = capi20 capi20/module
 SUBDIRS = include lib tools bridge l1oip $(MAYBE_EXAMPLE) $(MAYBE_GUI) $(MAYBE_CAPI)
 CLEANFILES = *~
+DISTCLEANFILES = 45-misdn.rules
 all: all-recursive
 
 .SUFFIXES:
@@ -270,6 +274,8 @@ $(top_srcdir)/configure:  $(am__configure_deps)
 $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	$(am__cd) $(srcdir) && $(ACLOCAL) $(ACLOCAL_AMFLAGS)
 $(am__aclocal_m4_deps):
+45-misdn.rules: $(top_builddir)/config.status $(srcdir)/45-misdn.rules.in
+	cd $(top_builddir) && $(SHELL) ./config.status $@
 include/mISDN/mISDNcompat.h: $(top_builddir)/config.status $(top_srcdir)/include/mISDN/mISDNcompat.h.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
 
@@ -619,6 +625,7 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-test -z "$(DISTCLEANFILES)" || rm -f $(DISTCLEANFILES)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -645,7 +652,7 @@ info: info-recursive
 
 info-am:
 
-install-data-am:
+install-data-am: install-data-local
 
 install-dvi: install-dvi-recursive
 
@@ -703,23 +710,27 @@ uninstall-am:
 	distcheck distclean distclean-generic distclean-libtool \
 	distclean-tags distcleancheck distdir distuninstallcheck dvi \
 	dvi-am html html-am info info-am install install-am \
-	install-data install-data-am install-dvi install-dvi-am \
-	install-exec install-exec-am install-html install-html-am \
-	install-info install-info-am install-man install-pdf \
-	install-pdf-am install-ps install-ps-am install-strip \
-	installcheck installcheck-am installdirs installdirs-am \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags tags-recursive uninstall uninstall-am
+	install-data install-data-am install-data-local install-dvi \
+	install-dvi-am install-exec install-exec-am install-html \
+	install-html-am install-info install-info-am install-man \
+	install-pdf install-pdf-am install-ps install-ps-am \
+	install-strip installcheck installcheck-am installdirs \
+	installdirs-am maintainer-clean maintainer-clean-generic \
+	mostlyclean mostlyclean-generic mostlyclean-libtool pdf pdf-am \
+	ps ps-am tags tags-recursive uninstall uninstall-am
 
 
-export _MEMLEAKDEBUG
+export _MEMLEAKDEBUG MISDN_CAPI_GROUP
 
 @MEMLEAKDEBUG_TRUE@	_MEMLEAKDEBUG = "-DMEMLEAK_DEBUG=1"
 @MEMLEAKDEBUG_FALSE@	_MEMLEAKDEBUG =
 
 @GIT_REPO_TRUE@ChangeLog: .git/objects
 @GIT_REPO_TRUE@	git log > $@
+
+install-data-local:
+	install -d $(DESTDIR)/etc/udev/rules.d
+	install -m 644 45-misdn.rules $(DESTDIR)/etc/udev/rules.d/45-misdn.rules
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

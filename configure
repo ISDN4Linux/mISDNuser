@@ -756,6 +756,7 @@ am__EXEEXT_TRUE
 LTLIBOBJS
 GIT_REPO_FALSE
 GIT_REPO_TRUE
+MISDN_GROUP
 AF_ISDN_VAL
 MISDN_AF_ISDN_VAL
 LIBOBJS
@@ -900,6 +901,7 @@ enable_memleak_debug
 enable_capi
 enable_softdsp
 with_AF_ISDN
+with_mISDN_group
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1556,6 +1558,8 @@ Optional Packages:
   --with-gnu-ld           assume the C compiler uses GNU ld [default=no]
   --with-AF_ISDN=PNR      alternative AF_ISDN protocol number, needed if
                           AF_ISDN is not defined
+  --with-mISDN_group=<unix group name>
+                          unix access group for mISDN
 
 Some influential environment variables:
   CC          C compiler command
@@ -5860,13 +5864,13 @@ if ${lt_cv_nm_interface+:} false; then :
 else
   lt_cv_nm_interface="BSD nm"
   echo "int some_variable = 0;" > conftest.$ac_ext
-  (eval echo "\"\$as_me:5863: $ac_compile\"" >&5)
+  (eval echo "\"\$as_me:5867: $ac_compile\"" >&5)
   (eval "$ac_compile" 2>conftest.err)
   cat conftest.err >&5
-  (eval echo "\"\$as_me:5866: $NM \\\"conftest.$ac_objext\\\"\"" >&5)
+  (eval echo "\"\$as_me:5870: $NM \\\"conftest.$ac_objext\\\"\"" >&5)
   (eval "$NM \"conftest.$ac_objext\"" 2>conftest.err > conftest.out)
   cat conftest.err >&5
-  (eval echo "\"\$as_me:5869: output\"" >&5)
+  (eval echo "\"\$as_me:5873: output\"" >&5)
   cat conftest.out >&5
   if $GREP 'External.*some_variable' conftest.out > /dev/null; then
     lt_cv_nm_interface="MS dumpbin"
@@ -7071,7 +7075,7 @@ ia64-*-hpux*)
   ;;
 *-*-irix6*)
   # Find out which ABI we are using.
-  echo '#line 7074 "configure"' > conftest.$ac_ext
+  echo '#line 7078 "configure"' > conftest.$ac_ext
   if { { eval echo "\"\$as_me\":${as_lineno-$LINENO}: \"$ac_compile\""; } >&5
   (eval $ac_compile) 2>&5
   ac_status=$?
@@ -8860,11 +8864,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:8863: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:8867: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:8867: \$? = $ac_status" >&5
+   echo "$as_me:8871: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -9199,11 +9203,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:9202: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:9206: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:9206: \$? = $ac_status" >&5
+   echo "$as_me:9210: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -9304,11 +9308,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:9307: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:9311: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:9311: \$? = $ac_status" >&5
+   echo "$as_me:9315: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -9359,11 +9363,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:9362: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:9366: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:9366: \$? = $ac_status" >&5
+   echo "$as_me:9370: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -11727,7 +11731,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11730 "configure"
+#line 11734 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11823,7 +11827,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11826 "configure"
+#line 11830 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -13779,11 +13783,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:13782: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:13786: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:13786: \$? = $ac_status" >&5
+   echo "$as_me:13790: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -13878,11 +13882,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:13881: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:13885: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:13885: \$? = $ac_status" >&5
+   echo "$as_me:13889: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -13930,11 +13934,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:13933: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:13937: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:13937: \$? = $ac_status" >&5
+   echo "$as_me:13941: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -15588,6 +15592,28 @@ else
 	git_repo=false
 fi
 
+
+
+# Check whether --with-mISDN_group was given.
+if test "${with_mISDN_group+set}" = set; then :
+  withval=$with_mISDN_group;
+		if test -n "$withval"
+		then
+			MISDN_GROUP="$withval"
+		else
+			MISDN_GROUP="dialout"
+		fi
+
+else
+
+		MISDN_GROUP="dialout"
+
+fi
+
+
+
+
+
  if test "x$git_repo" = xtrue; then
   GIT_REPO_TRUE=
   GIT_REPO_FALSE='#'
@@ -15597,7 +15623,7 @@ else
 fi
 
 
-ac_config_files="$ac_config_files Makefile include/Makefile include/mISDN/mISDNcompat.h lib/Makefile bridge/Makefile l1oip/Makefile tools/Makefile example/Makefile guitools/Makefile guitools/qmisdnwatch/Makefile capi20/Makefile capi20/module/Makefile"
+ac_config_files="$ac_config_files Makefile 45-misdn.rules include/Makefile include/mISDN/mISDNcompat.h lib/Makefile bridge/Makefile l1oip/Makefile tools/Makefile example/Makefile guitools/Makefile guitools/qmisdnwatch/Makefile capi20/Makefile capi20/module/Makefile"
 
 
 cat >confcache <<\_ACEOF
@@ -16716,6 +16742,7 @@ do
     "depfiles") CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
     "libtool") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
+    "45-misdn.rules") CONFIG_FILES="$CONFIG_FILES 45-misdn.rules" ;;
     "include/Makefile") CONFIG_FILES="$CONFIG_FILES include/Makefile" ;;
     "include/mISDN/mISDNcompat.h") CONFIG_FILES="$CONFIG_FILES include/mISDN/mISDNcompat.h" ;;
     "lib/Makefile") CONFIG_FILES="$CONFIG_FILES lib/Makefile" ;;

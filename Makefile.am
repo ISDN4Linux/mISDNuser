@@ -1,7 +1,9 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
-export _MEMLEAKDEBUG
+export _MEMLEAKDEBUG MISDN_CAPI_GROUP
+
+MISDN_CAPI_GROUP=@MISDN_GROUP@
 
 if MEMLEAKDEBUG
 	_MEMLEAKDEBUG = "-DMEMLEAK_DEBUG=1"
@@ -24,6 +26,7 @@ endif
 SUBDIRS = include lib tools bridge l1oip $(MAYBE_EXAMPLE) $(MAYBE_GUI) $(MAYBE_CAPI)
 
 CLEANFILES = *~
+DISTCLEANFILES = 45-misdn.rules
 
 if GIT_REPO
 
@@ -31,3 +34,8 @@ ChangeLog: .git/objects
 	git log > $@
 
 endif
+
+install-data-local:
+	install -d $(DESTDIR)/etc/udev/rules.d
+	install -m 644 45-misdn.rules $(DESTDIR)/etc/udev/rules.d/45-misdn.rules
+

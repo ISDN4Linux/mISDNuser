@@ -35,3 +35,19 @@ AC_DEFUN([MISDN_CHECK_AF_ISDN], [
 	AC_SUBST(MISDN_AF_ISDN_VAL)
 	AC_SUBST(AF_ISDN_VAL)
 ])
+
+AC_DEFUN([AC_MISDN_GROUP], [
+	AC_ARG_WITH([mISDN_group],
+	AS_HELP_STRING([--with-mISDN_group=<unix group name>], [unix access group for mISDN]), [
+		if test -n "$withval"
+		then
+			MISDN_GROUP="$withval"
+		else
+			MISDN_GROUP="dialout"
+		fi
+	],
+	[
+		MISDN_GROUP="dialout"
+	])
+])
+

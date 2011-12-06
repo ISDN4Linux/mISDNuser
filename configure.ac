@@ -150,9 +150,14 @@ else
 	git_repo=false
 fi
 
+AC_MISDN_GROUP
+
+AC_SUBST(MISDN_GROUP)
+
 AM_CONDITIONAL([GIT_REPO], [test "x$git_repo" = xtrue])
 	
 AC_CONFIG_FILES([Makefile
+                 45-misdn.rules
                  include/Makefile
                  include/mISDN/mISDNcompat.h
                  lib/Makefile

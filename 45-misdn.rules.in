@@ -1,0 +1,2 @@
+# mISDN devices
+KERNEL=="mISDNtimer*" , MODE="664", GROUP="@MISDN_GROUP@"
