@@ -37,6 +37,8 @@ extern "C" {
 #define MIC_VERSION_REQ			CAPICMD(0xf4, 0xff)
 #define MIC_GET_MANUFACTURER_REQ	CAPICMD(0xf5, 0xff)
 #define MIC_MANUFACTURER_REQ		CAPICMD(0xf6, 0xff)
+#define MIC_USERFLAG_REQ		CAPICMD(0xf7, 0xff)
+#define MIC_TTYNAME_REQ			CAPICMD(0xf8, 0xff)
 
 
 #ifdef __cplusplus
