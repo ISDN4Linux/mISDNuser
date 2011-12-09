@@ -35,6 +35,7 @@
  * defined so use this as workaround
  */
 
+extern int posix_openpt(int flags);
 extern int grantpt(int fd);
 extern int unlockpt(int fd);
 extern int ptsname_r(int fd, char *buf, size_t buflen);
@@ -1075,7 +1076,7 @@ static void mIcapi_userflag(int fd, int idx, struct mc_buf *mc)
 
 static void mIcapi_ttyname(int fd, int idx, struct mc_buf *mc)
 {
-	int ret, ml, l = 0;
+	int ret, ml = 0, l = 0;
 	struct mApplication *appl = pollinfo[idx].data;
 	struct lPLCI *lp;
 	uint32_t ncci = 0;
