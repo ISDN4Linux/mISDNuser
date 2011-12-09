@@ -446,7 +446,10 @@ static int StopBchannelThread(struct BInstance *bi)
 			sem_post(&bi->wait);
 		write(bi->cpipe[1], &cmd, 1);
 		ret = pthread_join(bi->tid, NULL);
-		iprint("Thread %d joined\n", (int)bi->tid);
+		if (ret < 0)
+			wprint("Error on pthread_join - %s\n", strerror(errno));
+		else
+			iprint("Thread %d joined\n", (int)bi->tid);
 		close(bi->cpipe[0]);
 		close(bi->cpipe[1]);
 		bi->pfd[0].fd = -1;
