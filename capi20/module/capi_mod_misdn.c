@@ -422,6 +422,87 @@ static unsigned misdnGetProfile(int nHandle, unsigned nController, unsigned char
 	return err;
 }
 
+static int misdnFlagReq(uint16_t ApplId, uint32_t set_f, uint32_t clr_f)
+{ 
+	unsigned char anBuf[100];
+	int ret, fd;
+
+	fd = capi_applid2fd(ApplId);
+	if (fd < 0)
+		return -1;
+	misdnSetHeader(anBuf, 16, ApplId, MIC_USERFLAG_REQ, 0);
+	capimsg_setu32(anBuf, 8, set_f);
+	capimsg_setu32(anBuf, 12, clr_f);
+	ret = misdnRemoteCommand(fd, anBuf, 16, MIC_USERFLAG_REQ);
+	if (ret == 12)
+		ret = CAPIMSG_U32(anBuf, 8);
+	else
+		ret = -1;
+	return ret;
+}
+
+static int misdnGetFlags(unsigned nApplId, unsigned *pnFlagsPtr)
+{
+	int ret;
+
+	ret = misdnFlagReq(nApplId, 0, 0);
+	if (ret < 0)
+		*pnFlagsPtr = 0;
+	else {
+		*pnFlagsPtr = ret;
+		ret = 0;
+	}
+	return ret;
+}
+
+static int misdnSetFlags(unsigned nApplId, unsigned nFlags)
+{
+	int ret;
+
+	ret = misdnFlagReq(nApplId, nFlags, 0);
+	if (ret >= 0)
+		ret = 0;
+	return ret;
+}
+
+static int misdnClearFlags(unsigned nApplId, unsigned nFlags)
+{
+	int ret;
+
+	ret = misdnFlagReq(nApplId, 0, nFlags);
+	if (ret >= 0)
+		ret = 0;
+	return ret;
+}
+
+static char *misdnGetTtyDeviceName(unsigned nApplId,unsigned nNcci, char *pnBuffer, size_t nSize)
+{
+	unsigned char *anBuf;
+	int ret, fd;
+
+	fd = capi_applid2fd(nApplId);
+	if (fd < 0)
+		return NULL;
+
+	if (nSize > 64)
+		nSize = 64;
+	anBuf = malloc(nSize + 12);
+	if (!anBuf)
+		return NULL;
+	misdnSetHeader(anBuf, 16, nApplId, MIC_TTYNAME_REQ, 0);
+	capimsg_setu32(anBuf, 8, nNcci);
+	capimsg_setu32(anBuf, 12, nSize & 0xff);
+	ret = misdnRemoteCommand(fd, anBuf, 16, MIC_TTYNAME_REQ);
+	if (ret > 8) {
+		ret = ret - 8;
+		memcpy(pnBuffer, &anBuf[8],  ret);
+		pnBuffer[ret] = 0;
+	} else
+		return NULL;
+	free(anBuf);
+	return pnBuffer;
+}
+
 /** Module operations structure */
 static struct sModuleOperations sRemoteCapi = {
 	misdnIsInstalled,
@@ -434,10 +515,10 @@ static struct sModuleOperations sRemoteCapi = {
 	misdnGetSerialNumber,
 	misdnGetProfile,
 	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
+	misdnGetFlags,
+	misdnSetFlags,
+	misdnClearFlags,
+	misdnGetTtyDeviceName,
 	NULL,
 	NULL
 };

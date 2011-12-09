@@ -11,15 +11,16 @@
  * this package for more details.
  */
 
+#include <stdlib.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <getopt.h>
-#include <string.h>
 #include <stdarg.h>
 #include <sys/un.h>
-#include <fcntl.h>
 #include <errno.h>
 #include <poll.h>
 #include <mISDN/q931.h>
+#include <string.h>
 #include "m_capi.h"
 #include "mc_buffer.h"
 #include "m_capi_sock.h"
@@ -29,6 +30,14 @@
 #endif
 /* should be moved to capi_debug.h */
 #include <capi_debug.h>
+
+/* for some reasons when _XOPEN_SOURCE 600 was defined lot of other things are not longer
+ * defined so use this as workaround
+ */
+
+extern int grantpt(int fd);
+extern int unlockpt(int fd);
+extern int ptsname_r(int fd, char *buf, size_t buflen);
 
 #ifndef DEF_CONFIG_FILE
 #define DEF_CONFIG_FILE	"/etc/capi20.conf"
@@ -369,38 +378,126 @@ struct BInstance *ControllerSelChannel(struct pController *pc, int nr, int proto
 	return bi;
 }
 
+
+static int Create_tty(struct BInstance *bi)
+{
+	int ret, pmod;
+
+	ret = posix_openpt(O_RDWR | O_NOCTTY);
+	if (ret < 0) {
+		eprint("Cannot open terminal - %s\n", strerror(errno));
+	} else {
+		bi->tty = ret;
+		ret = grantpt(bi->tty);
+		if (ret < 0) {
+			eprint("Error on grantpt - %s\n", strerror(errno));
+			close(bi->tty);
+			bi->tty = -1;
+		} else {
+			ret = unlockpt(bi->tty);
+			if (ret < 0) {
+				eprint("Error on unlockpt - %s\n", strerror(errno));
+				close(bi->tty);
+				bi->tty = -1;
+			} else {
+				/* packet mode */
+				pmod = 1;
+				ret = ioctl(bi->tty, TIOCPKT, &pmod);
+				if (ret < 0) {
+					eprint("Cannot set packet mode - %s\n", strerror(errno));
+					close(bi->tty);
+					bi->tty = -1;
+				}
+			}
+			
+		}
+	}
+	return  ret;
+}
+
 static int recvBchannel(struct BInstance *);
+
+
+static int recv_tty(struct BInstance *bi)
+{
+	int ret, maxl;
+	struct mc_buf *mc;
+
+	mc = alloc_mc_buf();
+	if (!mc)
+		return -ENOMEM;
+	if (!bi)
+		return -EINVAL;
+	mc->rp  = mc->rb + 8;
+	maxl = MC_RB_SIZE - 8;
+	ret = read(bi->tty, mc->rp, maxl);
+	if (ret < 0) {
+		wprint("Error on reading from tty %d errno %d - %s\n", bi->tty, errno, strerror(errno));
+		ret = -errno;
+	} else if (ret == 0) {
+		/* closed */
+		wprint("Read 0 bytes from tty %d\n", bi->tty);
+		ret = -ECONNABORTED;
+	} else if (ret == maxl) {
+		eprint("Message too big %d ctrl %02x (%02x%02x%02x%02x%02x%02x%02x%02x)\n",
+		       ret, mc->rp[0], mc->rp[1], mc->rp[2], mc->rp[3], mc->rp[4], mc->rp[5], mc->rp[6], mc->rp[7], mc->rp[8]);
+		ret = -EMSGSIZE;
+	}
+	if (ret > 0) {
+		mc->len = ret;
+		/* Fake length of DATA_B3 REQ to pass offset check */
+		capimsg_setu16(mc->rb, 0, 22);
+		mc->cmsg.Command = CAPI_DATA_TTY;
+		mc->cmsg.Subcommand = CAPI_REQ;
+		ret = bi->from_up(bi, mc);
+	}
+
+	if (ret != 0)		/* if message is not queued or freed */
+		free_mc_buf(mc);
+	return ret;
+}
 
 static void *BCthread(void *arg)
 {
 	struct BInstance *bi = arg;
 	unsigned char cmd;
-	int ret;
+	int ret, i;
 
 	bi->running = 1;
 	while (bi->running) {
-		ret = poll(bi->pfd, 2, -1);
+		ret = poll(bi->pfd, bi->pcnt, -1);
 		if (ret < 0) {
 			wprint("Bchannel%d Error on poll - %s\n", bi->nr, strerror(errno));
 			continue;
 		}
+		for (i = 1; i < bi->pcnt; i++) {
+			if (bi->pfd[i].revents & POLLIN) {
+				switch(i) {
+				case 1:
+					ret = recvBchannel(bi);
+					break;
+				case 2:
+					ret = recv_tty(bi);
+					break;
+				default:
+					wprint("Bchannel%d poll idx %d not handled\n", bi->nr, i);
+				}
+			}
+		}
+
 		if (bi->pfd[0].revents & POLLIN) {
-			ret = recvBchannel(bi);
-		} else if (bi->pfd[1].revents & POLLIN) {
-			ret = read(bi->pfd[1].fd, &cmd, 1);
+			ret = read(bi->pfd[0].fd, &cmd, 1);
 			if (cmd == 42) {
 				bi->running = 0;
 			}
-		} else {
-			wprint("Bchannel%d no POLLIN event\n", bi->nr);
 		}
 	}
 	return NULL;
 }
 
-static int CreateBchannelThread(struct BInstance *bi)
+static int CreateBchannelThread(struct BInstance *bi, int pcnt)
 {
-	int ret;
+	int ret, i;
 
 	ret = pipe(bi->cpipe);
 	if (ret) {
@@ -417,10 +514,11 @@ static int CreateBchannelThread(struct BInstance *bi)
 		eprint("error - %s\n", strerror(errno));
 		return ret;
 	}
-	bi->pfd[0].fd = bi->fd;
+	bi->pfd[0].fd = bi->cpipe[0];
 	bi->pfd[0].events = POLLIN | POLLPRI;
-	bi->pfd[1].fd = bi->cpipe[0];
+	bi->pfd[1].fd = bi->fd;
 	bi->pfd[1].events = POLLIN | POLLPRI;
+	bi->pcnt = pcnt;
 	ret = pthread_create(&bi->tid, NULL, BCthread, bi);
 	if (ret) {
 		eprint("Cannot create thread error - %s\n", strerror(errno));
@@ -429,7 +527,8 @@ static int CreateBchannelThread(struct BInstance *bi)
 		bi->cpipe[0] = -1;
 		bi->cpipe[1] = -1;
 		bi->pfd[0].fd = -1;
-		bi->pfd[1].fd = -1;
+		for (i = 1; i < bi->pcnt; i++)
+			bi->pfd[i].fd = -1;
 	} else
 		iprint("Created Bchannel tread %d\n", (int)bi->tid);
 	return ret;
@@ -437,7 +536,7 @@ static int CreateBchannelThread(struct BInstance *bi)
 
 static int StopBchannelThread(struct BInstance *bi)
 {
-	int ret;
+	int ret, i;
 	unsigned char cmd;
 
 	if (bi->running) {
@@ -453,7 +552,9 @@ static int StopBchannelThread(struct BInstance *bi)
 		close(bi->cpipe[0]);
 		close(bi->cpipe[1]);
 		bi->pfd[0].fd = -1;
-		bi->pfd[1].fd = -1;
+		for (i = 1; i < bi->pcnt; i++)
+			bi->pfd[i].fd = -1;
+		bi->pcnt = 0;
 		bi->cpipe[0] = -1;
 		bi->cpipe[1] = -1;
 	}
@@ -496,11 +597,15 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, enum BType btype)
 		bi->from_up = ncciB3Data;
 		break;
 #ifdef USE_SOFTFAX
-	case  BType_Fax:
+	case BType_Fax:
 		bi->from_down = FaxRecvBData;
 		bi->from_up = FaxB3Message;
 		break;
 #endif
+	case BType_tty:
+		bi->from_down = recvBdirect;
+		bi->from_up = ncciB3Data;
+		break;
 	default:
 		eprint("Error unnkown BType %d\n",  btype);
 		close(sk);
@@ -538,10 +643,33 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, enum BType btype)
 				bi->UpId = 0;
 				bi->DownId = 0;
 			}
-		} else {
-			ret = CreateBchannelThread(bi);
+		} else if (btype == BType_Fax) {
+			ret = CreateBchannelThread(bi, 2);
 			if (ret < 0) {
-				eprint("Error while creating B-channel thread)\n");
+				eprint("Error while creating B%d-channel thread\n", bi->nr);
+				close(sk);
+				bi->fd = -1;
+				bi->lp = NULL;
+			} else {
+				ret = 0;
+				bi->UpId = 0;
+				bi->DownId = 0;
+			}
+		} else if (btype == BType_tty) {
+			ret = Create_tty(bi);
+			if (ret < 0) {
+				eprint("Error while creating B%d-channel tty\n", bi->nr);
+				close(sk);
+				bi->fd = -1;
+				bi->lp = NULL;
+				return ret;
+			} else {
+				bi->pfd[2].fd = bi->tty;
+				bi->pfd[2].events = POLLIN | POLLPRI;
+				ret = CreateBchannelThread(bi, 3);
+			}
+			if (ret < 0) {
+				eprint("Error while creating B%d-channel thread\n", bi->nr);
 				close(sk);
 				bi->fd = -1;
 				bi->lp = NULL;
@@ -570,6 +698,11 @@ int CloseBInstance(struct BInstance *bi)
 			StopBchannelThread(bi);
 			break;
 #endif
+		case BType_tty:
+			StopBchannelThread(bi);
+			if (bi->tty > -1)
+				close(bi->tty);
+			bi->tty = -1;
 		default:
 			break;
 		}
@@ -915,6 +1048,70 @@ static void misdn_manufacturer_req(int fd, struct mc_buf *mc)
 		eprint("error send %d/%d  - %s\n", ret, 10, strerror(errno));
 }
 
+static void mIcapi_userflag(int fd, int idx, struct mc_buf *mc)
+{
+	int ret;
+	struct mApplication *appl = pollinfo[idx].data;
+	uint32_t sf, cf, uf = 0xffffffff;
+
+	CAPIMSG_SETSUBCOMMAND(mc->rb, CAPI_CONF);
+	capimsg_setu16(mc->rb, 0, 12);
+	if (appl) {
+		uf = appl->UserFlags;
+		sf = CAPIMSG_U32(mc->rb, 8);
+		cf = CAPIMSG_U32(mc->rb, 12);
+		if (cf)
+			uf &= ~cf;
+		if (sf)
+			uf |= sf;
+		iprint("UserFlags old=%x new=%x\n", appl->UserFlags, uf);
+		appl->UserFlags = uf;
+	}
+	capimsg_setu32(mc->rb, 8, uf);
+	ret = send(fd, mc->rb, 12, 0);
+	if (ret != 12)
+		eprint("error send %d/%d  - %s\n", ret, 12, strerror(errno));
+}
+
+static void mIcapi_ttyname(int fd, int idx, struct mc_buf *mc)
+{
+	int ret, ml, l = 0;
+	struct mApplication *appl = pollinfo[idx].data;
+	struct lPLCI *lp;
+	uint32_t ncci = 0;
+	char name[80];
+
+	CAPIMSG_SETSUBCOMMAND(mc->rb, CAPI_CONF);
+	if (appl) {
+		ncci = CAPIMSG_U32(mc->rb, 8);
+		ml = CAPIMSG_U32(mc->rb, 12);
+		if (appl->UserFlags & CAPIFLAG_HIGHJACKING) {
+			lp = get_lPLCI4plci(appl, ncci);
+			if (lp->BIlink && lp->BIlink->tty > -1) {
+				ret = ptsname_r(lp->BIlink->tty, name, 80);
+				if (ret)
+					eprint("NCCI %06x: error to get ptsname for %d - %s\n",
+						ncci, lp->BIlink->tty, strerror(errno));
+				else
+					l = strlen(name);
+			} else
+				eprint("NCCI %06x: do not find lPLCI for NCCI\n", ncci);
+		}
+	}
+	if (l >= ml)
+		l = 0;
+	if (l) {
+		iprint("NCCI %06x: ttyname set to %s\n", ncci, name);
+		memcpy(&mc->rb[8], name, l);
+	} else
+		wprint("NCCI %06x: ttyname requested but not available\n", ncci);
+	mc->rb[8 + l] = 0;
+	capimsg_setu16(mc->rb, 0, l + 8);
+	ret = send(fd, mc->rb, l + 8, 0);
+	if (ret != l + 8)
+		eprint("error send %d/%d  - %s\n", ret, 12, strerror(errno));
+}
+
 static int main_recv(int fd, int idx)
 {
 	int ret, len, cmd, dl;
@@ -979,6 +1176,12 @@ static int main_recv(int fd, int idx)
 		break;
 	case MIC_MANUFACTURER_REQ:
 		misdn_manufacturer_req(fd, mc);
+		break;
+	case MIC_USERFLAG_REQ:
+		mIcapi_userflag(fd, idx, mc);
+		break;
+	case MIC_TTYNAME_REQ:
+		mIcapi_ttyname(fd, idx, mc);
 		break;
 	default:
 		if (pollinfo[idx].type == PIT_Application)
@@ -1236,6 +1439,7 @@ int main(int argc, char *argv[])
 			pc->BInstances[j].nr = j;
 			pc->BInstances[j].pc = pc;
 			pc->BInstances[j].fd = -1;
+			pc->BInstances[j].tty = -1;
 			sem_init(&pc->BInstances[j].wait, 0, 0);
 		}
 		pc->profile.ncontroller = i + 1;

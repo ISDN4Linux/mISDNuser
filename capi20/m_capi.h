@@ -61,7 +61,8 @@ typedef int (BDataTrans_t)(struct BInstance *, struct mc_buf *);
 enum BType {
 	BType_None = 0,
 	BType_Direct = 1,
-	BType_Fax = 2
+	BType_Fax = 2,
+	BType_tty = 3
 };
 
 struct BInstance {
@@ -69,6 +70,7 @@ struct BInstance {
 	int			usecnt;
 	int			proto;
 	int			fd;
+	int			tty;
 	enum BType		type;
 	uint16_t		DownId;	/* Ids for send down messages */
 	uint16_t		UpId;	/* Ids for send up messages */
@@ -78,7 +80,8 @@ struct BInstance {
 	BDataTrans_t		*from_down;
 	BDataTrans_t		*from_up;
 	pthread_t		tid;
-	struct pollfd		pfd[2];
+	struct pollfd		pfd[4];
+	int			pcnt;
 	int			cpipe[2];
 	sem_t			wait;
 	unsigned int		running:1;
@@ -154,6 +157,7 @@ struct mApplication {
 	int			MaxB3Con;
 	int			MaxB3Blk;
 	int			MaxB3Size;
+	uint32_t		UserFlags;
 };
 
 struct mApplication *RegisterApplication(uint16_t, uint32_t, uint32_t, uint32_t);
@@ -217,6 +221,7 @@ struct mNCCI *getNCCI4addr(struct lPLCI *, uint32_t, int);
 void lPLCIDelNCCI(struct mNCCI *);
 struct mNCCI *ConnectB3Request(struct lPLCI *, struct mc_buf *);
 void B3ReleaseLink(struct lPLCI *, struct BInstance *);
+struct lPLCI *get_lPLCI4plci(struct mApplication *, uint32_t);
 
 #define GET_NCCI_EXACT		1
 #define GET_NCCI_ONLY_PLCI	2
@@ -265,6 +270,7 @@ struct mNCCI {
 	unsigned char		up_header[30];
 	unsigned int		dtmflisten:1;
 	unsigned int		l1direct:1;
+	unsigned int		l1trans:1;
 	unsigned int		l2trans:1;
 	unsigned int		l3trans:1;
 	unsigned int		dlbusy:1;
@@ -361,6 +367,11 @@ void mCapi_message2str(struct mc_buf *);
 #define CAPIMSG_REQ_FLAGS(m)		(m[20] | (m[21]<<8))
 
 #define CAPI_B3_DATA_IND_HEADER_SIZE	((4 == sizeof(void *)) ? 22 : 30)
+
+
+#define CAPIFLAG_HIGHJACKING	1
+
+#define CAPI_DATA_TTY		0xe0
 
 /* some helper */
 static inline int capiEncodeWord(unsigned char *p, uint16_t i)

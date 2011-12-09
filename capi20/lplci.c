@@ -1642,6 +1642,7 @@ static int lPLCILinkUp(struct lPLCI *lp)
 	int proto = -1, ret = 0, act_l1;
 	struct mISDNhead mh;
 	enum BType btype = BType_None;
+	struct mApplication *ap = lp->lc->Appl;
 
 	mh.id = 1;
 	mh.prim = 0;
@@ -1716,6 +1717,9 @@ static int lPLCILinkUp(struct lPLCI *lp)
 	if (ret)
 		return ret;
 
+	if (ap->UserFlags & CAPIFLAG_HIGHJACKING) {
+		btype = BType_tty;
+	}
 	dprint(MIDEBUG_PLCI, "lPLCILinkUp B1(%x) B2(%x) B3(%x) ch(%d) proto(%x)\n",
 	       lp->Bprotocol.B1, lp->Bprotocol.B2, lp->Bprotocol.B3, lp->chid.nr, proto);
 

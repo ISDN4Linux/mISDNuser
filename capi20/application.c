@@ -175,6 +175,18 @@ void SendCmsgAnswer2Application(struct mApplication *appl, struct mc_buf *mc, __
 	SendCmsg2Application(appl, mc);
 }
 
+struct lPLCI *get_lPLCI4plci(struct mApplication *appl, uint32_t id)
+{
+	struct lController *lc;
+	struct mPLCI *plci;
+
+	lc = get_lController(appl, id & 0x7f);
+	if (!lc)
+		return NULL;
+	plci = getPLCI4Id(lc->Contr, id & 0xFFFF);
+	return get_lPLCI4Id(plci, appl->AppId);
+}
+
 #define CapiFacilityNotSupported		0x300b
 
 static int FacilityMessage(struct mApplication *appl, struct pController *pc, struct mc_buf *mc)
