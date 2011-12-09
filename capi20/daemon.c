@@ -544,7 +544,9 @@ static int StopBchannelThread(struct BInstance *bi)
 		cmd = 42;
 		if (bi->waiting)
 			sem_post(&bi->wait);
-		write(bi->cpipe[1], &cmd, 1);
+		ret = write(bi->cpipe[1], &cmd, 1);
+		if (ret != 1)
+			wprint("Error on write control ret=%d - %s\n", ret, strerror(errno));
 		ret = pthread_join(bi->tid, NULL);
 		if (ret < 0)
 			wprint("Error on pthread_join - %s\n", strerror(errno));
