@@ -21,9 +21,5 @@ CLEANFILES = *~
 MISDN_SOCKET_DIR = /var/run/mISDNcapid
 
 install-exec-hook:
-	mkdir -p $(DESTDIR)$(MISDN_SOCKET_DIR)
-	chmod 775 $(DESTDIR)$(MISDN_SOCKET_DIR)
-	chgrp $(MISDN_CAPI_GROUP) $(DESTDIR)$(MISDN_SOCKET_DIR)
-	chgrp $(MISDN_CAPI_GROUP) $(DESTDIR)$(sbindir)/mISDNcapid
-	chmod 2755 $(DESTDIR)$(sbindir)/mISDNcapid
+	install  -d $(DESTDIR)$(MISDN_SOCKET_DIR)
 
