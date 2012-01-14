@@ -230,6 +230,8 @@ close_layer3(struct mlayer3 *ml3)
 	close(l3->l2sock);
 	close(l3->mdev);
 	release_l3(l3);
+	if (ml3->devinfo)
+		free(ml3->devinfo);
 	free(l3);
 }
 
