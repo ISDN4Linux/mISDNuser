@@ -915,7 +915,7 @@ layer3_thread(void *arg)
 			if (ret < 0) {
 				eprint("%s read socket error %s\n", __FUNCTION__, strerror(errno));
 			} else if (ret < MISDN_HEADER_LEN) {
-					eprint("%s read socket shor frame\n", __FUNCTION__);
+					eprint("%s read socket short frame\n", __FUNCTION__);
 			} else {
 				mb->len = ret;
 				msg_pull(mb, MISDN_HEADER_LEN);
