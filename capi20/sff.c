@@ -35,7 +35,6 @@ struct sff_page {
 	int			CStrip_size;
 	unsigned char		*sp;
 	unsigned char		*RStrip;
-	int			RStrip_size;
 	int			lines;
 	int			line_size; /* size in bytes to hold 1 line - linelen is pixel ! */
 	int			size;
@@ -503,7 +502,7 @@ static int sff_put_header(struct sff_state *sff)
 
 int SFF_WriteTiff(struct sff_state *sff, char *name)
 {
-	struct sff_page *pg = sff->firstpage;
+	struct sff_page *next, *pg = sff->firstpage;
 	TIFF *tf;
 	int compression_out = COMPRESSION_CCITTFAX3;
 	int fillorder_out = FILLORDER_MSB2LSB;
@@ -582,6 +581,14 @@ int SFF_WriteTiff(struct sff_state *sff, char *name)
 		pg = pg->next;
 	}
 	TIFFClose(tf);
+	pg = sff->firstpage;
+	while (pg) {
+		if (pg->RStrip)
+			free(pg->RStrip);
+		next = pg->next;
+		free(pg);
+		pg = next;
+	}
 	return 0;
 }
 

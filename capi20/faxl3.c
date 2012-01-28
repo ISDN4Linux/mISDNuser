@@ -445,7 +445,7 @@ static int InitFax(struct fax *fax)
 	int ret = 0, l;
 	unsigned char *p;
 
-	fax->fax = fax_init(NULL, fax->outgoing);
+	fax->fax = fax_init(fax->fax, fax->outgoing);
 	if (fax->fax) {
 		fax_set_transmit_on_idle(fax->fax, TRUE);
 		fax_set_tep_mode(fax->fax, TRUE);
@@ -562,13 +562,14 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 	int ret, val;
 	time_t cur_time;
 	struct mISDN_ctrl_req creq;
-	
+
 
 	nf = calloc(1, sizeof(*nf));
 	if (nf) {
 		nf->file_d = -2;
 		nf->ncci = ncciCreate(bi->lp);
 		if (nf->ncci) {
+			dprint(MIDEBUG_NCCI, "NCCI %06x: create\n", nf->ncci->ncci);
 			nf->binst = bi;
 			nf->lplci = bi->lp;
 			nf->outgoing = nf->lplci->PLCI->outgoing;
@@ -628,16 +629,24 @@ void mFaxFree(struct fax *fax)
 {
 	int ret;
 
-	dprint(MIDEBUG_NCCI, "Free fax data structs:%s%s%s\n",
+	dprint(MIDEBUG_NCCI, "Free fax data structs:%s%s%s%s\n",
 		fax->fax ? " SPANDSP" : "",
 		fax->ncci ? " NCCI" : "",
+		fax->sff.data ? " SFF data" : "",
 		fax->b3data ? " B3" :"");
 	if (fax->fax)
-		fax_release(fax->fax);
+		fax_free(fax->fax);
 	fax->fax = NULL;
 	if (fax->ncci)
 		ncciReleaseLink(fax->ncci);
 	fax->ncci = NULL;
+	if (fax->sff.data) {
+		dprint(MIDEBUG_NCCI, "SFF data:%p fax->b3data %p\n",
+			fax->sff.data, fax->b3data);
+		if (fax->sff.data && fax->b3data != fax->sff.data)
+			free(fax->sff.data);
+		fax->sff.data = NULL;
+	}
 	if (fax->b3data) {
 		if (fax->b3data_mapped)
 			munmap(fax->b3data, fax->b3data_size);
@@ -732,7 +741,8 @@ static void FaxSendDown(struct fax *fax, int ind)
 	pthread_mutex_unlock(&ncci->lock);
 	l = DEFAULT_PKT_SIZE;
 	ret = fax_tx(fax->fax, wav_buf, l);
-	dprint(MIDEBUG_NCCI_DATA, "got %d/%d samples from faxmodem\n", ret, l);
+	dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: got %d/%d samples from faxmodem(%p)\n",
+		ncci->ncci, ret, l, fax->fax);
 
 	w = wav_buf;
 	p = sbuf;
@@ -768,8 +778,8 @@ static void FaxSendDown(struct fax *fax, int ind)
 			ncci->xmit_handles[ncci->oidx].sent, ncci->xmit_handles[ncci->oidx].dlen,
 			ind ? "ind" : "cnf");
 #else
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send down %d bytes type %s id %d sent %d\n",
-			ncci->ncci, ret, _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, ret);
+		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send down %d bytes type %s id %d sent %d - %p\n",
+			ncci->ncci, ret, _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, ret, fax->fax);
 #endif
 #ifdef USE_DLBUSY
 	ncci->dlbusy = 1;
@@ -789,19 +799,23 @@ static int FaxDataInd(struct fax *fax, struct mc_buf *mc)
 	int16_t wav_buf[MAX_DATA_SIZE];
 	int16_t *w;
 	unsigned char *p;
+	fax_state_t *fst;
 
 	hh = (struct mISDNhead *)mc->rb;
 	dlen = mc->len - sizeof(*hh);
 	pthread_mutex_lock(&ncci->lock);
-	if (!ncci->BIlink) {
+	if ((!ncci->BIlink) || (!fax->fax)) {
 		pthread_mutex_unlock(&ncci->lock);
-		wprint("NCCI %06x: : frame with %d bytes dropped BIlink gone\n", ncci->ncci, dlen);
+		wprint("NCCI %06x: frame with %d bytes dropped Blink(%p) or sandsp fax(%p) gone\n",
+			ncci->ncci, dlen, ncci->BIlink, fax->fax);
 		return -EINVAL;
-	}
+	} else
+		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: fax(%p)\n", ncci->ncci, fax->fax);
+	fst = fax->fax;
 	pthread_mutex_unlock(&ncci->lock);
 
 	if (dlen > MAX_DATA_SIZE) {
-		wprint("NCCI %06x: : frame overflow %d/%d - truncated\n", ncci->ncci, dlen, MAX_DATA_SIZE);
+		wprint("NCCI %06x: frame overflow %d/%d - truncated\n", ncci->ncci, dlen, MAX_DATA_SIZE);
 		dlen =  MAX_DATA_SIZE;
 	}
 	w = wav_buf;
@@ -811,11 +825,11 @@ static int FaxDataInd(struct fax *fax, struct mc_buf *mc)
 	for (i = 0; i < dlen; i++)
 		*w++ = alaw2lin[*p++];
 
-	ret = fax_rx(fax->fax, wav_buf, dlen);
-	dprint(MIDEBUG_NCCI_DATA, "send %d samples to faxmodem ret %d\n", dlen, ret);
+	ret = fax_rx(fst, wav_buf, dlen);
+	dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send %d samples to faxmodem(%p)ret %d\n", ncci->ncci, dlen, fax->fax, ret);
 #ifdef USE_DLBUSY
 	/* try to get same amount from faxmodem */
-	ret = fax_tx(fax->fax, wav_buf, dlen);
+	ret = fax_tx(fst, wav_buf, dlen);
 	dprint(MIDEBUG_NCCI_DATA, "got %d/%d samples from faxmodem\n", ret, dlen);
 
 	w = wav_buf;
@@ -848,7 +862,7 @@ static int FaxDataInd(struct fax *fax, struct mc_buf *mc)
 	if (ret)
 		FaxSendDown(fax, 1);
 #else
-	pthread_mutex_unlock(&ncci->lock);
+	free_mc_buf(mc);
 	if (fax->startdownlink) {
 		fax->startdownlink = 0;
 		FaxSendDown(fax, 1);
@@ -895,9 +909,11 @@ static void FaxDataConf(struct fax *fax, struct mc_buf *mc)
 	ncci->dlbusy = 0;
 	free_mc_buf(mc);
 	pthread_mutex_unlock(&ncci->lock);
-#endif 
 	FaxSendDown(fax, 0);
-	return;
+#else
+	free_mc_buf(mc);
+	FaxSendDown(fax, 0);
+#endif
 }
 
 static void FaxDataResp(struct fax *fax, struct mc_buf *mc)
@@ -1274,7 +1290,7 @@ int FaxRecvBData(struct BInstance *bi, struct mc_buf *mc)
 				return -ENOMEM;
 			}
 		}
-		ret = 0;
+		ret = 1;
 		break;
 	case PH_DEACTIVATE_IND:
 		if (!fax) {
