@@ -41,6 +41,13 @@ struct mqueue {
 	int		len;
 };
 
+#ifdef MEMLEAK_DEBUG
+struct lhead {
+	struct lhead *prev;
+	struct lhead *next;
+};
+#endif
+
 struct mbuffer {
 	struct mbuffer		*prev;
 	struct mbuffer		*next;
@@ -58,6 +65,11 @@ struct mbuffer {
 	int			len;
 	struct l3_head		l3h;
 	struct l3_msg		l3;
+#ifdef MEMLEAK_DEBUG
+	struct lhead 		Alist;
+	char			d_fn[80];
+	int			d_ln;
+#endif
 } __attribute__((__may_alias__));
 
 #define	MBUFFER_DATA_SIZE	280

@@ -6,7 +6,7 @@ QMISDNWATCH_S = res/16x16-bullet-gray.png res/16x16-bullet-green.png \
 		src/mainWindow.cpp src/mainWindow.h src/misdn.cpp \
 		src/misdn.h src/Ql1logThread.cpp src/Ql1logThread.h
 
-AM_CPPFLAGS = -I$(top_srcdir)/include
+AM_CPPFLAGS = -I$(top_srcdir)/include $(_MEMLEAKDEBUG)
 
 CLEANFILES = *~ src/*~ res/*~ Makefile.qt moc_*.cpp qrc_icons.cpp
 

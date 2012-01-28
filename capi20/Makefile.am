@@ -14,7 +14,7 @@ else
 	_USE_SOFTFAX =
 endif
 
-AM_CPPFLAGS = -I$(top_srcdir)/include -Werror -Wall $(_USE_SOFTFAX)
+AM_CPPFLAGS = -I$(top_srcdir)/include -Werror -Wall $(_USE_SOFTFAX) $(_MEMLEAKDEBUG)
 
 CLEANFILES = *~
 

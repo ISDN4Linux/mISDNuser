@@ -25,11 +25,6 @@
 #include <errno.h>
 #include <mISDN/mISDNcompat.h>
 
-#undef MEMLEAK_DEBUG
-#if MEMLEAKDEBUG_COMPILE
-#define MEMLEAK_DEBUG 1
-#endif
-
 #define L3_DEB_WARN	0x00000001
 #define L3_DEB_PROTERR	0x00000002
 #define L3_DEB_STATE	0x00000004

@@ -26,11 +26,6 @@ extern "C" {
 #include <pthread.h>
 #include <mISDN/mISDNcompat.h>
 
-#undef MEMLEAK_DEBUG
-#if MEMLEAKDEBUG_COMPILE
-#define MEMLEAK_DEBUG 1
-#endif
-
 struct l3_head {
 	unsigned char	type;
 	unsigned char	crlen;

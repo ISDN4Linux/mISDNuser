@@ -7,6 +7,6 @@ misdn_rename_SOURCES = rename.c
 misdn_cleanl2_SOURCES = cleanl2.c
 misdn_E1test_SOURCES = E1test.c
 
-AM_CPPFLAGS = -Wall -I$(top_srcdir)/include
+AM_CPPFLAGS = -Wall -I$(top_srcdir)/include $(_MEMLEAKDEBUG)
 
 CLEANFILES = *~

@@ -1,3 +1,5 @@
+export _MEMLEAKDEBUG
+
 ASN1_SRC =	asn1/asn1.c asn1/asn1_enc.c asn1/asn1_generic.c
 
 SUPPSERV_SRC =	suppserv/aoc.c suppserv/basic_service.c suppserv/component.c \
@@ -18,6 +20,6 @@ lib_LTLIBRARIES = libmisdn.la
 libmisdn_la_SOURCES = $(MISC_SRC) $(LAYER3_SRC) $(INCLUDE_SRC) $(ASN1_SRC) $(SUPPSERV_SRC)
 libmisdn_la_LDFLAGS = -version-info 1:0:0
 
-AM_CPPFLAGS = -I$(top_srcdir)/include -Iinclude $(__MEMLEAKDEBUG)
+AM_CPPFLAGS = -I$(top_srcdir)/include -Iinclude $(_MEMLEAKDEBUG)
 
 CLEANFILES = *~ */*~
