@@ -35,7 +35,7 @@
 #include "../lib/include/fsm.h"
 #include "../lib/include/debug.h"
 
-/* SOme globals */
+/* Some globals */
 extern int	KeepTemporaryFiles;
 extern char	*TempDirectory;
 
@@ -90,6 +90,7 @@ struct BInstance {
 
 int OpenBInstance(struct BInstance *, struct lPLCI *, enum BType);
 int CloseBInstance(struct BInstance *);
+int ReleaseBchannel(struct BInstance *);
 
 struct capi_profile {
 	uint16_t ncontroller;	/* number of installed controller */

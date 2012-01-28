@@ -160,8 +160,25 @@ struct lController *addlController(struct mApplication *app, struct pController 
 	return lc;
 }
 
-void listenDestr(struct lController *lc)
+void rm_lController(struct lController *lc)
 {
+	struct lController *cur, *old;
+
+	if (lc->Contr) {
+		cur = lc->Contr->lClist;
+		old = cur;
+		while (cur) {
+			if (cur == lc) {
+				old->nextC = cur->nextC;
+				break;
+			}
+			old = cur;
+			cur = cur->nextC;
+		}
+		if (lc == lc->Contr->lClist)
+			lc->Contr->lClist = lc->nextC;
+	}
+	free(lc);
 }
 
 int listenRequest(struct lController *lc, struct mc_buf *mc)

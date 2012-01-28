@@ -36,6 +36,18 @@
 #include "../m_capi_sock.h"
 
 
+static FILE *mIm_debug = NULL;
+static char mIm_debug_file[128];
+
+
+#define mId_print(fmt, ...)	do { \
+					if (mIm_debug) { \
+						fprintf(mIm_debug, fmt, ##__VA_ARGS__); \
+						fflush(mIm_debug); \
+					} \
+				} while(0)
+
+
 /**
  * \brief Create a socket to mISDNcapid
  * \return socket number
@@ -149,8 +161,14 @@ static void misdnWriteCapiTrace(int nSend, unsigned char *pnBuffer, int nLength,
 static unsigned misdnIsInstalled(void)
 {
 	unsigned nHandle;
+	int pid;
 
 	nHandle = misdnOpenSocket();
+	if (nHandle >= 0 && !mIm_debug) {
+		pid = getpid();
+		sprintf(mIm_debug_file, "/tmp/mIm_debug_%05d.log", pid);
+		mIm_debug = fopen(mIm_debug_file, "wt");
+	}
 	return nHandle;
 }
 
@@ -193,6 +211,7 @@ static unsigned misdnRegister(unsigned nMaxB3Connection, unsigned nMaxB3Blks, un
 	if (ret == CapiNoError) {
 		/* No error set it to pnApplId */
 		*pnApplId = ApplId;
+		mId_print("%s: fd=%d ApplId=%d\n", __func__, nSock, ApplId);
 	} else {
 		/* error occured, close socket give back ApplId and return -1 */
 		capi_freeapplid(ApplId);
@@ -214,9 +233,9 @@ static unsigned misdnPutMessage(int nSock, unsigned nApplId, unsigned char *pnMs
 	int nLen = CAPIMSG_LEN(pnMsg);
 	int nCommand = CAPIMSG_COMMAND(pnMsg);
 	int nSubCommand = CAPIMSG_SUBCOMMAND(pnMsg);
-	int ret, tot, dlen;
+	int ret, tot, dlen = 0, d = 0;
 	uint16_t dh;
-	void *dp;
+	void *dp = NULL;
 	struct msghdr 	msg;
 	struct iovec	iv[2];
 	
@@ -228,6 +247,7 @@ static unsigned misdnPutMessage(int nSock, unsigned nApplId, unsigned char *pnMs
 				dp = (void *)((unsigned long)CAPIMSG_U32(pnMsg, 12));
 			else
 				dp = (void *)((unsigned long)CAPIMSG_U64(pnMsg, 22));
+			d = *((unsigned char *)dp);
 			iv[0].iov_base = pnMsg;
 			iv[0].iov_len = nLen;
 			iv[1].iov_base = dp;
@@ -248,10 +268,11 @@ static unsigned misdnPutMessage(int nSock, unsigned nApplId, unsigned char *pnMs
 		ret = send(nSock, pnMsg, nLen, 0);
 		tot = nLen;
 	}
-
-	if (tot != ret)
+	mId_print("%s: %s fd=%d len=%d dp=%p dlen=%d tot=%d d=%02x ret=%d (%d - %s)\n", __func__, capi20_cmd2str(nCommand, nSubCommand),
+		nSock, nLen, dp, dlen, tot, d, ret, errno, strerror(errno));
+	if (tot != ret) {
 		ret = CapiMsgOSResourceErr;
-	else
+	} else
 		ret = CapiNoError;
 	return ret;
 }
@@ -274,6 +295,7 @@ static unsigned misdnGetMessage(int nSock, unsigned nApplId, unsigned char **ppn
 
 	/* try to get a new buffer from queue */
 	if ((*ppnBuffer = pnBuffer = (unsigned char *)capi_get_buffer(nApplId, &nBufSize, &nOffset)) == 0) {
+		mId_print("%s: no pnBuffer\n", __func__);
 		return CapiMsgOSResourceErr;
 	}
 

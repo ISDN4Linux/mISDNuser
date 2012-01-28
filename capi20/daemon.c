@@ -21,6 +21,7 @@
 #include <poll.h>
 #include <mISDN/q931.h>
 #include <string.h>
+#include <signal.h>
 #include "m_capi.h"
 #include "mc_buffer.h"
 #include "m_capi_sock.h"
@@ -28,7 +29,6 @@
 #ifdef USE_SOFTFAX
 #include "g3_mh.h"
 #endif
-/* should be moved to capi_debug.h */
 #include <capi_debug.h>
 
 /* for some reasons when _XOPEN_SOURCE 600 was defined lot of other things are not longer
@@ -44,8 +44,11 @@ extern int ptsname_r(int fd, char *buf, size_t buflen);
 #define DEF_CONFIG_FILE	"/etc/capi20.conf"
 #endif
 
+#define MISDNCAPID_VERSION	"0.9"
+
 typedef enum {
 	PIT_None = 0,
+	PIT_Control,
 	PIT_mISDNmain,
 	PIT_CAPImain,
 	PIT_NewConn,
@@ -58,25 +61,28 @@ struct pollInfo {
 	void		*data;
 };
 
-static struct pollfd *mainpoll;
-static struct pollInfo *pollinfo;
+#define MI_CONTROL_SHUTDOWN	0x01000000
+
+static struct pollfd *mainpoll = NULL;
+static struct pollInfo *pollinfo = NULL;
 static int mainpoll_max = 0;
 static int mainpoll_size = 0;
 #define MAINPOLL_LIMIT 256
 
 static char def_config[] = DEF_CONFIG_FILE;
-static char *config_file;
+static char *config_file = NULL;
 static unsigned int debugmask = 0;
 static int do_daemon = 1;
-static int mIsock;
-static int mCsock;
-static struct pController *mI_Controller;
-static int mI_count;
+static int mIsock = 0;
+static int mCsock = 0;
+static int mIControl[2] = {-1, -1};
+static struct pController *mI_Controller = NULL;
+static int mI_count= 0;
 static FILE *DebugFile = NULL;
 static char *DebugFileName = NULL;
-int KeepTemporaryFiles;
+int KeepTemporaryFiles = 0;
 static char _TempDirectory[80];
-char *TempDirectory;
+char *TempDirectory = NULL;
 
 #define MISDND_TEMP_DIR	"/tmp"
 
@@ -90,6 +96,8 @@ static void usage(void)
 	fprintf(stderr, "   -D, --debug-file <debug file>         use debug file (default stdout/stderr)\n");
 	fprintf(stderr, "   -f, --foreground                      run in forground, not as daemon\n");
 	fprintf(stderr, "   -k, --keeptemp                        do not delete temporary files (e.g. TIFF for fax)\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "mISDNcapid Version %s\n", MISDNCAPID_VERSION);
 	fprintf(stderr, "\n");
 }
 
@@ -238,16 +246,35 @@ err:
 	return nr_controller;
 }
 
+/**********************************************************************
+Signal handler for clean shutdown
+***********************************************************************/
+static void
+termHandler(int sig)
+{
+	int ret, contr = MI_CONTROL_SHUTDOWN | sig;
+
+	iprint("Terminating on signal %d -- shutdown mISDNcapid\n", sig);
+
+	ret = write(mIControl[1], &contr, sizeof(contr));
+	if (ret != sizeof(contr))
+		eprint("Error sending shutdown to mainloop after signal %d - %s\n", sig, strerror(errno));
+	return;
+}
+
 static int add_mainpoll(int fd, pollInfo_t pit)
 {
 	struct pollfd *newmp;
 	struct pollInfo *newinfo;
 	int i, n;
 
-	for (i = 0; i < mainpoll_max; i++) {
-		if (mainpoll[i].fd == -1)
-			break;
-	}
+	if (mainpoll_max) {
+		for (i = 0; i < mainpoll_max; i++) {
+			if (mainpoll[i].fd == -1)
+				break;
+		}
+	} else
+		i = 0;
 	if (i == mainpoll_max) {
 		if (mainpoll_max < mainpoll_size)
 			mainpoll_max++;
@@ -256,26 +283,26 @@ static int add_mainpoll(int fd, pollInfo_t pit)
 				n = mainpoll_size * 2;
 			else
 				n = 4;
-			newmp = calloc(n, sizeof(*newmp));
+			newmp = calloc(n, sizeof(struct pollfd));
 			if (!newmp) {
 				eprint("no memory for %d mainpoll\n", n);
 				return -1;
 			}
-			newinfo = calloc(n, sizeof(*newinfo));
+			newinfo = calloc(n, sizeof(struct pollInfo));
 			if (!newinfo) {
 				free(newmp);
 				eprint("no memory for %d pollinfo\n", n);
 				return -1;
 			}
-			mainpoll_size = n;
 			if (mainpoll) {
-				memcpy(newmp, mainpoll, mainpoll_size * sizeof(*newmp));
+				memcpy(newmp, mainpoll, mainpoll_size * sizeof(struct pollfd));
 				free(mainpoll);
 			}
 			if (pollinfo) {
-				memcpy(newinfo, pollinfo, mainpoll_size * sizeof(*newinfo));
+				memcpy(newinfo, pollinfo, mainpoll_size * sizeof(struct pollInfo));
 				free(pollinfo);
 			}
+			mainpoll_size = n;
 			mainpoll = newmp;
 			pollinfo = newinfo;
 			mainpoll_max++;
@@ -318,6 +345,63 @@ static int del_mainpoll(int fd)
 		}
 	}
 	return -1;
+}
+
+void clean_all(void)
+{
+	int i, j;
+
+	for (i = 0; i < mainpoll_max; i++) {
+		switch (pollinfo[i].type) {
+		case PIT_Control:
+			if (mIControl[0] >= 0) {
+				close(mIControl[0]);
+				mIControl[0] = -1;
+			}
+			if (mIControl[1] >= 0) {
+				close(mIControl[1]);
+				mIControl[1] = -1;
+			}
+			break;
+		case PIT_Application:
+			ReleaseApplication(pollinfo[i].data);
+			pollinfo[i].data = NULL;
+			break;
+		case PIT_Bchannel:
+			ReleaseBchannel(pollinfo[i].data);
+			break;
+		case PIT_NewConn:
+			close(mainpoll[i].fd);
+			break;
+		case PIT_mISDNmain:
+		case PIT_CAPImain:
+		case PIT_None:
+			break;
+		}
+		mainpoll[i].fd = -1;
+		mainpoll[i].events = 0;
+		mainpoll[i].revents = 0;
+	}
+	mainpoll_max = 0;
+	mainpoll_size = 0;
+	free(pollinfo);
+	pollinfo = NULL;
+	free(mainpoll);
+	mainpoll = NULL;
+	for (i = 0; i < mI_count; i++) {
+		if (mI_Controller[i].l3) {
+			close_layer3(mI_Controller[i].l3);
+			mI_Controller[i].l3 = NULL;
+		}
+		for (j = 0; j < mI_Controller[i].BImax; j++) {
+			ReleaseBchannel(&mI_Controller[i].BInstances[j]);
+		}
+		free(mI_Controller[i].BInstances);
+		mI_Controller[i].BInstances = NULL;
+		while (mI_Controller[i].lClist)
+			rm_lController(mI_Controller[i].lClist);
+	}
+	mI_count = 0;
 }
 
 struct pController *get_cController(int cNr)
@@ -619,6 +703,9 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, enum BType btype)
 	addr.family = AF_ISDN;
 	addr.dev = bi->pc->mNr;
 	addr.channel = bi->nr;
+	/* not used but make valgrind happy */
+	addr.sapi = 0;
+	addr.tei = 0;
 
 	ret = bind(sk, (struct sockaddr *)&addr, sizeof(addr));
 	if (ret < 0) {
@@ -736,14 +823,18 @@ static int recvBchannel(struct BInstance *bi)
 	mc = alloc_mc_buf();
 	if (!mc)
 		return -ENOMEM;
-	if (!bi)
+	if (!bi) {
+		free_mc_buf(mc);
+		eprint("recvBchannel: but no BInstance assigned\n");
 		return -EINVAL;
+	}
 	ret = recv(bi->fd, mc->rb, MC_RB_SIZE, MSG_DONTWAIT);
 	if (ret < 0) {
 		wprint("Error on reading from %d errno %d - %s\n", bi->fd, errno, strerror(errno));
 		ret = -errno;
 	} else if (ret == 0) {
 		/* closed */
+		wprint("Nothing read - connection closed ?\n");
 		ret = -ECONNABORTED;
 	} else if (ret < 8) {
 		eprint("Short message read len %d (%02x%02x%02x%02x%02x%02x%02x%02x)\n",
@@ -764,16 +855,19 @@ static int recvBchannel(struct BInstance *bi)
 	return ret;
 }
 
-int ReleaseBchannel(int idx)
+int ReleaseBchannel(struct BInstance *bi)
 {
-	struct BInstance *bi;
-
-	bi = pollinfo[idx].data;
 	if (!bi)
 		return -1;
-	del_mainpoll(bi->fd);
-	close(bi->fd);
-	bi->fd = -1;
+	if (bi->fd >= 0) {
+		del_mainpoll(bi->fd);
+		close(bi->fd);
+		bi->fd = -1;
+	}
+	if (bi->tty >= 0) {
+		close(bi->tty);
+		bi->tty = -1;
+	}
 	return 0;
 }
 
@@ -849,8 +943,12 @@ static int l3_callback(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, s
 		       pc->profile.ncontroller, _mi_msg_type2str(cmd), cmd, pid, l3m, plci ? plci->plci : 0xffff);
 		ret = -EINVAL;
 	}
-	if (!ret && plci)
-		ret = plci_l3l4(plci, cmd, l3m);
+	if (!ret) {
+		if (plci)
+			ret = plci_l3l4(plci, cmd, l3m);
+		else
+			ret = 1; /* message need to be freed */
+	}
 	return ret;
 }
 
@@ -1202,7 +1300,7 @@ end:
 
 int main_loop(void)
 {
-	int res, ret, i, idx, error = 0;
+	int res, ret, i, idx, error = -1;
 	int running = 1;
 	int fd;
 	int nconn = -1;
@@ -1210,6 +1308,17 @@ int main_loop(void)
 	char buf[4096];
 	socklen_t alen;
 
+	ret = pipe(mIControl);
+	if (ret) {
+		eprint("error setup MasterControl pipe - %s\n", strerror(errno));
+		return errno;
+	}
+	ret = add_mainpoll(mIControl[0], PIT_Control);
+	if (ret < 0) {
+		eprint("Error while adding mIControl to mainpoll (mainpoll_max %d)\n", mainpoll_max);
+		return -1;
+	} else
+		iprint("mIControl added to idx %d\n", ret);
 	ret = add_mainpoll(mIsock, PIT_mISDNmain);
 	if (ret < 0) {
 		eprint("Error while adding mIsock to mainpoll (mainpoll_max %d)\n", mainpoll_max);
@@ -1226,8 +1335,12 @@ int main_loop(void)
 	while (running) {
 		ret = poll(mainpoll, mainpoll_max, -1);
 		if (ret < 0) {
-			wprint("Error on poll - %s\n", strerror(errno));
-			error = -errno;
+			if (errno == EINTR)
+				iprint("Received signal - continue\n");
+			else {
+				wprint("Error on poll errno=%d - %s\n", errno, strerror(errno));
+				error = -errno;
+			}
 			continue;
 		}
 		for (i = 0; i < mainpoll_max; i++) {
@@ -1240,7 +1353,7 @@ int main_loop(void)
 						res = recvBchannel(pollinfo[i].data);
 					} else if (mainpoll[i].revents == POLLHUP) {
 						dprint(MIDEBUG_POLL, "Bchannel socket %d closed\n", mainpoll[i].fd);
-						ReleaseBchannel(i);
+						ReleaseBchannel(pollinfo[i].data);
 					}
 					break;
 				case PIT_CAPImain:	/* new connect */
@@ -1297,6 +1410,15 @@ int main_loop(void)
 							dprint(MIDEBUG_POLL, "Deleted fd=%d from mainpoll\n", fd);
 					}
 					break;
+				case PIT_Control:
+					res = read(mainpoll[i].fd, &error, sizeof(error));
+					if (res == sizeof(error))
+						iprint("Pollevent for MasterControl read %x (%d bytes)\n", error, res);
+					else
+						eprint("Pollevent for MasterControl read error - %s\n", strerror(errno));
+					running = 0;
+					error = 0;
+					break;
 				default:
 					wprint("Unexpected poll event %x on fd %d type %d\n", mainpoll[i].revents,
 					       mainpoll[i].fd, pollinfo[i].type);
@@ -1308,6 +1430,7 @@ int main_loop(void)
 				break;
 		}
 	}
+	clean_all();
 	return error;
 }
 
@@ -1347,6 +1470,8 @@ static struct mi_ext_fn_s l3dbg = {
 	.prt_debug = my_lib_debug,
 };
 
+static struct sigaction mysig_act;
+
 int main(int argc, char *argv[])
 {
 	int ret, i, j, nb, c, exitcode = 1, ver, libdebug;
@@ -1374,6 +1499,8 @@ int main(int argc, char *argv[])
 	ver = init_layer3(4, &l3dbg);
 	mISDN_set_debug_level(libdebug);
 	iprint("Init mISDN lib version %x, debug = %x (%x)\n", ver, debugmask, libdebug);
+
+	mc_buffer_init();
 
 	snprintf(_TempDirectory, 80, "%s/mISDNd_XXXXXX", MISDND_TEMP_DIR);
 	TempDirectory = mkdtemp(_TempDirectory);
@@ -1534,17 +1661,46 @@ retry_Csock:
 	create_lin2alaw_table();
 	g3_gen_tables();
 #endif
+	/* setup signal handler */
+	memset(&mysig_act, 0, sizeof(mysig_act));
+	mysig_act.sa_handler = termHandler;
+	ret = sigaction(SIGTERM, &mysig_act, NULL);
+	if (ret) {
+		wprint("Error to setup signal handler for SIGTERM - %s\n", strerror(errno));
+	}
+	ret = sigaction(SIGHUP, &mysig_act, NULL);
+	if (ret) {
+		wprint("Error to setup signal handler for SIGHUP - %s\n", strerror(errno));
+	}
+	ret = sigaction(SIGINT, &mysig_act, NULL);
+	if (ret) {
+		wprint("Error to setup signal handler for SIGINT - %s\n", strerror(errno));
+	}
 	exitcode = main_loop();
 	free_ncci_fsm();
 	free_lPLCI_fsm();
 	free_listen();
+#ifdef USE_SOFTFAX
+	g3_destroy_tables();
+#endif
 errout:
+	mc_buffer_cleanup();
 	cleanup_layer3();
 	if (mCsock > -1)
 		close(mCsock);
 	close(mIsock);
 	if (mI_Controller)
 		free(mI_Controller);
+
 	unlink(MISDN_CAPI_SOCKET_PATH);
+	if (TempDirectory && !KeepTemporaryFiles) {
+		ret = rmdir(TempDirectory);
+		if (ret)
+			wprint("Error to remove TempDirectory:%s - %s\n", TempDirectory, strerror(errno));
+		else
+			iprint("Removed TempDirectory:%s\n", TempDirectory);
+	}
+	if (DebugFile)
+		fclose(DebugFile);
 	return exitcode;
 }

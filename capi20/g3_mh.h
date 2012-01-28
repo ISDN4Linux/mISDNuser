@@ -37,6 +37,7 @@ struct g3_mh_code {
 #define G3_CWTYPE_MAKEUP	1
 
 extern void g3_gen_tables(void);
+extern void g3_destroy_tables(void);
 
 struct g3_mh_line_s {
 	unsigned char	*line;

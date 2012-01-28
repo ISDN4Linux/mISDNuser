@@ -506,24 +506,16 @@ static void initNCCIHeaders(struct mNCCI *nc)
 	CAPIMSG_SETCOMMAND(nc->up_header, CAPI_DATA_B3);
 	CAPIMSG_SETSUBCOMMAND(nc->up_header, CAPI_IND);
 	CAPIMSG_SETCONTROL(nc->up_header, nc->ncci);
-	nc->up_msg.msg_name = NULL;
-	nc->up_msg.msg_namelen = 0;
+	memset(&nc->up_msg, 0, sizeof(nc->up_msg));
 	nc->up_msg.msg_iov = nc->up_iv;
 	nc->up_msg.msg_iovlen = 2;
-	nc->up_msg.msg_control = NULL;
-	nc->up_msg.msg_controllen = 0;
-	nc->up_msg.msg_flags = 0;
 	nc->up_iv[0].iov_base = nc->up_header;
 	nc->up_iv[0].iov_len = CAPI_B3_DATA_IND_HEADER_SIZE;
 
+	memset(&nc->down_msg, 0, sizeof(nc->down_msg));
 	nc->down_header.prim = nc->l1direct ? PH_DATA_REQ : DL_DATA_REQ;
-	nc->down_msg.msg_name = NULL;
-	nc->down_msg.msg_namelen = 0;
 	nc->down_msg.msg_iov = nc->down_iv;
 	nc->down_msg.msg_iovlen = 2;
-	nc->down_msg.msg_control = NULL;
-	nc->down_msg.msg_controllen = 0;
-	nc->down_msg.msg_flags = 0;
 	nc->down_iv[0].iov_base = &nc->down_header;
 	nc->down_iv[0].iov_len = sizeof(nc->down_header);
 }
@@ -656,7 +648,7 @@ void AnswerDataB3Req(struct mNCCI *ncci, struct mc_buf *mc, uint16_t Info)
 
 static void SendDataB3Down(struct mNCCI *ncci, uint16_t len)
 {
-	int pktid, l, tot, ret, nidx;
+	int pktid, l, tot, ret, nidx, err;
 	struct mc_buf *mc;
 
 	pthread_mutex_lock(&ncci->lock);
@@ -706,10 +698,16 @@ static void SendDataB3Down(struct mNCCI *ncci, uint16_t len)
 				ncci->down_iv[2].iov_len = l;
 				ncci->down_iv[2].iov_base = ncci->xmit_handles[nidx].sp;
 				ncci->xmit_handles[nidx].sp += l;
-				ncci->xmit_handles[ncci->oidx].sent += l;
+				ncci->xmit_handles[nidx].sent += l;
 				ncci->down_msg.msg_iovlen = 3;
 				tot += l;
+			} else {
+				ncci->down_iv[2].iov_len = 0;
+				ncci->down_iv[2].iov_base = NULL;
 			}
+		} else {
+			ncci->down_iv[2].iov_len = 0;
+			ncci->down_iv[2].iov_base = NULL;
 		}
 		ncci->down_header.id = pktid;
 	} else {
@@ -725,6 +723,8 @@ static void SendDataB3Down(struct mNCCI *ncci, uint16_t len)
 		l = ncci->xmit_handles[ncci->oidx].dlen;
 		ncci->down_iv[1].iov_len = l;
 		ncci->down_iv[1].iov_base = mc->rp;
+		ncci->down_iv[2].iov_len = 0;
+		ncci->down_iv[2].iov_base = NULL;
 		ncci->xmit_handles[ncci->oidx].sent = l;
 		ncci->down_header.id = pktid;
 		ncci->down_msg.msg_iovlen = 2;
@@ -732,8 +732,14 @@ static void SendDataB3Down(struct mNCCI *ncci, uint16_t len)
 	}
 	ret = sendmsg(ncci->BIlink->fd, &ncci->down_msg, MSG_DONTWAIT);
 	if (ret != tot) {
-		wprint("NCCI %06x: send returned %d while sending %d bytes type %s id %d - %s\n", ncci->ncci, ret, tot,
-		       _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, strerror(errno));
+		err = errno;
+		wprint("NCCI %06x: send returned %d while sending %d bytes type %s id %d errno=%d - %s\n", ncci->ncci, ret, tot,
+			_mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, err, strerror(err));
+		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send msg_iovlen=%zd iv[0]=%zd,%p iv[1]=%zd,%p iv[2]=%zd,%p\n",
+			ncci->ncci, ncci->down_msg.msg_iovlen,
+			ncci->down_iv[0].iov_len, ncci->down_iv[0].iov_base,
+			ncci->down_iv[1].iov_len, ncci->down_iv[1].iov_base,
+			ncci->down_iv[2].iov_len, ncci->down_iv[2].iov_base);
 		if (ncci->flowmode != flmIndication) {
 			ncci->dlbusy = 0;
 			ncci->xmit_handles[ncci->oidx].pkt = NULL;
@@ -745,10 +751,16 @@ static void SendDataB3Down(struct mNCCI *ncci, uint16_t len)
 		}
 		pthread_mutex_unlock(&ncci->lock);
 		return;
-	} else
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send down %d bytes type %s id %d current oidx[%d] sent %d/%d\n", ncci->ncci,
-		       ret, _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, ncci->oidx,
-		       ncci->xmit_handles[ncci->oidx].sent, ncci->xmit_handles[ncci->oidx].dlen);
+	} else {
+		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send down %d bytes type %s id %d current oidx[%d] sent %d/%d\n",
+			ncci->ncci, ret, _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, ncci->oidx,
+			ncci->xmit_handles[ncci->oidx].sent, ncci->xmit_handles[ncci->oidx].dlen);
+		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send msg_iovlen=%zd iv[0]=%zd,%p iv[1]=%zd,%p iv[2]=%zd,%p\n",
+			ncci->ncci, ncci->down_msg.msg_iovlen,
+			ncci->down_iv[0].iov_len, ncci->down_iv[0].iov_base,
+			ncci->down_iv[1].iov_len, ncci->down_iv[1].iov_base,
+			ncci->down_iv[2].iov_len, ncci->down_iv[2].iov_base);
+	}
 	ncci->dlbusy = 1;
 	if (ncci->flowmode == flmIndication) {
 		if (ncci->xmit_handles[ncci->oidx].sent == ncci->xmit_handles[ncci->oidx].dlen) {
@@ -1281,13 +1293,15 @@ int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 				bi->b3data = ncci;
 		}
 		FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_CONF, mc);
+#ifdef UNSINN
 		if (ncci->l1trans) {
 			/* prefill FIFO 64 ms */ 
 			mc->len = 520;
 			memset(&mc->rb[8], 0x55, 512);
-			ncciDataInd(ncci, hh->prim, mc);
-		}
-		ret = 0;
+			ret = ncciDataInd(ncci, hh->prim, mc);
+		} else
+#endif
+			ret = 1; /* auto free */
 		break;
 	case PH_ACTIVATE_IND:
 	case DL_ESTABLISH_IND:

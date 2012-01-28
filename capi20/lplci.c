@@ -690,6 +690,7 @@ static void plci_alert_req(struct FsmInst *fi, int event, void *arg)
 		if (Info == 0) {
 			plciL4L3(plci, MT_ALERTING, mc->l3m);
 			plci->alerting = 1;
+			mc->l3m = NULL; /* freed in plciL4L3*/
 		}
 	}
 answer:
@@ -1588,7 +1589,7 @@ int lPLCICreate(struct lPLCI **lpp, struct lController *lc, struct mPLCI *plci)
 	lp->PLCI = plci;
 	if (lc->Contr->profile.goptions & 0x0008) {
 		/* DTMF */
-		lp->l1dtmf = 0;
+		lp->l1dtmf = 1;
 	}
 	lp->plci_m.fsm = &plci_fsm;
 	lp->plci_m.state = ST_PLCI_P_0;
@@ -2053,6 +2054,7 @@ uint16_t lPLCISendMessage(struct lPLCI *lp, struct mc_buf *mc)
 
 	lPLCIGetCmsg(lp, mc);
 	ret = CapiNoError;
+	free_mc_buf(mc);
 	return ret;
 }
 

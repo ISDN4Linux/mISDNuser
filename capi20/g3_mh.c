@@ -275,7 +275,6 @@ static inline uint8_t calc_byte_runlen(uint8_t val, uint8_t sb)
 	return i - sb;
 }
 
-
 void g3_gen_tables(void)
 {
 	uint8_t i, v;
@@ -327,6 +326,14 @@ void g3_gen_tables(void)
 		v++;
 	} while (v != 0);
 	                                                                                       
+}
+
+void g3_destroy_tables(void)
+{
+	free(white_rev);
+	white_rev = NULL;
+	free(black_rev);
+	black_rev =NULL;
 }
 
 static struct g3_mh_code *g3_lookup_code(uint16_t val, int black)
