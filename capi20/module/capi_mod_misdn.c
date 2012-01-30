@@ -35,7 +35,7 @@
 #include <capiutils.h>
 #include "../m_capi_sock.h"
 
-
+#ifdef MISDND_CAPI_MODULE_DEBUG
 static FILE *mIm_debug = NULL;
 static char mIm_debug_file[128];
 
@@ -46,7 +46,9 @@ static char mIm_debug_file[128];
 						fflush(mIm_debug); \
 					} \
 				} while(0)
-
+#else
+#define mId_print(fmt, ...)	do {} while(0)
+#endif
 
 /**
  * \brief Create a socket to mISDNcapid
@@ -161,14 +163,16 @@ static void misdnWriteCapiTrace(int nSend, unsigned char *pnBuffer, int nLength,
 static unsigned misdnIsInstalled(void)
 {
 	unsigned nHandle;
-	int pid;
 
 	nHandle = misdnOpenSocket();
+#ifdef MISDND_CAPI_MODULE_DEBUG
 	if (nHandle >= 0 && !mIm_debug) {
+		int pid;
 		pid = getpid();
 		sprintf(mIm_debug_file, "/tmp/mIm_debug_%05d.log", pid);
 		mIm_debug = fopen(mIm_debug_file, "wt");
 	}
+#endif
 	return nHandle;
 }
 
