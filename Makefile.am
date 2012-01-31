@@ -28,6 +28,8 @@ SUBDIRS = include lib tools bridge l1oip $(MAYBE_EXAMPLE) $(MAYBE_GUI) $(MAYBE_C
 CLEANFILES = *~
 DISTCLEANFILES = 45-misdn.rules
 
+EXTRA_DIST = m4
+
 if GIT_REPO
 
 ChangeLog: .git/objects

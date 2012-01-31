@@ -37,10 +37,8 @@ host_triplet = @host@
 subdir = lib
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
-	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
-	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/acinclude.m4 $(top_srcdir)/configure.ac
+am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -234,7 +232,7 @@ SUPPSERV_SRC = suppserv/aoc.c suppserv/basic_service.c suppserv/component.c \
 		suppserv/diversion.c suppserv/address.c suppserv/ccbs.c \
 		suppserv/fac.c suppserv/ect.c
 
-SUPPSERV_INC = suppserv/ccbs.h suppserv/diversion.h suppserv/ect.h suppserv/asn1.h
+SUPPSERV_INC = include/ccbs.h include/diversion.h include/ect.h include/asn1.h
 MISC_SRC = misc/debug.c misc/fsm.c misc/mbuffer.c misc/mtimer.c
 LAYER3_SRC = layer3/dss1net.c layer3/dss1user.c layer3/layer3.c layer3/mlayer3.c layer3/q931.c
 INCLUDE_SRC = include/debug.h include/dss1.h include/fsm.h include/helper.h include/layer3.h \

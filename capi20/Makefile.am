@@ -16,6 +16,8 @@ endif
 
 AM_CPPFLAGS = -I$(top_srcdir)/include -Werror -Wall $(_USE_SOFTFAX) $(_MEMLEAKDEBUG)
 
+EXTRA_DIST = capi20.conf.sample
+
 CLEANFILES = *~
 
 MISDN_SOCKET_DIR = /var/run/mISDNcapid
@@ -23,3 +25,7 @@ MISDN_SOCKET_DIR = /var/run/mISDNcapid
 install-exec-hook:
 	install  -d $(DESTDIR)$(MISDN_SOCKET_DIR)
 
+install-data-local:
+	install -d $(DESTDIR)/etc/
+	install -m 644 capi20.conf.sample $(DESTDIR)/etc/capi20.conf
+                

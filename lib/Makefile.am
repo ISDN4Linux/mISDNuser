@@ -6,7 +6,7 @@ SUPPSERV_SRC =	suppserv/aoc.c suppserv/basic_service.c suppserv/component.c \
 		suppserv/diversion.c suppserv/address.c suppserv/ccbs.c \
 		suppserv/fac.c suppserv/ect.c
 
-SUPPSERV_INC = suppserv/ccbs.h suppserv/diversion.h suppserv/ect.h suppserv/asn1.h
+SUPPSERV_INC = include/ccbs.h include/diversion.h include/ect.h include/asn1.h
 
 
 MISC_SRC =	misc/debug.c misc/fsm.c misc/mbuffer.c misc/mtimer.c
