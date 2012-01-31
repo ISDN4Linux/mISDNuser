@@ -237,7 +237,10 @@ static unsigned misdnPutMessage(int nSock, unsigned nApplId, unsigned char *pnMs
 	int nLen = CAPIMSG_LEN(pnMsg);
 	int nCommand = CAPIMSG_COMMAND(pnMsg);
 	int nSubCommand = CAPIMSG_SUBCOMMAND(pnMsg);
-	int ret, tot, dlen = 0, d = 0;
+	int ret, tot, dlen = 0;
+#ifdef MISDND_CAPI_MODULE_DEBUG
+	uint8_t d = 0;
+#endif
 	uint16_t dh;
 	void *dp = NULL;
 	struct msghdr 	msg;
@@ -251,7 +254,9 @@ static unsigned misdnPutMessage(int nSock, unsigned nApplId, unsigned char *pnMs
 				dp = (void *)((unsigned long)CAPIMSG_U32(pnMsg, 12));
 			else
 				dp = (void *)((unsigned long)CAPIMSG_U64(pnMsg, 22));
+#ifdef MISDND_CAPI_MODULE_DEBUG
 			d = *((unsigned char *)dp);
+#endif
 			iv[0].iov_base = pnMsg;
 			iv[0].iov_len = nLen;
 			iv[1].iov_base = dp;
