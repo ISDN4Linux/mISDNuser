@@ -22,6 +22,7 @@
 #include <mISDN/q931.h>
 #include <string.h>
 #include <signal.h>
+#include <sys/stat.h>
 #include "m_capi.h"
 #include "mc_buffer.h"
 #include "m_capi_sock.h"
@@ -1642,6 +1643,12 @@ retry_Csock:
 
 		}
 	}
+	ret = chmod(MISDN_CAPI_SOCKET_PATH, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+	if (ret < 0) {
+		fprintf(stderr, "cannot change permissions on unix socket:%s - %s\n", MISDN_CAPI_SOCKET_PATH, strerror(errno));
+		goto errout;
+	}
+
 	if (listen(mCsock, 15)) {
 		fprintf(stderr, "cannot set listen mode for socket %s - %s\n", mcaddr.sun_path, strerror(errno));
 		goto errout;
