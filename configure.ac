@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.63])
-AC_INIT([mISDNuser],[2.0.7],[i4ldeveloper@isdn4linux.de],[mISDNuser])
+AC_INIT([mISDNuser],[2.0.8],[i4ldeveloper@isdn4linux.de],[mISDNuser])
 AC_CONFIG_SRCDIR([tools/])
 AC_CONFIG_HEADERS([include/config.h])
 AC_CONFIG_MACRO_DIR([m4])
