@@ -297,10 +297,13 @@ static int phaseB_handler(t30_state_t *t30, void *user_data, int result)
 		ident = t30_get_tx_ident(t30);
 	else
 		ident = t30_get_rx_ident(t30);
-
+	if (!ident)
+		ident = "no ident";
 	switch (result) {
 	case T30_DIS:
 		ident = t30_get_rx_ident(t30);
+		if (!ident)
+			ident = "no ident";
 		dprint(MIDEBUG_NCCI, "NCCI %06x: PhaseB DIS %s\n", ncci->ncci, ident);
 		strncpy(fax->RemoteID, ident, 20);
 		if (fax->lplci->Bprotocol.B3 == 5) {
