@@ -204,7 +204,7 @@ mISDNcapid_SOURCES = daemon.c application.c lplci.c mplci.c ncci.c m_capi.h m_ca
 
 mISDNcapid_LDADD = ../lib/libmisdn.la -lcapi20
 mISDNcapid_LDFLAGS = -shared
-AM_CPPFLAGS = -I$(top_srcdir)/include -Werror -Wall $(_USE_SOFTFAX) $(_MEMLEAKDEBUG)
+AM_CPPFLAGS = -I$(top_srcdir)/include -Werror -Wall $(_USE_SOFTFAX) $(_MEMLEAKDEBUG) -DMISDN_GROUP=\"$(MISDN_GROUP)\"
 EXTRA_DIST = capi20.conf.sample
 CLEANFILES = *~
 MISDN_SOCKET_DIR = /var/run/mISDNcapid

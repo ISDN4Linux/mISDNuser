@@ -23,6 +23,8 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <grp.h>
 #include "m_capi.h"
 #include "mc_buffer.h"
 #include "m_capi_sock.h"
@@ -1478,6 +1480,7 @@ int main(int argc, char *argv[])
 	int ret, i, j, nb, c, exitcode = 1, ver, libdebug;
 	struct sockaddr_un mcaddr;
 	struct pController *pc;
+	struct group *grp;
 
 	KeepTemporaryFiles = 0;
 	config_file = def_config;
@@ -1500,6 +1503,19 @@ int main(int argc, char *argv[])
 	ver = init_layer3(4, &l3dbg);
 	mISDN_set_debug_level(libdebug);
 	iprint("Init mISDN lib version %x, debug = %x (%x)\n", ver, debugmask, libdebug);
+
+	grp = getgrnam(MISDN_GROUP);
+	if (!grp) {
+		fprintf(stderr, "Cannot get %s group ID - %s\n", MISDN_GROUP, strerror(errno));
+		return 1;
+	} else {
+		if (setegid(grp->gr_gid) < 0) {
+			fprintf(stderr, "Cannot set effective group to %s gid:%d - %s\n",
+				MISDN_GROUP, (int)grp->gr_gid, strerror(errno));
+			return 1;
+		}
+		iprint("Did set eGID to %s gid:%d\n", MISDN_GROUP, (int)grp->gr_gid);
+	}
 
 	mc_buffer_init();
 
