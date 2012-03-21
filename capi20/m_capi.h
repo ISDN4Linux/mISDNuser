@@ -129,8 +129,8 @@ int OpenLayer3(struct pController *);
 
 /* This is a struct for the logical controller per application, also has the listen statemachine */
 struct lController {
-	struct lController	*nextC;
-	struct lController	*nextA;
+	struct lController	*nextC;		/* List of Logical controllers on the physical  controller */
+	struct lController	*nextA;		/* List of Logical controllers on the application */
 	int			refc;		/* refcount */
 	struct pController	*Contr;		/* pointer to the physical controler */
 	struct mApplication	*Appl;		/* pointer to the CAPI application */

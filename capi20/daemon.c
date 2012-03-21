@@ -980,10 +980,11 @@ int ListenController(struct pController *pc)
 
 	lc = pc->lClist;
 	while (lc) {
+		dprint(MIDEBUG_CONTROLLER, "pc->lClist %p %08x/%08x/%08x\n", lc, lc->InfoMask, lc->CIPmask, lc->CIPmask2);
 		InfoMask |= lc->InfoMask;
 		CIPMask |= lc->CIPmask;
 		CIPMask2 |= lc->CIPmask2;
-		lc = lc->nextA;
+		lc = lc->nextC;
 	}
 	dprint(MIDEBUG_CONTROLLER, "Controller %d change InfoMask %08x -> %08x\n", pc->profile.ncontroller, pc->InfoMask, InfoMask);
 	dprint(MIDEBUG_CONTROLLER, "Controller %d change CIPMask  %08x -> %08x\n", pc->profile.ncontroller, pc->CIPmask, CIPMask);
@@ -1404,7 +1405,7 @@ int main_loop(void)
 						if (pollinfo[i].type == PIT_Application)
 							ReleaseApplication(pollinfo[i].data);
 						fd = mainpoll[i].fd;
-						dprint(MIDEBUG_POLL, "read 0 socket %d closed\n", fd);
+						dprint(MIDEBUG_POLL, "read 0 socket %d type %d closed\n", fd, pollinfo[i].type);
 						close(mainpoll[i].fd);
 						res = del_mainpoll(mainpoll[i].fd);
 						if (res < 0) {

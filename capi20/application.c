@@ -63,6 +63,7 @@ struct mApplication *RegisterApplication(uint16_t ApplId, uint32_t MaxB3Connecti
 void ReleaseApplication(struct mApplication *appl)
 {
 	struct mApplication *ma = mApplications;
+	struct lController *lc, *lcn;
 
 	/* first remove from list */
 	while (ma) {
@@ -77,59 +78,17 @@ void ReleaseApplication(struct mApplication *appl)
 		}
 		ma = ma->next;
 	}
-	/* TODO clean controller refs */
+	/* remove assigned logical controllers */
+	lc = appl->contL;
+	while (lc) {
+		lcn = lc->nextA;
+		dprint(MIDEBUG_CONTROLLER, "Appl:%3d remove lc=%p (next:%p)\n", appl->AppId, lc, lcn);
+		rm_lController(lc);
+		lc = lcn;
+	}
 	close(appl->fd);
+	dprint(MIDEBUG_CAPIMSG, "Appl:%3d removed\n", appl->AppId);
 	free(appl);
-#if 0
-	int i, used = 0;
-	AppPlci_t **aplci_p = appl->AppPlcis;
-
-	if (test_and_set_bit(APPL_STATE_DESTRUCTOR, &appl->state)) {
-		// we are allready in this function
-		return (-EBUSY);
-	}
-	test_and_set_bit(APPL_STATE_RELEASE, &appl->state);
-	test_and_clear_bit(APPL_STATE_ACTIV, &appl->state);
-	listenDestr(appl);
-	if (who > 2) {
-		appl->contr = NULL;
-	}
-	if (aplci_p) {
-		for (i = 0; i < appl->maxplci; i++) {
-			if (*aplci_p) {
-				switch (who) {
-				case 4:
-					AppPlciDestr(*aplci_p);
-					*aplci_p = NULL;
-					break;
-				case 1:
-				case 2:
-				case 3:
-					AppPlciRelease(*aplci_p);
-				case 0:
-					if ((volatile AppPlci_t *)(*aplci_p))
-						used++;
-					break;
-				}
-			}
-			aplci_p++;
-		}
-	}
-	if (used) {
-		if (who == 3) {
-			list_del_init(&appl->head);
-			list_add(&appl->head, &garbage_applications);
-		}
-		test_and_clear_bit(APPL_STATE_DESTRUCTOR, &appl->state);
-		return (-EBUSY);
-	}
-	list_del_init(&appl->head);
-	appl->maxplci = 0;
-	kfree(appl->AppPlcis);
-	appl->AppPlcis = NULL;
-	kfree(appl);
-	return (0);
-#endif
 }
 
 struct lController *get_lController(struct mApplication *app, int cont)

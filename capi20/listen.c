@@ -58,6 +58,8 @@ static void listen_req_l_x(struct FsmInst *fi, int event, void *arg, int state)
 
 	FsmChangeState(fi, state);
 
+	dprint(MIDEBUG_CONTROLLER, "Controller%d: lc=%p nC=%p nA=%p\n",
+		lc->Contr->profile.ncontroller, lc, lc->nextC, lc->nextA);
 	dprint(MIDEBUG_CONTROLLER, "Controller%d: set InfoMask %08x -> %08x\n",
 	       lc->Contr->profile.ncontroller, lc->InfoMask, mc->cmsg.InfoMask);
 	dprint(MIDEBUG_CONTROLLER, "Controller%d: set CIPmask %08x -> %08x\n",
