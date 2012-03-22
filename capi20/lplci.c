@@ -1623,10 +1623,11 @@ void lPLCI_free(struct lPLCI *lp)
 		plciDetachlPLCI(lp);
 	}
 	nc = lp->Nccis;
+	lp->Nccis = NULL;
 	while (nc) {
-		ncciDel_lPlci(nc);
 		nn = nc->next;
 		nc->next = NULL;
+		ncciDel_lPlci(nc);
 		nc = nn;
 	}
 	free(lp);

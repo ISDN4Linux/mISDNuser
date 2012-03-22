@@ -591,6 +591,7 @@ struct mNCCI *ncciCreate(struct lPLCI *lp)
 	initNCCIHeaders(nc);
 	nc->osize = 256;
 	if (lp->Nccis) {
+		wprint("NCCI %06x: lp->Nccis already used for NCCI %06x (%p/%p)\n", nc->ncci, lp->Nccis->ncci, nc, lp->Nccis);
 		old = lp->Nccis;
 		while (old->next)
 			old = old->next;
@@ -612,12 +613,17 @@ void ncciFree(struct mNCCI *ncci)
 		if (ncci->xmit_handles[i].pkt)
 			free_mc_buf(ncci->xmit_handles[i].pkt);
 	}
-	lPLCIDelNCCI(ncci);
+	if (ncci->lp)
+		lPLCIDelNCCI(ncci);
+	else
+		wprint("NCCI %06x: PLCI not linked\n", ncci->ncci);
+	dprintf(MIDEBUG_NCCI, "NCCI %06x: freed\n", ncci->ncci);
 	free(ncci);
 }
 
 void ncciDel_lPlci(struct mNCCI *ncci)
 {
+	dprintf(MIDEBUG_NCCI, "NCCI %06x: unlink PLCI:%04x\n", ncci->ncci, ncci->lp ? ncci->lp->plci : -1);
 	ncci->lp = NULL;
 	/* maybe we should release the NCCI here */
 }
