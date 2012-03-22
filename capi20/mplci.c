@@ -147,7 +147,7 @@ static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 					wprint("Cannot create lPLCI for PLCI %04x\n", plci->plci);
 				}
 			}
-			lc = lc->nextA;
+			lc = lc->nextC;
 		}
 	}
 	if (found == 0) {
