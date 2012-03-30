@@ -544,7 +544,7 @@ struct mISDNport *mISDN_port_open(int port, int nt_mode, int hdlc)
 		fprintf(stderr, "Cannot alloc mISDNport structure\n");
 		return(NULL);
 	}
-	memset(mISDNport, 0, sizeof(mISDNport));
+	memset(mISDNport, 0, sizeof(struct mISDNport));
 	*mISDNportp = mISDNport;
 	mISDNport->prev = mISDNport_prev;
 
