@@ -822,7 +822,7 @@ static int FaxDataInd(struct fax *fax, struct mc_buf *mc)
 		dlen =  MAX_DATA_SIZE;
 	}
 	w = wav_buf;
-	mc->rp = mc->rb + sizeof(hh);
+	mc->rp = mc->rb + sizeof(*hh);
 	p = mc->rp;
 	// convert (alaw -> pcm)
 	for (i = 0; i < dlen; i++)
