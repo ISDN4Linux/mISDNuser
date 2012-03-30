@@ -426,7 +426,7 @@ mi_encode_calling_nr(struct l3_msg *l3m, char *nr, int pres, unsigned int screen
 	unsigned char ie[32];
 	int l;
 
-	if (pres < 0 && screen < 0 && (nr == NULL || *nr == 0)) /* defaults, no number provided */
+	if (pres < 0 && (nr == NULL || *nr == 0)) /* defaults, no number provided */
 		return 0;
 	if (nr && strlen(nr) > 30)
 		return -EINVAL;
@@ -452,7 +452,7 @@ mi_encode_connected_nr(struct l3_msg *l3m, char *nr, int pres, unsigned int scre
 	unsigned char ie[32];
 	int l;
 
-	if (pres < 0 && screen < 0 && (nr == NULL || *nr == 0)) /* defaults, no number provided */
+	if (pres < 0 && (nr == NULL || *nr == 0)) /* defaults, no number provided */
 		return 0;
 	if (nr && strlen(nr) > 30)
 		return -EINVAL;
