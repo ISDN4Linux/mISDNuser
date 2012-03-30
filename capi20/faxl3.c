@@ -204,6 +204,7 @@ static int FaxPrepareReceivedTiff(struct fax *fax)
 	if (ret) {
 		fax->b3transfer_error = errno;
 		wprint("NCCI %06x: Cannot fstat received file %s - %s\n", ncci->ncci, fax->file_name, strerror(fax->b3transfer_error));
+		close(fd);
 		return -fax->b3transfer_error;
 	}
 	fax->b3data_size = fst.st_size;
@@ -211,6 +212,7 @@ static int FaxPrepareReceivedTiff(struct fax *fax)
 	if (!fax->b3data) {
 		fax->b3transfer_error = errno;
 		wprint("NCCI %06x: Cannot map received file %s - %s\n", ncci->ncci, fax->file_name, strerror(fax->b3transfer_error));
+		close(fd);
 		return -fax->b3transfer_error;
 	}
 	fax->b3data_mapped = 1;
