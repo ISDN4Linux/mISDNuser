@@ -509,6 +509,7 @@ static int InitFax(struct fax *fax)
 		t30_set_supported_compressions(fax->t30, fax->compressions);
 		t30_set_supported_resolutions(fax->t30, fax->resolutions);
 		t30_set_supported_image_sizes(fax->t30, fax->image_sizes);
+		t30_set_supported_modems(fax->t30, fax->modems);
 
 		// spandsp loglevel
 		fax->logging = t30_get_logging_state(fax->t30);
