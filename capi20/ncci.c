@@ -571,7 +571,7 @@ struct mNCCI *ncciCreate(struct lPLCI *lp)
 			nc->flowmode = flmPHDATA;
 		}
 	} else {
-		nc->l2trans = 1;
+		nc->l2trans = 0;
 		if (lp->Bprotocol.B1 == 0) { // HDLC
 			nc->l1direct = 1;
 			nc->flowmode = flmPHDATA;
