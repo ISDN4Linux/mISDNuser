@@ -1607,6 +1607,7 @@ void lPLCI_free(struct lPLCI *lp)
 {
 	struct mNCCI *nc, *nn;
 
+	dprint(MIDEBUG_PLCI, "PLCI:%04x free now\n", lp->plci);
 	if (lp->BIlink)
 		CloseBInstance(lp->BIlink);
 	if (lp->PLCI) {
@@ -1636,6 +1637,7 @@ void lPLCI_free(struct lPLCI *lp)
 void lPLCIRelease(struct lPLCI *lp)
 {
 	/* TODO clean NCCIs */
+	dprint(MIDEBUG_PLCI, "PLCI:%04x plci state %s - %s NCCIs\n", lp->plci, str_st_plci[lp->plci_m.state], lp->Nccis ? "have" : "no");
 	FsmEvent(&lp->plci_m, EV_AP_RELEASE, NULL);
 }
 

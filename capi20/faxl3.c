@@ -575,10 +575,10 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 		nf->file_d = -2;
 		nf->ncci = ncciCreate(bi->lp);
 		if (nf->ncci) {
-			dprint(MIDEBUG_NCCI, "NCCI %06x: create\n", nf->ncci->ncci);
 			nf->binst = bi;
 			nf->lplci = bi->lp;
 			nf->outgoing = nf->lplci->PLCI->outgoing;
+			dprint(MIDEBUG_NCCI, "NCCI %06x: create %s\n", nf->ncci->ncci, nf->outgoing ? "outgoing" : "incoming");
 			if (nf->lplci->Bprotocol.B1cfg[0])
 				nf->rate = CAPIMSG_U16(nf->lplci->Bprotocol.B1cfg, 1);
 			if (nf->lplci->Bprotocol.B3cfg[0]) {
@@ -619,7 +619,8 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 			if (ret < 0)
 				wprint("Error on MISDN_CTRL_RX_BUFFER  ioctl - %s\n", strerror(errno));
 			else
-				dprint(MIDEBUG_NCCI, "MISDN_CTRL_RX_BUFFER  old values: min=%d max=%d\n", creq.p1, creq.p2);
+				dprint(MIDEBUG_NCCI, "NCCI %06x: MISDN_CTRL_RX_BUFFER  values: min=%d -> %d max=%d\n",
+					nf->ncci->ncci, creq.p1, DEFAULT_PKT_SIZE, creq.p2);
 			nf->startdownlink = 1;
 		} else {
 			eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
