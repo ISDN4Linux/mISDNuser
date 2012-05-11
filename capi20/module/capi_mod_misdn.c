@@ -155,14 +155,19 @@ static void misdnWriteCapiTrace(int nSend, unsigned char *pnBuffer, int nLength,
 }
 #endif
 
+#if HAVE_OLDCAPIMOD
+#define	ISINSTALLTYPE	unsigned
+#else
+#define ISINSTALLTYPE   int
+#endif
 
 /**
  * \brief Check if misdn interface is available
  * \return file descriptor of socket, or error code
  */
-static unsigned misdnIsInstalled(void)
+static ISINSTALLTYPE misdnIsInstalled(void)
 {
-	unsigned nHandle;
+	ISINSTALLTYPE nHandle;
 
 	nHandle = misdnOpenSocket();
 #ifdef MISDND_CAPI_MODULE_DEBUG

@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.63])
-AC_INIT([mISDNuser],[2.0.11],[i4ldeveloper@isdn4linux.de],[mISDNuser])
+AC_INIT([mISDNuser],[2.0.12],[i4ldeveloper@isdn4linux.de],[mISDNuser])
 AC_CONFIG_SRCDIR([tools/])
 AC_CONFIG_HEADERS([include/config.h])
 AC_CONFIG_MACRO_DIR([m4])
@@ -112,12 +112,22 @@ then
 	AC_CHECK_LIB(capi20, [capi20_isinstalled],,
 		AC_MSG_ERROR([capi library not found])
 	)
-	AC_CHECK_HEADER([capi20.h],
-		AC_CHECK_HEADER([capi_mod.h],,
-			AC_MSG_ERROR([capi_mod.h do not exist - update capi4linux]),
-		),
+	AC_CHECK_HEADER([capi20.h],,
 		AC_MSG_ERROR([capi20.h do not exist - install capi4linux development files]),
 	)
+	AC_CHECK_HEADER([capi_mod.h],,
+		AC_MSG_ERROR([capi_mod.h do not exist - update capi4linux]),
+	)
+	AC_EGREP_HEADER([unsigned\ \(\ \*IsInstalled], capi_mod.h,
+		[
+			AC_MSG_RESULT([Old capi_mod.h *IsInstalled detected])
+			HAVE_OLDCAPIMOD=1
+		],[
+			AC_MSG_RESULT([New capi_mod.h *IsInstalled detected])
+			HAVE_OLDCAPIMOD=0
+		]
+	)
+	AC_SUBST(HAVE_OLDCAPIMOD)
 	AC_COMPUTE_INT([CAPI_MODULE_LOADER_VERSION], [[MODULE_LOADER_VERSION]],
 		[
 		#include <sys/types.h>
