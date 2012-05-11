@@ -242,7 +242,7 @@ static unsigned misdnPutMessage(int nSock, unsigned nApplId, unsigned char *pnMs
 	int nLen = CAPIMSG_LEN(pnMsg);
 	int nCommand = CAPIMSG_COMMAND(pnMsg);
 	int nSubCommand = CAPIMSG_SUBCOMMAND(pnMsg);
-	int ret, tot, dlen = 0;
+	int ret = -1, tot = 0, dlen = 0;
 #ifdef MISDND_CAPI_MODULE_DEBUG
 	uint8_t d = 0;
 #endif
