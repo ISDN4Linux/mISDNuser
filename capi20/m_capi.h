@@ -200,6 +200,7 @@ struct lPLCI {
 	struct mPLCI			*PLCI;
 	struct FsmInst			plci_m;
 	struct BInstance		*BIlink;
+	pthread_mutex_t			lock;
 	int NcciCnt;
 	struct mNCCI			*Nccis;
 	int				cause;

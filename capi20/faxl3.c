@@ -569,7 +569,13 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 	time_t cur_time;
 	struct mISDN_ctrl_req creq;
 
-
+	pthread_mutex_lock(&bi->lp->lock);
+	nf = bi->b3data;
+	if (nf) {
+		dprint(MIDEBUG_NCCI, "PLCI %04x: already created NCCI: %06x\n", bi->lp->plci, nf->ncci->ncci);
+		pthread_mutex_unlock(&bi->lp->lock);
+		return nf;
+	}
 	nf = calloc(1, sizeof(*nf));
 	if (nf) {
 		nf->file_d = -2;
@@ -629,6 +635,7 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 		}
 	}
 	bi->b3data = nf;
+	pthread_mutex_unlock(&bi->lp->lock);
 	return nf;
 }
 
@@ -1197,9 +1204,7 @@ int FaxB3Message(struct BInstance *bi, struct mc_buf *mc)
 		if (cmd == CAPI_CONNECT_B3 && subcmd == CAPI_REQ) {
 			fax = mFaxCreate(bi);
 		}
-		if (fax) {
-			bi->b3data = fax;
-		} else {
+		if (!fax) {
 			wprint("No Fax struct assigned\n");
 			return CapiMsgOSResourceErr;
 		}

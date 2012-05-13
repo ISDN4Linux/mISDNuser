@@ -1599,6 +1599,7 @@ int lPLCICreate(struct lPLCI **lpp, struct lController *lc, struct mPLCI *plci)
 	lp->plci_m.printdebug = lPLCI_debug;
 	lp->chid.nr = MI_CHAN_NONE;
 	lp->autohangup = 1;
+	pthread_mutex_init(&lp->lock, NULL);
 	*lpp = lp;
 	return 0;
 }
@@ -1782,21 +1783,37 @@ struct mNCCI *getNCCI4addr(struct lPLCI *lp, uint32_t addr, int mode)
 void lPLCIDelNCCI(struct mNCCI *ncci)
 {
 	struct lPLCI *lp = ncci->lp;
+	struct mNCCI *nc, *onc;
 
-	if (lp->Nccis != ncci) {
-		eprint("lPLCI %04x do not cover NCCI %06x\n", lp->plci, ncci->ncci);
-		return;
+	pthread_mutex_lock(&lp->lock);
+	nc = lp->Nccis;
+	onc = NULL;
+	while (nc) {
+		if (nc == ncci) {
+			lp->NcciCnt--;
+			if (onc)
+				onc->next = nc->next;
+			break;
+		}
+		onc = nc;
+		nc = nc->next;
 	}
-	lp->Nccis = NULL;
-	lp->NcciCnt = 0;
+	if (lp->Nccis ==  ncci)
+		lp->Nccis = ncci->next;
 
-	if (ncci->BIlink) {
-		ncci->BIlink->b3data = NULL;
-		if (ncci->BIlink->fd > 0)
-			CloseBInstance(ncci->BIlink);
-		ncci->BIlink = NULL;
-		lp->BIlink = NULL;
+	if (lp->Nccis || lp->NcciCnt) {
+		iprint("PLCI:%04x still %d NCCIs do not shutdown link\n", lp->plci, lp->NcciCnt);
+	} else {
+		dprint(MIDEBUG_PLCI, "PLCI:%04x all NCCIs gone %s BIlink\n", lp->plci, ncci->BIlink ? "shutdown" : "no");
+		if (ncci->BIlink) {
+			ncci->BIlink->b3data = NULL;
+			if (ncci->BIlink->fd > 0)
+				CloseBInstance(ncci->BIlink);
+			ncci->BIlink = NULL;
+			lp->BIlink = NULL;
+		}
 	}
+	pthread_mutex_unlock(&lp->lock);
 }
 
 void B3ReleaseLink(struct lPLCI *lp, struct BInstance *bi)

@@ -1140,17 +1140,20 @@ static int ncciSendMessage(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, stru
 
 int ncciB3Data(struct BInstance *bi, struct mc_buf *mc)
 {
-	struct mNCCI *ncci = bi->b3data;
+	struct mNCCI *ncci;
 
 	if (mc->cmsg.Command == CAPI_CONNECT_B3 && mc->cmsg.Subcommand == CAPI_REQ) {
+		pthread_mutex_lock(&bi->lp->lock);
+		ncci = bi->b3data;
 		if (ncci)
 			wprint("NCCI %06x: already assigned\n", ncci->ncci);
 		else {
 			ncci = ConnectB3Request(bi->lp, mc);
 			bi->b3data = ncci;
 		}
-			
-	}
+		pthread_mutex_unlock(&bi->lp->lock);	
+	} else
+		ncci = bi->b3data;
 	if (!ncci) {
 		wprint("No NCCI asigned for  PCLI %04x\n", bi->lp->plci);
 		return -EINVAL;
@@ -1292,12 +1295,15 @@ int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 	case PH_ACTIVATE_CNF:
 	case DL_ESTABLISH_CNF:
 		if (!ncci) {
+			pthread_mutex_lock(&bi->lp->lock);
 			ncci = ncciCreate(bi->lp);
 			if (!ncci) {
+				pthread_mutex_unlock(&bi->lp->lock);
 				eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
 				return -ENOMEM;
 			} else
 				bi->b3data = ncci;
+			pthread_mutex_unlock(&bi->lp->lock);
 		}
 		FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_CONF, mc);
 #ifdef UNSINN
@@ -1313,12 +1319,15 @@ int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 	case PH_ACTIVATE_IND:
 	case DL_ESTABLISH_IND:
 		if (!ncci) {
+			pthread_mutex_lock(&bi->lp->lock);
 			ncci = ncciCreate(bi->lp);
 			if (!ncci) {
+				pthread_mutex_unlock(&bi->lp->lock);
 				eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
 				return -ENOMEM;
 			} else
 				bi->b3data = ncci;
+			pthread_mutex_unlock(&bi->lp->lock);
 		} else
 			dprint(MIDEBUG_NCCI, "NCCI %06x: %s on existing NCCIx\n", ncci->ncci, _mi_msg_type2str(hh->prim));
 		FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_IND, mc);
