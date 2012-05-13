@@ -162,7 +162,7 @@ static struct Fsm plci_fsm = { 0, 0, 0, 0, 0 };
 
 static void lPLCI_debug(struct FsmInst *fi, char *fmt, ...)
 {
-	char tmp[128];
+	char tmp[160];
 	char *p = tmp;
 	va_list args;
 	struct lPLCI *lp = fi->userdata;
@@ -170,7 +170,7 @@ static void lPLCI_debug(struct FsmInst *fi, char *fmt, ...)
 	if (!(MIDEBUG_STATES & mI_debug_mask))
 		return;
 	va_start(args, fmt);
-	p += sprintf(p, "lPLCI 0x%x: ", lp->plci);
+	p += sprintf(p, "lPLCI %04x: ", lp->plci);
 	p += vsprintf(p, fmt, args);
 	*p = 0;
 	dprint(MIDEBUG_STATES, "%s\n", tmp);
@@ -2079,6 +2079,7 @@ static int lPLCILinkDown(struct lPLCI *lp)
 	struct BInstance *bi;
 
 	nc = lp->Nccis;
+	dprint(MIDEBUG_PLCI, "PLCI:%04x LinkDown %s Nccis %d\n", lp->plci, lp->Nccis ? "" : "no", lp->NcciCnt);
 	if (nc) {
 		while (nc) {
 			nn = nc->next;

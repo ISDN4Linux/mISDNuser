@@ -80,10 +80,10 @@ FsmEvent(struct FsmInst *fi, int event, void *arg)
 void
 FsmChangeState(struct FsmInst *fi, int newstate)
 {
-	fi->state = newstate;
 	if (fi->debug)
-		fi->printdebug(fi, "ChangeState %s",
-			fi->fsm->strState[newstate]);
+		fi->printdebug(fi, "ChangeState %s -> %s",
+		                fi->fsm->strState[fi->state], fi->fsm->strState[newstate]);
+	fi->state = newstate;
 }
 
 static void

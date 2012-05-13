@@ -119,7 +119,7 @@ static void ncci_debug(struct FsmInst *fi, char *fmt, ...)
 	if (!ncci->ncci_m.debug)
 		return;
 	va_start(args, fmt);
-	p += sprintf(p, "NCCI %08x: ", ncci->ncci);
+	p += sprintf(p, "NCCI %06x: ", ncci->ncci);
 	p += vsprintf(p, fmt, args);
 	*p = 0;
 	dprint(MIDEBUG_STATES, "%s\n", tmp);
@@ -277,7 +277,7 @@ static void ncci_facility_req(struct FsmInst *fi, int event, void *arg)
 	} else
 		mc->cmsg.Info = CapiIllMessageParmCoding;
 
-	dprintf(MIDEBUG_NCCI, "NCCI %06x: fac\n", ncci->ncci);
+	dprint(MIDEBUG_NCCI, "NCCI %06x: fac\n", ncci->ncci);
 	Send2Application(ncci, mc);
 }
 
@@ -538,6 +538,7 @@ struct mNCCI *ncciCreate(struct lPLCI *lp)
 	lp->NcciCnt++;
 	nc->ncci = lp->plci;
 	nc->ncci |= (lp->NcciCnt << 16) & 0xFFFF0000;
+	dprint(MIDEBUG_NCCI, "NCCI %06x: will be created now\n", nc->ncci);
 	nc->lp = lp;
 	nc->appl = lp->lc->Appl;
 	nc->BIlink = lp->BIlink;
@@ -598,7 +599,7 @@ struct mNCCI *ncciCreate(struct lPLCI *lp)
 		old->next = nc;
 	} else
 		lp->Nccis = nc;
-	dprintf(MIDEBUG_NCCI, "NCCI %06x: created\n", nc->ncci);
+	dprint(MIDEBUG_NCCI, "NCCI %06x: created\n", nc->ncci);
 	return nc;
 }
 
@@ -606,7 +607,7 @@ void ncciFree(struct mNCCI *ncci)
 {
 	int i;
 
-	dprintf(MIDEBUG_NCCI, "NCCI %06x: free\n", ncci->ncci);
+	dprint(MIDEBUG_NCCI, "NCCI %06x: free\n", ncci->ncci);
 
 	/* cleanup data queues */
 	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
@@ -617,13 +618,13 @@ void ncciFree(struct mNCCI *ncci)
 		lPLCIDelNCCI(ncci);
 	else
 		wprint("NCCI %06x: PLCI not linked\n", ncci->ncci);
-	dprintf(MIDEBUG_NCCI, "NCCI %06x: freed\n", ncci->ncci);
+	dprint(MIDEBUG_NCCI, "NCCI %06x: freed\n", ncci->ncci);
 	free(ncci);
 }
 
 void ncciDel_lPlci(struct mNCCI *ncci)
 {
-	dprintf(MIDEBUG_NCCI, "NCCI %06x: unlink PLCI:%04x\n", ncci->ncci, ncci->lp ? ncci->lp->plci : -1);
+	dprint(MIDEBUG_NCCI, "NCCI %06x: unlink PLCI:%04x\n", ncci->ncci, ncci->lp ? ncci->lp->plci : -1);
 	ncci->lp = NULL;
 	/* maybe we should release the NCCI here */
 }
