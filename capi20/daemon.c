@@ -1251,8 +1251,8 @@ static int main_recv(int fd, int idx)
 			wprint("Msg len error on %04x read %d but indicated %d bytes\n", cmd, ret, len);
 			if (ret < len)
 				mc->len = ret;
-		} else
-			mc->len = len;
+		}
+		mc->len = len;
 	} else {
 		dl = CAPIMSG_DATALEN(mc->rb);
 		if ((len + dl) != ret) {
