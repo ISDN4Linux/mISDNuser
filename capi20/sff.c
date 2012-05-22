@@ -676,9 +676,10 @@ int SFF_ReadTiff(struct sff_state *sff, char *name)
 		ls.linelen = linelen;
 		if (!TIFFGetField(tf, TIFFTAG_YRESOLUTION, &resV)) {
 			wprint("TIFFTAG_YRESOLUTION not set\n");
-			resV = 96.0;
+			resV = 98.0;
 		}
-		if (resV > 97.0)
+		dprint(MIDEBUG_NCCI_DATA, "V-resolution: %f\n", resV);
+		if (resV > 100.0)
 			pg->head.res_vertical = 1;
 		else
 			pg->head.res_vertical = 0;
