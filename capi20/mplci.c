@@ -237,13 +237,23 @@ int mPLCISendMessage(struct lController *lc, struct mc_buf *mc)
 struct lPLCI *get_lPLCI4Id(struct mPLCI *plci, uint16_t appId)
 {
 	struct lPLCI *lp;
+	struct lController *lc;
+	struct mApplication *app;
 
 	if (!plci)
 		return NULL;
 	lp = plci->lPLCIs;
 	while (lp) {
-		if (appId == lp->lc->Appl->AppId)
-			break;
+		lc = lp->lc;
+		if (lc) {
+			app = lc->Appl;
+			if (app) {
+				if (appId == app->AppId)
+					break;
+			} else
+				wprint("PLCI:%04x lc no application assigned\n", plci->plci);
+		} else
+			wprint("PLCI:%04x lp no lc assigned\n", plci->plci);
 		lp = lp->next;
 	}
 	return lp;
