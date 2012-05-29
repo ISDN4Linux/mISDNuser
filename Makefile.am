@@ -32,7 +32,7 @@ EXTRA_DIST = m4
 
 if GIT_REPO
 
-ChangeLog: .git/objects
+ChangeLog: $(srcdir)/.git/objects
 	git log > $@
 
 endif

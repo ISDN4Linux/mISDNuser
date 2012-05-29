@@ -154,11 +154,13 @@ AC_CHECK_FUNCS([gethostbyname gettimeofday inet_ntoa memset select socket strcas
 MISDN_CHECK_AF_ISDN
 
 
-if test -d .git/objects
-then
-	git_repo=true
+AC_MSG_CHECKING([whether building from git])
+if test -d ${srcdir}/.git/objects; then
+    AC_MSG_RESULT([yes])
+    git_repo=true
 else
-	git_repo=false
+    AC_MSG_RESULT([no])
+    git_repo=false
 fi
 
 AC_MISDN_GROUP
