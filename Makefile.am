@@ -38,6 +38,9 @@ ChangeLog: .git/objects
 endif
 
 install-data-local:
-	install -d $(DESTDIR)/etc/udev/rules.d
-	install -m 644 45-misdn.rules $(DESTDIR)/etc/udev/rules.d/45-misdn.rules
+	install -d $(DESTDIR)$(sysconfdir)/udev/rules.d
+	install -m 644 45-misdn.rules $(DESTDIR)$(sysconfdir)/udev/rules.d/45-misdn.rules
+
+distuninstallcheck_listfiles = \
+	find . -type f -print | grep -v '45-misdn.rules'
 
