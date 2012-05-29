@@ -1985,7 +1985,7 @@ static struct stateentry datastatelist[] =
 	 MT_SETUP_ACKNOWLEDGE, l3dss1_setup_ack},
 	{SBIT(2) | SBIT(3),
 	 MT_ALERTING, l3dss1_alerting},
-	{SBIT(2) | SBIT(3),
+	{SBIT(2) | SBIT(3) | SBIT(4),
 	 MT_PROGRESS, l3dss1_progress},
 	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) |
 	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19) | SBIT(25),
