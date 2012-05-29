@@ -29,5 +29,8 @@ test_file.out
 autom4te.cache
 ChangeLog
 config.log
+config.status
 Makefile
 DEADJOE
+.dirstamp
+libtool
