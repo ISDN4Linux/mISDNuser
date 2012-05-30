@@ -15607,11 +15607,16 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
 
 
 
-if test -d .git/objects
-then
-	git_repo=true
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether building from git" >&5
+$as_echo_n "checking whether building from git... " >&6; }
+if test -d ${srcdir}/.git/objects; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+    git_repo=true
 else
-	git_repo=false
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+    git_repo=false
 fi
 
 

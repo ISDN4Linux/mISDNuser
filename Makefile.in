@@ -103,7 +103,6 @@ am__relativize = \
   reldir="$$dir2"
 DIST_ARCHIVES = $(distdir).tar.gz
 GZIP_ENV = --best
-distuninstallcheck_listfiles = find . -type f -print
 distcleancheck_listfiles = find . -type f -print
 ACLOCAL = @ACLOCAL@
 AF_ISDN_VAL = @AF_ISDN_VAL@
@@ -237,6 +236,9 @@ SUBDIRS = include lib tools bridge l1oip $(MAYBE_EXAMPLE) $(MAYBE_GUI) $(MAYBE_C
 CLEANFILES = *~
 DISTCLEANFILES = 45-misdn.rules
 EXTRA_DIST = m4
+distuninstallcheck_listfiles = \
+	find . -type f -print | grep -v '45-misdn.rules'
+
 all: all-recursive
 
 .SUFFIXES:
@@ -725,12 +727,12 @@ export _MEMLEAKDEBUG MISDN_CAPI_GROUP
 @MEMLEAKDEBUG_TRUE@	_MEMLEAKDEBUG = "-DMEMLEAK_DEBUG=1"
 @MEMLEAKDEBUG_FALSE@	_MEMLEAKDEBUG =
 
-@GIT_REPO_TRUE@ChangeLog: .git/objects
+@GIT_REPO_TRUE@ChangeLog: $(srcdir)/.git/objects
 @GIT_REPO_TRUE@	git log > $@
 
 install-data-local:
-	install -d $(DESTDIR)/etc/udev/rules.d
-	install -m 644 45-misdn.rules $(DESTDIR)/etc/udev/rules.d/45-misdn.rules
+	install -d $(DESTDIR)$(sysconfdir)/udev/rules.d
+	install -m 644 45-misdn.rules $(DESTDIR)$(sysconfdir)/udev/rules.d/45-misdn.rules
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

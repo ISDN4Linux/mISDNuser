@@ -208,7 +208,10 @@ mISDNcapid_LDFLAGS = -shared
 AM_CPPFLAGS = -I$(top_srcdir)/include -Werror -Wall $(_USE_SOFTFAX) $(_MEMLEAKDEBUG) -DMISDN_GROUP=\"$(MISDN_GROUP)\"
 EXTRA_DIST = capi20.conf.sample
 CLEANFILES = *~
-MISDN_SOCKET_DIR = /var/run/mISDNcapid
+MISDN_SOCKET_DIR = $(localstatedir)/run/mISDNcapid
+distuninstallcheck_listfiles = \
+	find . -type f -print | grep -v 'capi20.conf'
+
 all: all-am
 
 .SUFFIXES:
@@ -553,8 +556,8 @@ install-exec-hook:
 	install  -d $(DESTDIR)$(MISDN_SOCKET_DIR)
 
 install-data-local:
-	install -d $(DESTDIR)/etc/
-	install -m 644 capi20.conf.sample $(DESTDIR)/etc/capi20.conf
+	install -d $(DESTDIR)$(sysconfdir)
+	install -m 644 capi20.conf.sample $(DESTDIR)$(sysconfdir)/capi20.conf
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
