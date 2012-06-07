@@ -35,7 +35,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 bin_PROGRAMS = misdn_info$(EXEEXT) misdn_log$(EXEEXT) \
-	misdn_E1test$(EXEEXT)
+	misdn_E1test$(EXEEXT) isdn_text2wireshark$(EXEEXT)
 sbin_PROGRAMS = misdn_rename$(EXEEXT) misdn_cleanl2$(EXEEXT)
 subdir = tools
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
@@ -50,6 +50,9 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(sbindir)"
 PROGRAMS = $(bin_PROGRAMS) $(sbin_PROGRAMS)
+am_isdn_text2wireshark_OBJECTS = text_wireshark.$(OBJEXT)
+isdn_text2wireshark_OBJECTS = $(am_isdn_text2wireshark_OBJECTS)
+isdn_text2wireshark_LDADD = $(LDADD)
 am_misdn_E1test_OBJECTS = E1test.$(OBJEXT)
 misdn_E1test_OBJECTS = $(am_misdn_E1test_OBJECTS)
 misdn_E1test_LDADD = $(LDADD)
@@ -78,12 +81,12 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(misdn_E1test_SOURCES) $(misdn_cleanl2_SOURCES) \
-	$(misdn_info_SOURCES) $(misdn_log_SOURCES) \
-	$(misdn_rename_SOURCES)
-DIST_SOURCES = $(misdn_E1test_SOURCES) $(misdn_cleanl2_SOURCES) \
-	$(misdn_info_SOURCES) $(misdn_log_SOURCES) \
-	$(misdn_rename_SOURCES)
+SOURCES = $(isdn_text2wireshark_SOURCES) $(misdn_E1test_SOURCES) \
+	$(misdn_cleanl2_SOURCES) $(misdn_info_SOURCES) \
+	$(misdn_log_SOURCES) $(misdn_rename_SOURCES)
+DIST_SOURCES = $(isdn_text2wireshark_SOURCES) $(misdn_E1test_SOURCES) \
+	$(misdn_cleanl2_SOURCES) $(misdn_info_SOURCES) \
+	$(misdn_log_SOURCES) $(misdn_rename_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -215,6 +218,7 @@ misdn_log_SOURCES = loghex.c
 misdn_rename_SOURCES = rename.c
 misdn_cleanl2_SOURCES = cleanl2.c
 misdn_E1test_SOURCES = E1test.c
+isdn_text2wireshark_SOURCES = text_wireshark.c
 AM_CPPFLAGS = -Wall -I$(top_srcdir)/include $(_MEMLEAKDEBUG)
 CLEANFILES = *~
 all: all-am
@@ -337,6 +341,9 @@ clean-sbinPROGRAMS:
 	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
 	echo " rm -f" $$list; \
 	rm -f $$list
+isdn_text2wireshark$(EXEEXT): $(isdn_text2wireshark_OBJECTS) $(isdn_text2wireshark_DEPENDENCIES) 
+	@rm -f isdn_text2wireshark$(EXEEXT)
+	$(LINK) $(isdn_text2wireshark_OBJECTS) $(isdn_text2wireshark_LDADD) $(LIBS)
 misdn_E1test$(EXEEXT): $(misdn_E1test_OBJECTS) $(misdn_E1test_DEPENDENCIES) 
 	@rm -f misdn_E1test$(EXEEXT)
 	$(LINK) $(misdn_E1test_OBJECTS) $(misdn_E1test_LDADD) $(LIBS)
@@ -364,6 +371,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/info.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/loghex.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rename.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/text_wireshark.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
