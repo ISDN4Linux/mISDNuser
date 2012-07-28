@@ -82,7 +82,7 @@ am__objects_5 = asn1/asn1.lo asn1/asn1_enc.lo asn1/asn1_generic.lo
 am__objects_6 = suppserv/aoc.lo suppserv/basic_service.lo \
 	suppserv/component.lo suppserv/diversion.lo \
 	suppserv/address.lo suppserv/ccbs.lo suppserv/fac.lo \
-	suppserv/ect.lo
+	suppserv/ect.lo suppserv/3pty.lo
 am_libmisdn_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
 	$(am__objects_4) $(am__objects_5) $(am__objects_6)
 libmisdn_la_OBJECTS = $(am_libmisdn_la_OBJECTS)
@@ -233,11 +233,13 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 ASN1_SRC = asn1/asn1.c asn1/asn1_enc.c asn1/asn1_generic.c
-SUPPSERV_SRC = suppserv/aoc.c suppserv/basic_service.c suppserv/component.c \
+SUPPSERV_SRC =	suppserv/aoc.c suppserv/basic_service.c suppserv/component.c \
 		suppserv/diversion.c suppserv/address.c suppserv/ccbs.c \
-		suppserv/fac.c suppserv/ect.c
+		suppserv/fac.c suppserv/ect.c suppserv/3pty.c
 
-SUPPSERV_INC = include/ccbs.h include/diversion.h include/ect.h include/asn1.h
+SUPPSERV_INC =	include/ccbs.h include/diversion.h include/ect.h include/asn1.h \
+		suppserv/3pty.h
+
 MISC_SRC = misc/debug.c misc/fsm.c misc/mbuffer.c misc/mtimer.c
 LAYER3_SRC = layer3/dss1net.c layer3/dss1user.c layer3/layer3.c layer3/mlayer3.c layer3/q931.c
 INCLUDE_SRC = include/debug.h include/dss1.h include/fsm.h include/helper.h include/layer3.h \
@@ -371,6 +373,8 @@ suppserv/fac.lo: suppserv/$(am__dirstamp) \
 	suppserv/$(DEPDIR)/$(am__dirstamp)
 suppserv/ect.lo: suppserv/$(am__dirstamp) \
 	suppserv/$(DEPDIR)/$(am__dirstamp)
+suppserv/3pty.lo: suppserv/$(am__dirstamp) \
+	suppserv/$(DEPDIR)/$(am__dirstamp)
 libmisdn.la: $(libmisdn_la_OBJECTS) $(libmisdn_la_DEPENDENCIES) 
 	$(libmisdn_la_LINK) -rpath $(libdir) $(libmisdn_la_OBJECTS) $(libmisdn_la_LIBADD) $(LIBS)
 
@@ -400,6 +404,8 @@ mostlyclean-compile:
 	-rm -f misc/mbuffer.lo
 	-rm -f misc/mtimer.$(OBJEXT)
 	-rm -f misc/mtimer.lo
+	-rm -f suppserv/3pty.$(OBJEXT)
+	-rm -f suppserv/3pty.lo
 	-rm -f suppserv/address.$(OBJEXT)
 	-rm -f suppserv/address.lo
 	-rm -f suppserv/aoc.$(OBJEXT)
@@ -432,6 +438,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@misc/$(DEPDIR)/fsm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@misc/$(DEPDIR)/mbuffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@misc/$(DEPDIR)/mtimer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@suppserv/$(DEPDIR)/3pty.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@suppserv/$(DEPDIR)/address.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@suppserv/$(DEPDIR)/aoc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@suppserv/$(DEPDIR)/basic_service.Plo@am__quote@

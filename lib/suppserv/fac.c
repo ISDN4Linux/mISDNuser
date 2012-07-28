@@ -360,6 +360,12 @@ static int encodeFacReturnResult(__u8 * dest, const struct asn1_parm *pc)
         dprint(DBGM_ASN1_ENC, "Return result %s Id:%d start encoding\n", ops, res->invokeId);
         if (res->operationValuePresent) {
                 switch (res->operationValue) {
+		case Fac_Begin3PTY:
+			len = encodeFacBegin3PTY(dest, pc, NULL);
+			break;
+		case Fac_End3PTY:
+			len = encodeFacEnd3PTY(dest, pc, NULL);
+			break;
                 case Fac_StatusRequest:
 			len = encodeFacStatusRequest(dest, pc, NULL);
 			break;
@@ -498,6 +504,12 @@ static int encodeFacInvoke(__u8 * dest, const struct asn1_parm *pc)
 	/* Diversion support */
 	case Fac_ActivationDiversion:
 		len = encodeFacActivationDiversion(dest, pc, &inv->o.ActivationDiversion);
+		break;
+	case Fac_Begin3PTY:
+		len = encodeFacBegin3PTY(dest, pc, NULL);
+		break;
+	case Fac_End3PTY:
+		len = encodeFacEnd3PTY(dest, pc, NULL);
 		break;
 	case Fac_DeactivationDiversion:
 		len = encodeFacDeactivationDiversion(dest, pc, &inv->o.DeactivationDiversion);

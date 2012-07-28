@@ -4,9 +4,10 @@ ASN1_SRC =	asn1/asn1.c asn1/asn1_enc.c asn1/asn1_generic.c
 
 SUPPSERV_SRC =	suppserv/aoc.c suppserv/basic_service.c suppserv/component.c \
 		suppserv/diversion.c suppserv/address.c suppserv/ccbs.c \
-		suppserv/fac.c suppserv/ect.c
+		suppserv/fac.c suppserv/ect.c suppserv/3pty.c
 
-SUPPSERV_INC = include/ccbs.h include/diversion.h include/ect.h include/asn1.h
+SUPPSERV_INC =	include/ccbs.h include/diversion.h include/ect.h include/asn1.h \
+		suppserv/3pty.h
 
 
 MISC_SRC =	misc/debug.c misc/fsm.c misc/mbuffer.c misc/mtimer.c

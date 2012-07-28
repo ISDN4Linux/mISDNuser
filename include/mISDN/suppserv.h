@@ -66,6 +66,9 @@ extern "C" {
 		 * Malicious Call Identification Operation Request
 		 */
 		Fac_MaliciousCallId = FAC_OID_BASE(FacOIDBase_Local) + 3,
+		/* 3PTY */
+		Fac_Begin3PTY = FAC_OID_BASE(FacOIDBase_Local) + 4,
+		Fac_End3PTY = FAC_OID_BASE(FacOIDBase_Local) + 5,
 		/*
 		 * localValue's from Diversion-Operations
 		 * {ccitt identified-organization etsi(0) 207 operations-and-errors(1)}

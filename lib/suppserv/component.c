@@ -149,6 +149,10 @@ static int ParseInvokeComponent(struct asn1_parm *pc, u_char * p, u_char * end, 
 
 	switch (operationValue) {
 		/* Diversion support */
+	case Fac_Begin3PTY:
+	case Fac_End3PTY:
+		/* No additional invoke parameters */
+		break;
 	case Fac_ActivationDiversion:
 		XSEQUENCE_1(ParseActivationDiversion, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, &pc->u.inv.o.ActivationDiversion);
 		break;
@@ -309,6 +313,11 @@ int ParseReturnResultComponentSequence(struct asn1_parm *pc, u_char * p, u_char 
 	pc->u.retResult.operationValuePresent = 1;
 
 	switch (pc->u.retResult.operationValue) {
+		/* 3PTY */
+	case Fac_Begin3PTY:
+	case Fac_End3PTY:
+		/* No additional result parameters */
+		break;
 		/* Diversion support */
 	case Fac_ActivationDiversion:
 	case Fac_DeactivationDiversion:
