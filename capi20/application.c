@@ -79,6 +79,7 @@ void ReleaseApplication(struct mApplication *appl)
 		ma = ma->next;
 	}
 	/* remove assigned logical controllers */
+	pthread_rwlock_wrlock(&appl->llock);
 	lc = appl->contL;
 	while (lc) {
 		lcn = lc->nextA;
@@ -88,18 +89,23 @@ void ReleaseApplication(struct mApplication *appl)
 	}
 	close(appl->fd);
 	dprint(MIDEBUG_CAPIMSG, "Appl:%3d removed\n", appl->AppId);
+	pthread_rwlock_unlock(&appl->llock);
+	pthread_rwlock_destroy(&appl->llock);
 	free(appl);
 }
 
 struct lController *get_lController(struct mApplication *app, int cont)
 {
-	struct lController *lc = app->contL;
+	struct lController *lc;
 
+	pthread_rwlock_rdlock(&app->llock);
+	lc = app->contL;
 	while (lc) {
 		if (lc->Contr->profile.ncontroller == cont)
 			break;
 		lc = lc->nextC;
 	}
+	pthread_rwlock_unlock(&app->llock);
 	return lc;
 }
 
@@ -143,7 +149,7 @@ struct lPLCI *get_lPLCI4plci(struct mApplication *appl, uint32_t id)
 	if (!lc)
 		return NULL;
 	plci = getPLCI4Id(lc->Contr, id & 0xFFFF);
-	return get_lPLCI4Id(plci, appl->AppId);
+	return get_lPLCI4Id(plci, appl->AppId, 0);
 }
 
 #define CapiFacilityNotSupported		0x300b
@@ -164,7 +170,7 @@ static int FacilityMessage(struct mApplication *appl, struct pController *pc, st
 	case 0x0001:		// DTMF
 		dprint(MIDEBUG_CONTROLLER, "DTMF addr %06x\n", mc->cmsg.adr.adrNCCI);
 		plci = getPLCI4Id(pc, mc->cmsg.adr.adrPLCI & 0xFFFF);
-		lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
+		lp = get_lPLCI4Id(plci, mc->cmsg.ApplId, 0);
 		bi = lp ? lp->BIlink : NULL;
 		if  (bi) {
 			ret = bi->from_up(bi, mc);
@@ -232,7 +238,7 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 		mcbuf_rb2cmsg(mc);
 		if ((subcmd == CAPI_REQ) || (subcmd == CAPI_RESP)) {
 			plci = getPLCI4Id(pc, mc->cmsg.adr.adrPLCI & 0xFFFF);
-			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
+			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId, 0);
 			bi = lp ? lp->BIlink : NULL;
 			if (bi) {
 				ret = bi->from_up(bi, mc);
@@ -248,7 +254,7 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 	case CAPI_CONNECT_B3:
 		mcbuf_rb2cmsg(mc);
 		plci = getPLCI4Id(pc, mc->cmsg.adr.adrPLCI & 0xFFFF);
-		lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
+		lp = get_lPLCI4Id(plci, mc->cmsg.ApplId, 0);
 		bi = lp ? lp->BIlink : NULL;
 		if (bi) {
 			ret = bi->from_up(bi, mc);
@@ -268,7 +274,7 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 		       plci ? plci->plci : 0xffff, mc->cmsg.ApplId);
 		if (subcmd == CAPI_REQ) {
 			if (plci) {
-				lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
+				lp = get_lPLCI4Id(plci, mc->cmsg.ApplId, 0);
 				if (lp)
 					ret = lPLCISendMessage(lp, mc);
 				else {
@@ -292,7 +298,7 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 				ret = mPLCISendMessage(lc, mc);
 			}
 		} else if (subcmd == CAPI_RESP) {
-			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
+			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId, 0);
 			if (lp)
 				ret = lPLCISendMessage(lp, mc);
 			else {
@@ -310,7 +316,7 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 		mcbuf_rb2cmsg(mc);
 		if ((subcmd == CAPI_REQ) || (subcmd == CAPI_RESP)) {
 			plci = getPLCI4Id(pc, mc->cmsg.adr.adrPLCI);
-			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
+			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId, 0);
 			dprint(MIDEBUG_PLCI, "adrPLCI %06x plci:%04x ApplId %d lp %p\n", mc->cmsg.adr.adrPLCI,
 			       plci ? plci->plci : 0xffff, mc->cmsg.ApplId, lp);
 			if (lp)

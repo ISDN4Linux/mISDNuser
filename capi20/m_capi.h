@@ -114,6 +114,7 @@ struct pController {
 	struct mlayer3		*l3;
 	struct lController	*lClist;
 	struct mPLCI		*plciL;		/* List of PLCIs */
+	pthread_rwlock_t	llock;
 	int			appCnt;
 	int			BImax;		/* Nr of BInstances */
 	struct BInstance 	*BInstances;	/* Array of BInstances [0 ... BImax - 1] */
@@ -146,6 +147,7 @@ void init_listen(void);
 void free_listen(void);
 struct lController *addlController(struct mApplication *, struct pController *, int);
 void rm_lController(struct lController *lc);
+void free_lController(struct lController *lc);
 int listenRequest(struct lController *, struct mc_buf *);
 
 struct mApplication {
@@ -153,6 +155,7 @@ struct mApplication {
 	int			refc;	/* refcount */
 	int			fd;	/* Filedescriptor for CAPI messages */
 	struct lController	*contL;	/* list of controllers */
+	pthread_rwlock_t	llock;
 	uint16_t		AppId;
 	uint16_t		MsgId;	/* next message number */
 	int			MaxB3Con;
@@ -176,6 +179,7 @@ struct mPLCI {
 	struct pController	*pc;
 	int nAppl;
 	struct lPLCI		*lPLCIs;
+	pthread_rwlock_t	llock;
 	unsigned int		alerting:1;
 	unsigned int		outgoing:1;
 };
@@ -186,7 +190,7 @@ struct mPLCI *new_mPLCI(struct pController *, int, struct lPLCI *);
 int free_mPLCI(struct mPLCI *);
 void plciDetachlPLCI(struct lPLCI *);
 struct mPLCI *getPLCI4Id(struct pController *, uint32_t);
-struct lPLCI *get_lPLCI4Id(struct mPLCI *, uint16_t);
+struct lPLCI *get_lPLCI4Id(struct mPLCI *, uint16_t, int);
 struct mPLCI *getPLCI4pid(struct pController *, int);
 int mPLCISendMessage(struct lController *, struct mc_buf *);
 int plciL4L3(struct mPLCI *, int, struct l3_msg *);

@@ -401,8 +401,10 @@ void clean_all(void)
 		}
 		free(mI_Controller[i].BInstances);
 		mI_Controller[i].BInstances = NULL;
+		pthread_rwlock_wrlock(&mI_Controller[i].llock);
 		while (mI_Controller[i].lClist)
-			rm_lController(mI_Controller[i].lClist);
+			free_lController(mI_Controller[i].lClist);
+		pthread_rwlock_unlock(&mI_Controller[i].llock);
 	}
 	mI_count = 0;
 }
@@ -978,6 +980,7 @@ int ListenController(struct pController *pc)
 	uint32_t InfoMask = 0, CIPMask = 0, CIPMask2 = 0;
 	int ret = 0;
 
+	pthread_rwlock_rdlock(&pc->llock);
 	lc = pc->lClist;
 	while (lc) {
 		dprint(MIDEBUG_CONTROLLER, "pc->lClist %p %08x/%08x/%08x\n", lc, lc->InfoMask, lc->CIPmask, lc->CIPmask2);
@@ -986,6 +989,7 @@ int ListenController(struct pController *pc)
 		CIPMask2 |= lc->CIPmask2;
 		lc = lc->nextC;
 	}
+	pthread_rwlock_unlock(&pc->llock);
 	dprint(MIDEBUG_CONTROLLER, "Controller %d change InfoMask %08x -> %08x\n", pc->profile.ncontroller, pc->InfoMask, InfoMask);
 	dprint(MIDEBUG_CONTROLLER, "Controller %d change CIPMask  %08x -> %08x\n", pc->profile.ncontroller, pc->CIPmask, CIPMask);
 	dprint(MIDEBUG_CONTROLLER, "Controller %d change CIPMask2 %08x -> %08x\n", pc->profile.ncontroller, pc->CIPmask2, CIPMask2);
@@ -1563,6 +1567,11 @@ int main(int argc, char *argv[])
 		pc->enable = 1;	/* default all controllers are enabled */
 		pc->L3Proto = L3_PROTOCOL_DSS1_USER;
 		pc->L3Flags = 0;
+	        ret = pthread_rwlock_init(&pc->llock, NULL);
+	        if (ret) {
+	                fprintf(stderr, "Cannot init lock for controller %d ret:%d - %s\n", i + 1, ret, strerror(ret));
+	                goto errout;
+		}
 		ret = ioctl(mIsock, IMGETDEVINFO, &pc->devinfo);
 		if (ret < 0) {
 			fprintf(stderr, "mISDNv2 IMGETDEVINFO error controller %d - %s\n", i + 1, strerror(errno));

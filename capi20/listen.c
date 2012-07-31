@@ -143,6 +143,7 @@ struct lController *addlController(struct mApplication *app, struct pController 
 		lc->InfoMask = 0;
 		lc->CIPmask = 0;
 		lc->CIPmask2 = 0;
+		pthread_rwlock_wrlock(&pc->llock);
 		old = pc->lClist;
 		while (old && old->nextC)
 			old = old->nextC;
@@ -150,6 +151,8 @@ struct lController *addlController(struct mApplication *app, struct pController 
 			old->nextC = lc;
 		else
 			pc->lClist = lc;
+		pthread_rwlock_unlock(&pc->llock);
+		pthread_rwlock_wrlock(&app->llock);
 		old = app->contL;
 		while (old && old->nextA)
 			old = old->nextA;
@@ -157,30 +160,45 @@ struct lController *addlController(struct mApplication *app, struct pController 
 			old->nextA = lc;
 		else
 			app->contL = lc;
+		pthread_rwlock_unlock(&app->llock);
 	} else
 		eprint("Controller%d: Application %d - no memory for lController\n", pc->profile.ncontroller, app->AppId);
 	return lc;
 }
 
-void rm_lController(struct lController *lc)
+void free_lController(struct lController *lc)
 {
 	struct lController *cur, *old;
 
-	if (lc->Contr) {
-		cur = lc->Contr->lClist;
-		old = cur;
-		while (cur) {
-			if (cur == lc) {
-				old->nextC = cur->nextC;
-				break;
-			}
-			old = cur;
-			cur = cur->nextC;
-		}
-		if (lc == lc->Contr->lClist)
-			lc->Contr->lClist = lc->nextC;
+	if (!lc->Contr) {
+		free(lc);
+		return;
 	}
+	cur = lc->Contr->lClist;
+	old = cur;
+	while (cur) {
+		if (cur == lc) {
+			old->nextC = cur->nextC;
+			break;
+		}
+		old = cur;
+		cur = cur->nextC;
+	}
+	if (lc == lc->Contr->lClist)
+		lc->Contr->lClist = lc->nextC;
 	free(lc);
+}
+
+void rm_lController(struct lController *lc)
+{
+	struct pController *pc = lc->Contr;
+
+	if (pc) {
+		pthread_rwlock_wrlock(&pc->llock);
+		free_lController(lc);
+		pthread_rwlock_unlock(&pc->llock);
+	} else
+		free(lc);
 }
 
 int listenRequest(struct lController *lc, struct mc_buf *mc)
