@@ -873,7 +873,7 @@ mi_decode_channel_id(struct l3_msg *l3m, struct misdn_channel_info *cip)
 				break;
 		}
 		if (*l3m->channel_id > 2 && ((c.flags & (MI_CHAN_FLG_ANY | MI_CHAN_FLG_NONE)) == 0))
-			c.nr = l3m->channel_id[3];
+			c.nr = l3m->channel_id[3] & 0x7f;
 	}
 	if (cip->nr != c.nr || cip->type != c.type || cip->flags != c.flags)
 		c.ctrl |= MI_CHAN_CTRL_UPDATED;
