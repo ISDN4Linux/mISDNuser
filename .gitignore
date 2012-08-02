@@ -31,6 +31,16 @@ ChangeLog
 config.log
 config.status
 Makefile
+Makefile.in
+configure
+ltmain.sh
+m4
+autom4te.cache
+depcomp
+missing
+install-sh
+config.guess
+config.sub
 DEADJOE
 .dirstamp
 libtool

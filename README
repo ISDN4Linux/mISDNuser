@@ -1,3 +1,13 @@
 This package contain the libmisdn library and some utilities for the
 mISDN version 2 Linux ISDN stack.
 
+To build it you need the GNU autotools:
+automake
+autoconf
+libtools
+
+You can create the files automatically with running make.
+
+After this run ./configure with your options and make again.
+
+
