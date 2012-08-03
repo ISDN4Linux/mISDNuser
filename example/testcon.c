@@ -1143,7 +1143,7 @@ int argc;
 char *argv[];
 
 {
-	char FileName[200],FileNameOut[200];
+	char FileName[200],FileNameOut[200], FileNameIn[200];
 	int aidx=1,para=1, idx;
 	char sw;
 	devinfo_t mISDN;
@@ -1207,7 +1207,7 @@ char *argv[];
 			}  else {
 				if (para==1) {
 					if (argc > 1)
-						strcpy(FileName,argv[aidx]);
+						strncpy(FileName, argv[aidx], 199);
 					para++;
 				} else {
 					fprintf(stderr,"Undefined argument %s\n",argv[aidx]);
@@ -1225,10 +1225,10 @@ char *argv[];
 		return 1;
 	}
 	close(err);
-	sprintf(FileNameOut,"%s.out",FileName);
-	sprintf(FileName,"%s.in",FileName);
-	if (0>(mISDN.save = open(FileName, O_WRONLY|O_CREAT|O_TRUNC,S_IRWXU))) {
-		printf("TestmISDN cannot open %s due to %s\n",FileName,
+	sprintf(FileNameOut,"%s.out", FileName);
+	sprintf(FileNameIn,"%s.in", FileName);
+	if (0>(mISDN.save = open(FileNameIn, O_WRONLY|O_CREAT|O_TRUNC,S_IRWXU))) {
+		printf("TestmISDN cannot open %s due to %s\n",FileNameIn,
 			strerror(errno));
 		return 1;
 	}
