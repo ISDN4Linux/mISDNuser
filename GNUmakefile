@@ -1,18 +1,18 @@
 all:
-		if test ! -f configure ; then \
+		@if test ! -f configure ; then \
 			$(MAKE) configure ; \
 		fi
-		if test ! -f Makefile.in ; then \
+		@if test ! -f Makefile.in ; then \
 			$(MAKE) Makefile.in ; \
 		fi
-		if test -f Makefile ; then \
+		@if test -f Makefile ; then \
 			$(MAKE) -f Makefile $@; \
 		else \
 			echo "Please run ./configure"; \
 		fi
 
 %:
-		if test -f Makefile ; then \
+		@if test -f Makefile ; then \
 			$(MAKE) -f Makefile $@; \
 		else \
 			echo "Please run ./configure"; \

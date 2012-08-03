@@ -26,6 +26,7 @@
 test_file.in
 test_file.out
 
+45-misdn.rules
 autom4te.cache
 ChangeLog
 config.log
@@ -35,7 +36,7 @@ Makefile.in
 configure
 ltmain.sh
 m4
-autom4te.cache
+aclocal.m4
 depcomp
 missing
 install-sh
