@@ -712,15 +712,9 @@ int main_data_loop(devinfo_t *di) {
 
 int
 connect_layer1_d(devinfo_t *di) {
-	struct mISDN_ctrl_req creq;
 	int cnt, ret = 0;
 	int sk;
 	struct mISDN_devinfo devinfo;
-	socklen_t alen;
-	struct mISDNhead *hh;
-	struct timeval tout;
-	fd_set rds;
-	unsigned char buffer[2048];
 
 	sk = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (sk < 1) {
@@ -802,6 +796,7 @@ set_hw_loop(devinfo_t *di)
 	if (ret < 0) {
 		fprintf(stdout, "set_hw_loop ioctl error %s\n", strerror(errno));
 	}
+	return ret;
 }
 
 

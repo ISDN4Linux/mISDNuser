@@ -467,12 +467,10 @@ int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 
 void do_bconnection(devinfo_t *di) {
 	unsigned char		buf[MAX_REC_BUF];
-	struct  mISDNhead	*hh;
 	struct timeval		tout;
 	fd_set			rds;
 	int			ret = 0;
 
-	hh = (struct  mISDNhead *)buf;
 	/* Main loop */
 	while (1) {
 		tout.tv_usec = 0;
@@ -488,6 +486,9 @@ void do_bconnection(devinfo_t *di) {
 		}
 		if (ret == 0) { /* time out */
 #ifdef NOTYET
+			struct  mISDNhead	*hh;
+
+			hh = (struct  mISDNhead *)buf;
 			if (di->flag & FLG_SEND_TONE) {
 				if (di->val) {
 					di->val--;
@@ -1238,7 +1239,7 @@ static int my_lib_debug(const char *file, int line, const char *func, int level,
 }
 
 static struct mi_ext_fn_s myfn = {
-                         .prt_debug = my_lib_debug,
+			 .prt_debug = my_lib_debug,
 };
 
 int main(argc,argv)
@@ -1295,8 +1296,8 @@ char *argv[];
 						mISDN.flag |= FLG_NT_MODE;
 						break;
 					case 'n':
-					        if (!argv[aidx][2]) {
-					        	idx = 0;
+						if (!argv[aidx][2]) {
+							idx = 0;
 							aidx++;
 						} else {
 							idx=2;
@@ -1309,8 +1310,8 @@ char *argv[];
 						}
 						break;
 					case 'm':
-					        if (!argv[aidx][2]) {
-					        	idx = 0;
+						if (!argv[aidx][2]) {
+							idx = 0;
 							aidx++;
 						} else {
 							idx=2;
@@ -1342,7 +1343,7 @@ char *argv[];
 					exit(1);
 				}
 			}
-                                   aidx++;
+			aidx++;
 		} while (aidx<argc);
 	}
 
