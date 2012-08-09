@@ -21,6 +21,7 @@
  *
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -30,12 +31,14 @@
 #include <netdb.h>
 #include <sys/socket.h>
 #include <stdlib.h>
+#include <poll.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
 #include <pthread.h>
 #include <sys/ioctl.h>
+#include <getopt.h>
 #include <mISDN/q931.h>
 #include <mISDN/mISDNif.h>
 #include <mISDN/mlayer3.h>
@@ -43,80 +46,284 @@
 void usage(pname) 
 char *pname;
 {
-	fprintf(stderr,"Call with %s [options] [filename]\n",pname);
+	fprintf(stderr,"Call with %s [options] [filename]\n", pname);
 	fprintf(stderr,"\n");
-	fprintf(stderr,"       filename   filename.in  incoming data\n");
-	fprintf(stderr,"                  filename.out outgoing data\n");
-	fprintf(stderr,"                  data is alaw for voice\n");
+	fprintf(stderr,"    filename     filename.in  incoming data\n");
+	fprintf(stderr,"                 filename.out outgoing data\n");
+	fprintf(stderr,"                 data is alaw for voice\n");
 	fprintf(stderr,"\n");
-	fprintf(stderr,"\n     Valid options are:\n");
+	fprintf(stderr,"    Valid options are:\n");
 	fprintf(stderr,"\n");
-	fprintf(stderr,"  -?              Usage ; printout this information\n");
-	fprintf(stderr,"  -a<n>           use address family number n (default %d)\n", MISDN_AF_ISDN); 
-	fprintf(stderr,"  -c<n>           use card number n (default 0)\n"); 
-	fprintf(stderr,"  -F<n>           use function n (default 0)\n"); 
-	fprintf(stderr,"                    0 send and recive voice\n"); 
-	fprintf(stderr,"                    1 send touchtones\n"); 
-	fprintf(stderr,"                    2 receive touchtones\n"); 
-	fprintf(stderr,"                    3 send and receive hdlc data\n"); 
-	fprintf(stderr,"                    4 send and receive X75 data\n"); 
-	fprintf(stderr,"                    5 send and receive voice early B connect\n");
-	fprintf(stderr,"                    6 loop back voice\n");
-	fprintf(stderr,"  -n <phone nr>   Phonenumber to dial\n");
-	fprintf(stderr,"  -N              NT Mode\n");
-	fprintf(stderr,"  -m <msn>	  MSN (default 123) NT mode only\n");
-	fprintf(stderr,"  -vn             Printing debug info level n\n");
-	fprintf(stderr,"\n");
+	fprintf(stderr, "   -?, --help                     this help\n");
+	fprintf(stderr, "   -a  --af <n>                   use address family number n (default %d)\n", MISDN_AF_ISDN);
+	fprintf(stderr, "   -C  --complete                 SETUP sending complete\n");
+	fprintf(stderr, "   -c, --controller <n>           use controller n (default 0)\n");
+	fprintf(stderr, "   -f, --function <n>             do function n (default 0)\n");
+	fprintf(stderr, "   -l, --libdebug <mask>          use library debugmask\n");
+	fprintf(stderr, "   -m  --msn <number>             use as calling number\n");
+	fprintf(stderr, "   -N  --nt                       NT Mode\n");
+	fprintf(stderr, "   -n  --number <phonenumber>     use phone number\n");
+	fprintf(stderr, "   -P  --PtP                      PtP Mode\n");
+	fprintf(stderr, "   -p  --progress  <LLDD>         add progress (LL 2 digit loc DD 2 digit description\n");
+	fprintf(stderr, "   -T, --timeout <n>              use timeout (default 30) -1 no timeout\n");
+	fprintf(stderr, "   -v, --verbose <level>          set verbose level\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "   Available functions:\n");
+	fprintf(stderr, "       0 send and recive voice\n");
+	fprintf(stderr, "       1 send touchtones\n");
+	fprintf(stderr, "       2 receive touchtones\n");
+	fprintf(stderr, "       3 send and receive hdlc data\n");
+	fprintf(stderr, "       4 send and receive X75 data\n");
+	fprintf(stderr, "       5 send and receive voice early B connect\n");
+	fprintf(stderr, "       6 loop back voice\n");
+	fprintf(stderr, "       7 send and recive voice extra FACILITY\n");
+	fprintf(stderr, "\n");
 }
 
 typedef struct _devinfo {
-	int			cardnr;
-	int			func;
-	char			phonenr[32];
-	char			msn[32];
-	char			net_nr[32];
-	pthread_mutex_t		wait;
-	pthread_t		bworker;
-	struct mlayer3		*layer3;
-	unsigned int		pid;
-	int			bchan;
-	int			nds;
-	int			bproto;
-	int			used_bchannel;
-	int			save;
-	int			play;
-	FILE			*fplay;
-	int			si;
-	int			flag;
-	int			timeout;
+	int				contr;
+	int				func;
+	char				phonenr[32];
+	char				msn[32];
+	char				net_nr[32];
+	struct mlayer3			*l3;
+	struct pollfd			pfd[2];
+	int				npfd;
+	unsigned int			pid;
+	unsigned int			progress;
+	struct misdn_channel_info	cid;
+	int				bchan;
+	int				bproto;
+	int				used_bchannel;
+	int				pipe[2];
+	unsigned int			nt:1;
+	unsigned int			PtP:1;
+	unsigned int			sending_complete:1;
+	unsigned int			orginate:1;
+	unsigned int			send_tone:1;
+	unsigned int			cid_sent:1;
+	unsigned int			active:1;
+	unsigned int			hangup:1;
+	unsigned int			send_data:1;
+	unsigned int			bch_setup:1;
+	unsigned int			bch_OK:1;
+	unsigned int			bch_doactive:1;
+	unsigned int			bch_active:1;
+	unsigned int			bch_actdelayed:1;
+	unsigned int			bch_early:1;
+	unsigned int			bch_loop:1;
+	unsigned int			bch_loop_set:1;
+	unsigned int			bch_stop:1;
+	unsigned int			stop:1;
+	int				save;
+	int				play;
+	FILE				*fplay;
+	int				si;
+	struct timeval			read_timeout;
+	int				worker_tick;
+	time_t				timeout;
+	time_t				lasttime;
+	int				cfg_timeout;
 } devinfo_t;
-
-#define FLG_SEND_TONE		0x0001
-#define FLG_SEND_DATA		0x0002
-#define FLG_NT_MODE		0x0004
-#define FLG_BCHANNEL_SETUP	0x0010
-#define FLG_BCHANNEL_DOACTIVE	0x0020
-#define FLG_BCHANNEL_ACTIVE	0x0040
-#define FLG_BCHANNEL_ACTDELAYED	0x0080
-#define FLG_CALL_ORGINATE	0x0100
-#define FLG_BCHANNEL_EARLY	0x0200
-#define FLG_CALL_ACTIVE		0x0400
-#define FLG_BCHANNEL_LOOP	0x0800
-#define FLG_BCHANNEL_LOOPSET	0x1000
-#define FLG_STOP_BCHANNEL	0x4000
-#define FLG_STOP		0x8000
 
 #define MAX_REC_BUF		4000
 #define MAX_DATA_BUF		1024
 
-static int VerifyOn=0;
+#define ReadPipe		pipe[0]
+#define WritePipe		pipe[1]
+
+#define PRIV_ADDBC_FD		0x01010002
+#define PRIV_RMBC_FD		0x01020002
+
+
 #ifdef NOTYET
 static char tt_char[] = "0123456789ABCD*#";
 #endif
 
 #define PLAY_SIZE 64
 
-int play_msg(devinfo_t *di) {
+static int VerboseLevel, LibDebug;
+static char *DataFileName;
+
+#define TEST_FAC_LEN		39
+static unsigned char test_facility[] =  {0x91, 0xA1, 0x24, 0x02, 0x02, 0x40, 0x00, 0x02,
+					 0x01, 0x0F, 0x30, 0x1B, 0x02, 0x01, 0x01, 0x0A,
+					 0x01, 0x00, 0xA1, 0x13, 0xA0, 0x11, 0xA1, 0x0F,
+					 0x0A, 0x01, 0x02, 0x12, 0x0A, 0x31, 0x34, 0x31,
+					 0x35, 0x35, 0x32, 0x34, 0x39, 0x36, 0x36 };
+
+static int opt_parse(devinfo_t *di, int ac, char *av[])
+{
+	int c, af;
+
+	memset(di, 0, sizeof(*di));
+	DataFileName = NULL;
+	di->pid = MISDN_PID_NONE;
+	di->cfg_timeout = 30;
+
+	for (;;) {
+		int option_index = 0;
+		static struct option long_options[] = {
+			{"help", 0, 0, '?'},
+			{"af", 1, 0, 'a'},
+			{"complete", 0, 0, 'C'},
+			{"controller", 1, 0, 'c'},
+			{"function", 1, 0, 'f'},
+			{"libdebug", 1, 0, 'l'},
+			{"msn", 1, 0, 'm'},
+			{"nt", 0, 0, 'N'},
+			{"number", 1, 0, 'n'},
+			{"PtP", 0, 0, 'P'},
+			{"progress", 1, 0, 'p'},
+			{"timeout", 1, 0, 'T'},
+			{"verbose", 1, 0, 'v'},
+			{0, 0, 0, 0}
+		};
+
+		c = getopt_long(ac, av, "?a:Cc:f:l:m:Nn:Pp:T:v:", long_options, &option_index);
+		if (c == -1)
+			break;
+		switch (c) {
+		case 0:
+			fprintf(stderr, "option %s", long_options[option_index].name);
+			if (optarg)
+				fprintf(stderr, " with arg %s", optarg);
+			fprintf(stderr, "\n");
+			usage(av[0]);
+			return -1;
+		case 'a':
+			if (optarg) {
+				af = atol(optarg);
+				if (set_af_isdn(af) < 0) {
+					fprintf(stderr, "Wrong address family number %s\n", optarg);
+					return -2;
+				}
+			} else {
+				fprintf(stderr, "option -a but no AF number\n");
+				return -2;
+			}
+			break;
+		case 'C':
+			di->sending_complete = 1;
+			break;
+		case 'c':
+			if (optarg)
+				di->contr = atoi(optarg);
+			else {
+				fprintf(stderr, "option -c but no controller number\n");
+				return -2;
+			}
+			break;
+		case 'f':
+			if (optarg)
+				di->func = atoi(optarg);
+			else {
+				fprintf(stderr, "option -c but no function number\n");
+				return -2;
+			}
+			break;
+		case 'l':
+			if (optarg)
+				LibDebug = strtol(optarg, NULL, 0);
+			else {
+				fprintf(stderr, "option -c but no mask\n");
+				return -2;
+			}
+			break;
+		case 'm':
+			if (optarg) {
+				strncpy(di->msn, optarg, 31);
+			} else {
+				fprintf(stderr, "option -m but no number\n");
+				return -2;
+			}
+			break;
+		case 'N':
+			di->nt = 1;
+			break;
+		case 'n':
+			if (optarg) {
+				strncpy(di->phonenr, optarg, 31);
+			} else {
+				fprintf(stderr, "option -n but no number\n");
+				return -2;
+			}
+			break;
+		case 'P':
+			di->PtP = 1;
+			break;
+		case 'p':
+			if (optarg)
+				di->progress = strtol(optarg, NULL, 16);
+			else {
+				fprintf(stderr, "option -p but no progress value\n");
+				return -2;
+			}
+			break;
+		case 'T':
+			if (optarg)
+				di->cfg_timeout = atoi(optarg);
+			else {
+				fprintf(stderr, "option -T but no timeout value\n");
+				return -2;
+			}
+			break;
+		case 'v':
+			if (optarg) {
+				errno = 0;
+				VerboseLevel = (unsigned int)strtol(optarg, NULL, 0);
+				if (errno) {
+					fprintf(stderr, "cannot read verbose level from %s - %s\n", optarg, strerror(errno));
+					return -3;
+				}
+			} else {
+				fprintf(stderr, "option -v but no value for verbose\n");
+				return -3;
+			}
+			break;
+		case '?':
+			usage(av[0]);
+			return -1;
+		}
+	}
+	c = ac - optind;
+	if (c != 0) {
+		DataFileName = strdup(av[optind]);
+	}
+	return 0;
+}
+
+static int mylog(int level, const char *fmt, ...)
+{
+	char		logbuf[512];
+	struct timeval	tv;
+	struct tm	tm;
+	int		l;
+	va_list	args;
+
+	if (level > VerboseLevel)
+		return 0;
+	va_start(args, fmt);
+	gettimeofday(&tv, NULL);
+	localtime_r(&tv.tv_sec, &tm);
+	l = sprintf(logbuf, "%02d.%02d.%04d %02d:%02d:%02d.%06d  ",
+		    tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900, tm.tm_hour, tm.tm_min, tm.tm_sec, (int)tv.tv_usec);
+	vsnprintf(&logbuf[l], 512 - l, fmt, args);
+	va_end(args);
+	return fprintf(stdout, "%s", logbuf);
+}
+
+static void send_ctrl(devinfo_t *di, unsigned int cmd)
+{
+	int ret;
+
+	ret = write(di->WritePipe, &cmd, sizeof(cmd));
+	if (ret != sizeof(cmd)) {
+		mylog(1, "Cannot write control %x - %s\n", cmd, strerror(errno));
+	}
+}
+
+static int play_msg(devinfo_t *di) {
 	unsigned char buf[PLAY_SIZE + MISDN_HEADER_LEN];
 	struct  mISDNhead *hh = (struct  mISDNhead *)buf;
 	int len, ret;
@@ -124,31 +331,31 @@ int play_msg(devinfo_t *di) {
 	if (di->play < 0)
 		return 0;
 	len = read(di->play, buf + MISDN_HEADER_LEN, PLAY_SIZE);
-	if (len<1) {
-		if (len<0)
-			printf("play_msg err %d: \"%s\"\n", errno, strerror(errno));
+	if (len < 1) {
+		if (len < 0)
+			mylog(0, "play_msg err %d: \"%s\"\n", errno, strerror(errno));
 		close(di->play);
 		di->play = -1;
 		return 0;
 	}
 	
 	hh->prim = PH_DATA_REQ;
-	hh->id = 0;
+	hh->id = 42;
 	ret = sendto(di->bchan, buf, len + MISDN_HEADER_LEN, 0, NULL, 0);
 	if (ret < 0)
-		fprintf(stdout,"play send error %d %s\n", errno, strerror(errno));
-	else if (VerifyOn>4)
-		fprintf(stdout,"play send ret=%d\n", ret);
+		mylog(0, "play send error %d %s\n", errno, strerror(errno));
+	else
+		mylog(7, "play send ret=%d\n", ret);
 	return ret;
 }
 
-int send_data(devinfo_t *di) {
+static int send_data(devinfo_t *di) {
 	char buf[MAX_DATA_BUF + MISDN_HEADER_LEN];
 	struct  mISDNhead *hh = (struct  mISDNhead *)buf;
 	char *data;
 	int len, ret;
 	
-	if (di->play<0 || !di->fplay)
+	if (di->play < 0 || !di->fplay)
 		return 0;
 	if (!(data = fgets(buf + MISDN_HEADER_LEN, MAX_DATA_BUF, di->fplay))) {
 		close(di->play);
@@ -169,113 +376,57 @@ int send_data(devinfo_t *di) {
 	hh->id = 0;
 	ret = sendto(di->bchan, buf, len + MISDN_HEADER_LEN, 0, NULL, 0);
 	if (ret < 0)
-		fprintf(stdout,"send_data error %d %s\n", errno, strerror(errno));
-	else if (VerifyOn>4)
-		fprintf(stdout,"send_data ret=%d\n", ret);
+		mylog(0, "send_data error %d %s\n", errno, strerror(errno));
+	else
+		mylog(7, "send_data ret=%d\n", ret);
 	return ret;
 }
 
-void do_bconnection(devinfo_t *);
-
-int setup_bchannel(devinfo_t *di) {
+static int setup_bchannel(devinfo_t *di) {
 	int			ret;
 	struct sockaddr_mISDN	addr;
 
-	if (di->flag & FLG_BCHANNEL_SETUP)
+	if (di->bch_setup)
 		return 1;
 	if ((di->used_bchannel < 1) || (di->used_bchannel > 2)) {
-		fprintf(stdout, "wrong channel %d\n", di->used_bchannel);
+		mylog(0, "wrong channel %d\n", di->used_bchannel);
 		return 2;
 	}
 	di->bchan = socket(PF_ISDN, SOCK_DGRAM, di->bproto);
 	if (di->bchan < 0) {
-		fprintf(stdout, "could not open bchannel socket %s\n", strerror(errno));
+		mylog(0, "could not open bchannel socket %s\n", strerror(errno));
 		return 3;
 	}
 
-	if (di->bchan > di->nds - 1)
-		di->nds = di->bchan + 1;
-
 	ret = fcntl(di->bchan, F_SETFL, O_NONBLOCK);
 	if (ret < 0) {
-		fprintf(stdout, "fcntl error %s\n", strerror(errno));
+		mylog(0, "fcntl error %s\n", strerror(errno));
 		return 4;
 	}
 
 	addr.family = AF_ISDN;
-	addr.dev = di->cardnr;
+	addr.dev = di->contr;
 	addr.channel = di->used_bchannel;
 
 	ret = bind(di->bchan, (struct sockaddr *) &addr, sizeof(addr));
 
 	if (ret < 0) {
-		fprintf(stdout, "could not bind bchannel socket %s\n", strerror(errno));
+		mylog(0, "could not bind bchannel socket %s\n", strerror(errno));
 		return 5;
 	}
-	ret = pthread_create(&di->bworker, NULL, (void *)do_bconnection, (void *)di);
-	if (ret) {
-		fprintf(stdout, "%s cannot start bworker thread  %s\n", __FUNCTION__, strerror(errno));
-	} else
-		di->flag |= FLG_BCHANNEL_SETUP;
-		
+	di->pfd[1].fd = di->bchan;
+	di->pfd[1].events= POLLIN;
+
+	send_ctrl(di, PRIV_ADDBC_FD);
+
+	di->bch_setup = 1;
 	return ret;
 }
 
-int send_SETUP(devinfo_t *di, int SI, char *PNr) {
-	unsigned char		nr[64], bearer[4], cid[4];
-	unsigned char		*np,*p;
-	int			ret, l;
-	struct	l3_msg		*l3m;
-
-	ret = di->layer3->to_layer3(di->layer3, MT_ASSIGN, 0, NULL);
-	if (ret < 0) {
-		fprintf(stdout, "cannot get a new pid\n");
-		return ret;
-	}
-		
-	l3m =  alloc_l3_msg();
-	if (!l3m) {
-		fprintf(stdout, "cannot allocate l3 msg struct\n");
-		return -ENOMEM;
-	}
-	if (SI == 1) { /* Audio */
-		l = 3;			/* Length                               */
-		bearer[0] = 0x90;	/* Coding Std. CCITT, 3.1 kHz audio     */
-		bearer[1] = 0x90;	/* Circuit-Mode 64kbps                  */
-		bearer[2] = 0xa3;	/* A-Law Audio                          */
-	} else { /* default Datatransmission 64k */
-		l = 2;			/* Length                               */
-		bearer[0] = 0x88;	/* Coding Std. CCITT, unrestr. dig. Inf */
-		bearer[1] = 0x90;	/* Circuit-Mode 64kbps                  */
-	}
-	add_layer3_ie(l3m, IE_BEARER, l, bearer);
-	if (di->flag & FLG_NT_MODE) {
-		di->used_bchannel = 1;
-		cid[0] = 0x80; /* channel prefered */
-		cid[0] |= di->used_bchannel;
-		add_layer3_ie(l3m, IE_CHANNEL_ID, 1, cid);
-	}
-	np = (unsigned char *)PNr;
-	l = strlen(PNr) + 1;
-	p = nr;
-	/* Classify as AnyPref. */
-	*p++ = 0x81;		/* Ext = '1'B, Type = '000'B, Plan = '0001'B. */
-	while (*np)
-		*p++ = *np++ & 0x7f;
-	add_layer3_ie(l3m, IE_CALLED_PN, l, nr);
-	ret = di->layer3->to_layer3(di->layer3, MT_SETUP, di->pid, l3m);
-	if (ret < 0) {
-		fprintf(stdout, "send to_layer3  error  %s\n", strerror(errno));
-	}
-	return ret;
-}
-
-int activate_bchan(devinfo_t *di) {
+static int activate_bchan(devinfo_t *di) {
 	unsigned char 		buf[2048];
 	struct  mISDNhead	*hh = (struct  mISDNhead *)buf;
-	struct timeval		tout;
-	fd_set			rds;
-	int ret, rval;
+	int ret;
 
 	if (di->bproto == ISDN_P_B_X75SLP)
 		hh->prim = DL_ESTABLISH_REQ;
@@ -285,60 +436,21 @@ int activate_bchan(devinfo_t *di) {
 	ret = sendto(di->bchan, buf, MISDN_HEADER_LEN, 0, NULL, 0);
 	
 	if (ret < 0) {
-		fprintf(stdout, "could not send ACTIVATE_REQ %s\n", strerror(errno));
+		mylog(0, "could not send ACTIVATE_REQ %s\n", strerror(errno));
 		return 0;
 	}
 	
-	if (VerifyOn>3)
-		fprintf(stdout,"ACTIVATE_REQ sendto ret=%d\n", ret);
+	mylog(3, "ACTIVATE_REQ sendto ret=%d\n", ret);
 
-	tout.tv_usec = 0;
-	tout.tv_sec = 10;
-	FD_ZERO(&rds);
-	FD_SET(di->bchan, &rds);
-
-	ret = select(di->nds, &rds, NULL, NULL, &tout);
-	if (VerifyOn>3)
-		fprintf(stdout,"select ret=%d\n", ret);
-	if (ret < 0) {
-		fprintf(stdout, "select error  %s\n", strerror(errno));
-		return 0;
-	}
-	if (ret == 0) {
-		fprintf(stdout, "select timeeout\n");
-		return 0;
-	}
-	
-	if (di->bproto == ISDN_P_B_X75SLP)
-		rval = DL_ESTABLISH_CNF;
-	else
-		rval = PH_ACTIVATE_IND;
-	if (FD_ISSET(di->bchan, &rds)) {
-		ret = recv(di->bchan, buf, 2048, 0);
-		if (ret < 0) {
-			fprintf(stdout, "recv error  %s\n", strerror(errno));
-			return 0;
-		}
-		if (hh->prim == rval) {
-			di->flag |= FLG_BCHANNEL_ACTIVE;
-		} else {
-			fprintf(stdout, "recv not  %x but %x\n", rval, hh->prim);
-			return 0;
-		}
-	} else {
-		fprintf(stdout, "bchan fd not in set\n");
-		return 0;
-	}
-	
 	return ret;
 }
 
-int deactivate_bchan(devinfo_t *di) {
+static int deactivate_bchan(devinfo_t *di) {
 	unsigned char 		buf[64];
 	struct  mISDNhead	*hh = (struct  mISDNhead *)buf;
 	int ret;
 
-	if (!(di->flag &FLG_BCHANNEL_ACTIVE))
+	if (!di->bch_active)
 		return 0;
 	if (di->bchan < 1)
 		return 0;
@@ -346,40 +458,36 @@ int deactivate_bchan(devinfo_t *di) {
 		hh->prim = DL_RELEASE_REQ;
 	else
 		hh->prim = PH_DEACTIVATE_REQ;
-	hh->id   = MISDN_ID_ANY;
+	hh->id = MISDN_ID_ANY;
 	ret = sendto(di->bchan, buf, MISDN_HEADER_LEN, 0, NULL, 0);
 	
 	if (ret < 0) {
-		fprintf(stdout, "could not send DEACTIVATE_REQ %s\n", strerror(errno));
+		mylog(0, "could not send DEACTIVATE_REQ %s\n", strerror(errno));
 		return 9;
 	}
-	di->flag &= ~FLG_BCHANNEL_ACTIVE;
-	if (VerifyOn>3)
-		fprintf(stdout,"DEACTIVATE_REQ sendto ret=%d\n", ret);
+	di->bch_active = 0;
+	mylog(3, "DEACTIVATE_REQ sendto ret=%d\n", ret);
 
 	return ret;
 }
 
 #ifdef NOTYET
-int send_touchtone(devinfo_t *di, int tone) {
+static int send_touchtone(devinfo_t *di, int tone) {
 	struct  mISDNhead frm;
 	int tval, ret;
 
-	if (VerifyOn>1)
-		fprintf(stdout,"send_touchtone %c\n", DTMF_TONE_MASK & tone);
+	mylog(1, "send_touchtone %c\n", DTMF_TONE_MASK & tone);
 	tval = DTMF_TONE_VAL | tone;
 	ret = mISDN_write_frame(di->device, &frm,
 		di->b_adress[di->used_bchannel] | FLG_MSG_DOWN,
 		PH_CONTROL | REQUEST, 0, 4, &tval, TIMEOUT_1SEC);
-	if (VerifyOn>3)
-		fprintf(stdout,"tt send ret=%d\n", ret);
+	mylog(3, "tt send ret=%d\n", ret);
 	return ret;
 }
 #endif
 
 #ifdef NOTYET
-void
-do_hw_loop(devinfo_t *di)
+static void do_hw_loop(devinfo_t *di)
 {
 	struct mISDN_ctrl_req	creq;
 	int ret;
@@ -388,189 +496,30 @@ do_hw_loop(devinfo_t *di)
 	creq.channel = di->used_bchannel;
 	ret = ioctl(di->layer2, IMCTRLREQ, &creq);
 	if (ret < 0)
-		fprintf(stdout,"do_hw_loop ioctl error %s\n", strerror(errno));
+		mylog(0, "do_hw_loop ioctl error %s\n", strerror(errno));
 	else
-		di->flag  |= FLG_BCHANNEL_LOOPSET;
+		di->bch_loopset = 1;
 }
 
-void
-del_hw_loop(devinfo_t *di)
+static void del_hw_loop(devinfo_t *di)
 {
 	struct mISDN_ctrl_req	creq;
 	int ret;
 
-	if (!(di->flag & FLG_BCHANNEL_LOOPSET))
+	if (!di->bch_loopset)
 		return;
 	creq.op = MISDN_CTRL_LOOP;
 	creq.channel = 0;
 	ret = ioctl(di->layer2, IMCTRLREQ, &creq);
 	if (ret < 0)
-		fprintf(stdout,"del_hw_loop ioctl error %s\n", strerror(errno));
-	di->flag &= ~FLG_BCHANNEL_LOOPSET;
+		mylog(0, "del_hw_loop ioctl error %s\n", strerror(errno));
+	di->bch_loopset = 0;
 }
 #endif
 
-int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
-{
-	struct  mISDNhead	*hh = (struct  mISDNhead *)buf;
+static int number_match(char *cur, char *msn, int complete) {
 
-	if (len < MISDN_HEADER_LEN) {
-		if (VerifyOn)
-			fprintf(stdout,"got short B frame %d\n", len);
-		return 1;
-	}
-
-	if (VerifyOn>7)
-		fprintf(stdout,"readloop B prim(%x) id(%x) len(%d)\n",
-			hh->prim, hh->id, len);
-	if (hh->prim == PH_DATA_IND) {
-		/* received data, save it */
-		write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
-	} else if (hh->prim == PH_DATA_CNF) {
-		/* get ACK of send data, so we can
-		 * send more
-		 */
-		if (VerifyOn>5)
-			fprintf(stdout,"PH_DATA_CNF\n");
-		switch (di->func) {
-			case 0:
-			case 2:
-				if (di->play > -1)
-					play_msg(di);
-				break;
-		}
-	} else if (hh->prim == DL_DATA_IND) {
-		/* received data, save it */
-		write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
-	} else if (hh->prim == (PH_CONTROL_IND)) {
-		unsigned int	*tone = (unsigned int *)(buf + MISDN_HEADER_LEN);
-
-		if ((len == (4 + MISDN_HEADER_LEN)) && ((*tone & ~DTMF_TONE_MASK) == DTMF_TONE_VAL)) {
-			fprintf(stdout,"GOT TT %c\n", DTMF_TONE_MASK & *tone);
-		} else
-			fprintf(stdout,"unknown PH_CONTROL len %d/val %x\n", len, *tone);
-	} else if ((hh->prim == DL_RELEASE_CNF) || (hh->prim == PH_DEACTIVATE_IND)) {
-		if (VerifyOn)
-			fprintf(stdout,"readloop B got termination request\n");
-		close(di->bchan);
-		di->bchan = 0;
-		di->flag &= ~FLG_BCHANNEL_ACTIVE;
-		di->flag &= ~FLG_BCHANNEL_SETUP;
-		return 1;
-	} else {
-		if (VerifyOn)
-			fprintf(stdout,"got unexpected B frame prim(%x) id(%x) len(%d)\n",
-				hh->prim, hh->id, len);
-	}
-	return 0;
-}
-
-void do_bconnection(devinfo_t *di) {
-	unsigned char		buf[MAX_REC_BUF];
-	struct timeval		tout;
-	fd_set			rds;
-	int			ret = 0;
-
-	/* Main loop */
-	while (1) {
-		tout.tv_usec = 0;
-		tout.tv_sec = di->timeout;
-		FD_ZERO(&rds);
-		FD_SET(di->bchan, &rds);
-		ret = select(di->bchan +1 , &rds, NULL, NULL, &tout);
-		if (VerifyOn>7)
-			fprintf(stdout,"selectloop ret=%d\n", ret);
-		if (ret < 0) {
-			fprintf(stdout,"select error %s\n", strerror(errno));
-			continue;
-		}
-		if (ret == 0) { /* time out */
-#ifdef NOTYET
-			struct  mISDNhead	*hh;
-
-			hh = (struct  mISDNhead *)buf;
-			if (di->flag & FLG_SEND_TONE) {
-				if (di->val) {
-					di->val--;
-					send_touchtone(di, tt_char[di->val]);
-				} else {
-					/* After last tone disconnect */
-					p = msg = buf + mISDN_HEADER_LEN;
-					MsgHead(p, di->cr, MT_DISCONNECT);
-					l = p - msg;
-					hh->prim = DL_DATA_REQ;
-					hh->id = MISDN_ID_ANY;
-					ret = sendto(di->layer2, buf, l + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
-					if (ret < 0) {
-						fprintf(stdout, "sendto error  %s\n", strerror(errno));
-					}
-					di->flag &= ~FLG_SEND_TONE;
-				}
-				continue;
-			} else 
-#endif	
-			if (di->flag & FLG_SEND_DATA) {
-				if (di->play > -1)
-					send_data(di);
-				else
-					di->flag &= ~FLG_SEND_DATA;
-				continue;;
-			} else if (di->flag & FLG_BCHANNEL_DOACTIVE) {
-				ret = activate_bchan(di);
-				if (!ret) {
-					fprintf(stdout,"error on activate_bchan\n");
-					return;
-				}
-				di->flag &= ~FLG_BCHANNEL_DOACTIVE;
-				/* send next after 1 sec */
-				di->timeout = 1;
-				di->flag |= FLG_SEND_DATA;
-				continue;
-			}
-			/* hangup */
-			fprintf(stdout,"timed out sending hangup\n");
-			if (di->flag & FLG_CALL_ACTIVE)
-				ret = di->layer3->to_layer3(di->layer3, MT_DISCONNECT, di->pid, NULL);
-			else
-				ret = di->layer3->to_layer3(di->layer3, MT_RELEASE_COMPLETE, di->pid, NULL);
-			if (ret < 0) {
-				fprintf(stdout, "to_layer3 error  %s\n", strerror(-ret));
-			}
-			if (di->flag & FLG_CALL_ACTIVE)
-				di->flag &= ~FLG_CALL_ACTIVE;
-			else
-				break;
-		}
-		if (FD_ISSET(di->bchan, &rds)) {
-			/* B-Channel related messages */
-			ret = recv(di->bchan, buf, MAX_REC_BUF, 0);
-			if (VerifyOn>6)
-				fprintf(stdout,"recvloop ret=%d\n", ret);
-			if (ret < 0) {
-				fprintf(stdout, "recv error  %s\n", strerror(errno));
-				continue;
-			}
-			ret = do_bchannel(di, ret, buf);
-			if (ret)
-				break;
-		}
-	}
-	if (di->bchan) {
-#ifdef NOTYET
-		if (di->flag & FLG_BCHANNEL_LOOP)
-			del_hw_loop(di);
-		else
-#endif
-			deactivate_bchan(di);
-	}
-	return;
-}
-
-int
-number_match(char *cur, char *msn, int complete) {
-
-	if (VerifyOn > 2)
-		fprintf(stdout,"numbers: %s/%s\n", cur, msn);
+	mylog(0, "numbers: %s/%s\n", cur, msn);
 	if (complete) {
 		if (!strcmp(cur, msn))
 			return 0;
@@ -590,41 +539,215 @@ number_match(char *cur, char *msn, int complete) {
 	return 1;
 }
 
-int send_connect(devinfo_t *di) {
-	time_t		sec;
-	struct tm	*t;
-	unsigned char	c[5];
+static void Dsend_connect(devinfo_t *di)
+{
+	time_t		t;
+	struct tm	tm;
 	struct l3_msg	*l3m;
 	int		ret;
 
-	sec = time(NULL);
-	t = localtime(&sec);
-	l3m =  alloc_l3_msg();
+	l3m = alloc_l3_msg();
 	if (!l3m) {
-		fprintf(stdout, "cannot allocate l3 msg struct\n");
+		mylog(0, "cannot allocate l3 msg struct\n");
+		return;
+	}
+	if (di->nt) {
+		t = time(NULL);
+		localtime_r(&t, &tm);
+		mi_encode_date(l3m, &tm);
+	}
+	ret = di->l3->to_layer3(di->l3, MT_CONNECT, di->pid, l3m);
+	if (ret) {
+		mylog(0, "send to_layer3  error  %s\n", strerror(-ret));
+		free_l3_msg(l3m);
+	}
+}
+
+static void Dsend_disconnect(devinfo_t *di, int cause)
+{
+	struct l3_msg	*l3m;
+	int		ret, loc;
+
+	l3m = alloc_l3_msg();
+	if (!l3m) {
+		mylog(0, "cannot allocate l3 msg struct\n");
+		return;
+	}
+	if (di->nt)
+		loc = CAUSE_LOC_PRVN_LOCUSER;
+	else
+		loc =CAUSE_LOC_USER;
+	mi_encode_cause(l3m, cause, loc, 0, NULL);
+	ret = di->l3->to_layer3(di->l3, MT_DISCONNECT, di->pid, l3m);
+	if (ret) {
+		mylog(0, "send to_layer3  error  %s\n", strerror(-ret));
+		free_l3_msg(l3m);
+	} else
+		mylog(4, "send Disconnect cause #%d\n", cause);
+}
+
+static void Dsend_release(devinfo_t *di, int cause)
+{
+	struct l3_msg	*l3m;
+	int		ret, loc;
+
+	l3m = alloc_l3_msg();
+	if (!l3m) {
+		mylog(0, "cannot allocate l3 msg struct\n");
+		return;
+	}
+	if (di->nt)
+		loc = CAUSE_LOC_PRVN_LOCUSER;
+	else
+		loc =CAUSE_LOC_USER;
+	if (cause != NO_CAUSE)
+		mi_encode_cause(l3m, cause, loc, 0, NULL);
+	ret = di->l3->to_layer3(di->l3, MT_RELEASE, di->pid, l3m);
+	if (ret) {
+		mylog(0, "send to_layer3  error  %s\n", strerror(-ret));
+		free_l3_msg(l3m);
+	} else {
+		if (cause != NO_CAUSE)
+			mylog(4, "send Release cause #%d\n", cause);
+		else
+			mylog(4, "send Release without cause\n");
+	}
+}
+
+static int Dsend_SETUP(devinfo_t *di)
+{
+	int			ret;
+	struct	l3_msg		*l3m;
+
+	if (di->pid != MISDN_PID_NONE) {
+		mylog(0, "Already have PID=%x assigned\n", di->pid);
+		return -1;
+	}
+	di->pid = request_new_pid(di->l3);
+	if (di->pid == MISDN_PID_NONE) {
+		mylog(0, "cannot get a new pid\n");
+		return -1;
+	}
+
+	l3m = alloc_l3_msg();
+	if (!l3m) {
+		mylog(0, "cannot allocate l3 msg struct\n");
 		return -ENOMEM;
 	}
-	c[0] = t->tm_year;
-	c[1] = t->tm_mon + 1;
-	c[2] = t->tm_mday;
-	c[3] = t->tm_hour;
-	c[4] = t->tm_min;
-	add_layer3_ie(l3m, IE_DATE, 5, c);
-	ret = di->layer3->to_layer3(di->layer3, MT_CONNECT, di->pid, l3m);
+
+	if (di->sending_complete)
+		l3m->sending_complete = 1;
+
+	if (di->si == 1) { /* Audio */
+		ret = mi_encode_bearer(l3m, Q931_CAP_3KHZ_AUDIO, Q931_L1INFO_ALAW, 0, 0x10);
+	} else { /* default Datatransmission 64k */
+		ret = mi_encode_bearer(l3m, Q931_CAP_UNRES_DIGITAL, 0, 0, 0x10);
+	}
+	if (ret)
+		mylog(0, "cannot add Bearer\n");
+
+	if (di->nt) {
+		di->used_bchannel = 1;
+		di->cid.nr = di->used_bchannel;
+		di->cid.type = MI_CHAN_TYP_B;
+		di->cid.flags = MI_CHAN_FLG_EXCLUSIVE;
+		di->cid.ctrl = MI_CHAN_CTRL_NEEDSEND;
+		di->bch_OK = 1;
+		di->cid_sent = 1;
+	} else {
+		di->cid.nr = MI_CHAN_ANY;
+		di->cid.type = MI_CHAN_TYP_B;
+		di->cid.flags = MI_CHAN_FLG_ANY;
+		di->cid.ctrl = MI_CHAN_CTRL_NEEDSEND;
+	}
+	ret = mi_encode_channel_id(l3m, &di->cid);
+
+	if (ret) {
+		mylog(0, "cannot add CID\n");
+		return -1;
+	}
+
+	if (di->func == 7) {
+		/* Add FAC for rerouting info */
+		ret = add_layer3_ie(l3m, IE_FACILITY, TEST_FAC_LEN, test_facility);
+		if (ret) {
+			mylog(0, "cannot add FAC\n");
+		}
+	}
+
+	if (di->progress) {
+		struct misdn_progress_info prg;
+
+		prg.loc = (di->progress >> 8) & 0x7f;
+		prg.desc = di->progress & 0x7f;
+		prg.ctrl = MI_PROG_CTRL_NEEDSEND;
+		ret = mi_encode_progress(l3m, &prg);
+		if (ret) {
+			mylog(0, "cannot add CID\n");
+			return -1;
+		}
+	}
+
+	if (di->msn) {
+		if (di->nt)
+			ret = mi_encode_calling_nr(l3m, di->msn, Q931_NPRESENTATION_ALLOWED, Q931_NSCREEN_NETWORK, Q931_NTYPE_NATIONAL, Q931_NPLAN_ISDN);
+		else
+			ret = mi_encode_calling_nr(l3m, di->msn, Q931_NPRESENTATION_ALLOWED, Q931_NSCREEN_USER_NOT, Q931_NTYPE_UNKNOWN, Q931_NPLAN_ISDN);
+		if (ret) {
+			mylog(0, "cannot add calling number\n");
+			return -1;
+		}
+	}
+	if (di->phonenr) {
+		ret = mi_encode_called_nr(l3m, di->phonenr, Q931_NTYPE_UNKNOWN, Q931_NPLAN_ISDN);
+		if (ret) {
+			mylog(0, "cannot add called number\n");
+			return -1;
+		}
+	}
+	ret = di->l3->to_layer3(di->l3, MT_SETUP, di->pid, l3m);
+	if (ret < 0) {
+		mylog(0, "send to_layer3  error  %s\n", strerror(-ret));
+		free_l3_msg(l3m);
+	}
 	return ret;
 }
 
-int answer_call(devinfo_t *di, struct l3_msg *l3m) {
-	unsigned char		c[4];
-	unsigned char		*np,*p;
-	int			ret, l, mt;
-	struct	l3_msg		*nl3m;
+static void Dsend_answer(devinfo_t *di, unsigned int mt, int cause)
+{
+	struct l3_msg	*l3m;
+	int		ret, loc;
 
-	nl3m =  alloc_l3_msg();
-	if (!nl3m) {
-		fprintf(stdout, "cannot allocate l3 msg struct\n");
-		return -ENOMEM;
+	l3m = alloc_l3_msg();
+	if (!l3m) {
+		mylog(0, "cannot allocate l3 msg struct\n");
+		return;
 	}
+	/* channel is only added if cid.ctrl has MI_CHAN_CTRL_NEEDSEND */
+	ret = mi_encode_channel_id(l3m, &di->cid);
+	if (ret) {
+		mylog(0, "cannot add CID\n");
+		return;
+	}
+	if (di->nt)
+		loc = CAUSE_LOC_PRVN_LOCUSER;
+	else
+		loc =CAUSE_LOC_USER;
+	if (cause != NO_CAUSE)
+		mi_encode_cause(l3m, cause, loc, 0, NULL);
+	ret = di->l3->to_layer3(di->l3, mt, di->pid, l3m);
+	if (ret) {
+		mylog(0, "send %s to_layer3  error  %s\n", mi_msg_type2str(mt), strerror(-ret));
+		free_l3_msg(l3m);
+	} else
+		mylog(4, "send %s\n", mi_msg_type2str(mt));
+}
+
+static int answer_call(devinfo_t *di, struct l3_msg *l3m) {
+	unsigned char	*np, *p;
+	int		cause, ret, l, mt;
+
+	cause = NO_CAUSE;
 	if (l3m->called_nr) {
 		p = l3m->called_nr;
 		l = *p++;
@@ -644,45 +767,42 @@ int answer_call(devinfo_t *di, struct l3_msg *l3m) {
 		} else {
 			/* Number cannot match */
 			mt = MT_RELEASE_COMPLETE;
+			cause = CAUSE_CALL_REJECTED;
 		}
 	} else {
 		mt = MT_SETUP_ACKNOWLEDGE;
 	}
-	if (mt == MT_RELEASE_COMPLETE) {
-		c[0] = 0x80 | CAUSE_LOC_PRVN_RMTUSER;
-		c[1] = 0x80 | CAUSE_CALL_REJECTED;
-		add_layer3_ie(nl3m, IE_CAUSE, 2, c);
-	} else {
-		c[0] = 0x80; /* channel prefered */
-		c[0] |= di->used_bchannel;
-		add_layer3_ie(nl3m, IE_CHANNEL_ID, 1, c);
+
+	if (mt != MT_RELEASE_COMPLETE) {
+		if (di->nt && !di->cid_sent) {
+			di->cid.nr = di->used_bchannel;
+			di->cid.type = MI_CHAN_TYP_B;
+			di->cid.flags = MI_CHAN_FLG_EXCLUSIVE;
+			di->cid.ctrl = MI_CHAN_CTRL_NEEDSEND;
+			di->cid_sent = 1;
+		}
 	}
-	ret = di->layer3->to_layer3(di->layer3, mt, di->pid, nl3m);
-	if (ret < 0) {
-		fprintf(stdout, "send to_layer3  error  %s\n", strerror(errno));
-		return ret;
-	}
+	Dsend_answer(di, mt, cause);
 	if (mt == MT_CALL_PROCEEDING)
 		return 1;
 	else
 		return 0;
 }
 
-int
-setup_channel(devinfo_t *di, struct l3_msg *l3m)
+static int setup_channel(devinfo_t *di, struct l3_msg *l3m)
 {
 	int	ret;
 
-	if (di->flag & FLG_CALL_ACTIVE)
+	if (di->active)
 		return 0;
-	if (di->flag & FLG_NT_MODE) {
+	if (di->nt) {
 		di->used_bchannel = 1;
 		ret = answer_call(di, l3m);
 		if (ret < 0) {
-			fprintf(stdout, "answer_call return %d\n", ret);
+			mylog(0, "answer_call return %d\n", ret);
 			return 1;
 		}
-		di->flag |= FLG_CALL_ACTIVE;
+		di->active = 1;
 		if (!ret) {
 			return 0;
 		}
@@ -691,54 +811,52 @@ setup_channel(devinfo_t *di, struct l3_msg *l3m)
 			if (l3m->channel_id[0] == 1 && !(l3m->channel_id[1] & 0x60)) {
 				di->used_bchannel = l3m->channel_id[1]  & 0x3;
 			} else {
-				fprintf(stdout,"wrong channel id IE %02x %02x\n", l3m->channel_id[0], l3m->channel_id[1]);
+				mylog(0, "wrong channel id IE %02x %02x\n", l3m->channel_id[0], l3m->channel_id[1]);
 				return 2;
 			}
-			di->flag |= FLG_CALL_ACTIVE;
+			di->active = 1;
 			if (di->used_bchannel < 1 || di->used_bchannel > 2) {
-				fprintf(stdout,"got no valid bchannel nr %d\n", di->used_bchannel);
+				mylog(0, "got no valid bchannel nr %d\n", di->used_bchannel);
 				return 3;
 			}
 		} else {
-			fprintf(stdout,"got no channel_id IE\n");
+			mylog(0, "got no channel_id IE\n");
 			return 4;
 		}
 	}
 	switch (di->func) {
 		case 5:
-			di->flag |= FLG_BCHANNEL_EARLY;
+			di->bch_early = 1;
 		case 0:
 		case 1:
 		case 2:
 		case 3:
 		case 4:
+		case 7:
 			ret = setup_bchannel(di);
 			if (ret) {
-				fprintf(stdout,"error %d on setup_bchannel\n", ret);
+				mylog(0, "error %d on setup_bchannel\n", ret);
 				return 5;
 			}
-			if (di->flag & FLG_BCHANNEL_EARLY) {
+			if (di->bch_early) {
 				ret = activate_bchan(di);
 				if (!ret) {
-					fprintf(stdout,"error on activate_bchan\n");
+					mylog(0, "error on activate_bchan\n");
 					return 6;
 				}
 			}
 			break;
 		case 6:
-			di->flag |= FLG_BCHANNEL_SETUP;
+			di->bch_setup = 1;
 			break;
 	}
-	if (di->flag & FLG_NT_MODE) {
-		ret = send_connect(di);
-		if (ret) {
-			fprintf(stdout, "send to_layer3  error  %s\n", strerror(errno));
-			return 7;
-		}
-		if (!(di->flag & FLG_BCHANNEL_EARLY)) {
+	if (di->nt) {
+		Dsend_connect(di);
+
+		if (!di->bch_early) {
 			ret = activate_bchan(di);
 			if (!ret) {
-				fprintf(stdout,"error on activate_bchan\n");
+				mylog(0, "error on activate_bchan\n");
 				return 8;
 			}
 		}
@@ -746,13 +864,14 @@ setup_channel(devinfo_t *di, struct l3_msg *l3m)
 		case 0:
 		case 2:
 		case 5:
+		case 7:
 			if (di->play > -1)
 				play_msg(di);
 			break;
 		case 1:
 			/* send next after 2 sec */
 			di->timeout = 2;
-			di->flag |= FLG_SEND_TONE;
+			di->send_tone = 1;
 			break;
 		case 3:
 		case 4:
@@ -766,23 +885,19 @@ setup_channel(devinfo_t *di, struct l3_msg *l3m)
 #endif
 		}
 	} else {
-		if (!(di->flag & FLG_CALL_ORGINATE)) {
-			ret = di->layer3->to_layer3(di->layer3, MT_CONNECT, di->pid, NULL);
-			if (ret < 0) {
-				fprintf(stdout, "sendto error  %s\n", strerror(errno));
-				return 9;
-			}
+		if (!di->orginate) {
+			Dsend_connect(di);
 		}
 	}
 	
 	return 0;
 }
 
-int check_number(devinfo_t *di, struct l3_msg *l3m) {
-	unsigned char		*np,*p, c[2];
-	int			ret, l, mt;
-	struct	l3_msg		*nl3m;
+static int check_number(devinfo_t *di, struct l3_msg *l3m) {
+	unsigned char		*np,*p;
+	int			ret, l, mt, cause;
 
+	cause = NO_CAUSE;
 	if (l3m->called_nr) {
 		p = l3m->called_nr;
 		l = *p++;
@@ -803,62 +918,50 @@ int check_number(devinfo_t *di, struct l3_msg *l3m) {
 		} else {
 			/* Number cannot match */
 			mt = MT_DISCONNECT;
-			fprintf(stdout, "call rejected\n");
+			cause = CAUSE_CALL_REJECTED;
 		}
 	} else {
 		return 0;
 	}
-	nl3m =  alloc_l3_msg();
-	if (!nl3m) {
-		fprintf(stdout, "cannot allocate l3 msg struct\n");
-		return -ENOMEM;
-	}
-	if (mt == MT_DISCONNECT) {
-		c[0] = 0x80 | CAUSE_LOC_PRVN_RMTUSER;
-		c[1] = 0x80 | CAUSE_CALL_REJECTED;
-		add_layer3_ie(nl3m, IE_CAUSE, 2, c);
-	}
-	ret = di->layer3->to_layer3(di->layer3, mt, di->pid, nl3m);
-	if (ret < 0) {
-		fprintf(stdout, "send to_layer3  error  %s\n", strerror(errno));
-		return ret;
-	}
+
+	Dsend_answer(di, mt, cause);
+
 	if (mt == MT_DISCONNECT)
 		return 0;
+
 	switch (di->func) {
 		case 5:
-			di->flag |= FLG_BCHANNEL_EARLY;
+			di->bch_early = 1;
 		case 0:
 		case 1:
 		case 2:
 		case 3:
 		case 4:
+		case 7:
 			ret = setup_bchannel(di);
 			if (ret) {
-				fprintf(stdout,"error %d on setup_bchannel\n", ret);
+				mylog(0, "error %d on setup_bchannel\n", ret);
 				return 5;
 			}
-			if (di->flag & FLG_BCHANNEL_EARLY) {
+			if (di->bch_early) {
 				ret = activate_bchan(di);
 				if (!ret) {
-					fprintf(stdout,"error on activate_bchan\n");
+					mylog(0, "error on activate_bchan\n");
 					return 6;
 				}
 			}
 			break;
 		case 6:
-			di->flag |= FLG_BCHANNEL_SETUP;
+			di->bch_setup = 1;
 			break;
 	}
-	ret = send_connect(di);
-	if (ret) {
-		fprintf(stdout, "send to_layer3  error  %s\n", strerror(errno));
-			return 1;
-		}
-	if (!(di->flag & FLG_BCHANNEL_EARLY)) {
+
+	Dsend_connect(di);
+
+	if (!di->bch_early) {
 		ret = activate_bchan(di);
 		if (!ret) {
-			fprintf(stdout,"error on activate_bchan\n");
+			mylog(0, "error on activate_bchan\n");
 			return 2;
 		}
 	}
@@ -866,13 +969,14 @@ int check_number(devinfo_t *di, struct l3_msg *l3m) {
 	case 0:
 	case 2:
 	case 5:
+	case 7:
 		if (di->play > -1)
 			play_msg(di);
 		break;
 	case 1:
 		/* send next after 2 sec */
 		di->timeout = 2;
-		di->flag |= FLG_SEND_TONE;
+		di->send_tone = 1;
 		break;
 	case 3:
 	case 4:
@@ -888,198 +992,134 @@ int check_number(devinfo_t *di, struct l3_msg *l3m) {
 	return 0;
 }
 
-int do_dchannel(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, struct l3_msg *l3m)
+static void get_bchannel(devinfo_t *di, struct l3_msg *l3m)
+{
+	int ret;
+	struct misdn_channel_info cid = {MI_CHAN_NONE, 0, 0, 0};
+
+	ret = mi_decode_channel_id(l3m, &cid);
+	if (ret)
+		mylog(0, "error decoding B-channel %s\n", strerror(-ret));
+
+	if (cid.nr < MI_CHAN_DCHANNEL) {
+		/* valid channel number */
+		mylog(3, "Got B%d assigned\n", cid.nr);
+		di->cid = cid;
+		di->bch_OK = 1;
+		di->used_bchannel = cid.nr;
+	}
+}
+
+static int from_layer3(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, struct l3_msg *l3m)
 {
 	devinfo_t		*di = l3->priv;
 	int			ret;
 
-	if (VerifyOn>3)
-		fprintf(stdout,"do_dchannel: L3 cmd(%x) pid(%x)\n",
-			cmd, pid);
+	mylog(4, "from L3 cmd %s (%x) pid(%x)\n", mi_msg_type2str(cmd), cmd, pid);
 	switch (cmd) {
 	case MT_ASSIGN:
-		if (!di->pid) {
+		if (di->pid == MISDN_PID_NONE) {
 			di->pid = pid;
-			if (VerifyOn > 2)
-				fprintf(stdout,"register pid %x\n", pid);
-		} else if ((di->flag & FLG_NT_MODE) && (di->flag & FLG_CALL_ORGINATE)) {
+			mylog(2, "register pid %x\n", pid);
+		} else if (di->nt && di->orginate) {
 			if (((di->pid & MISDN_PID_CRTYPE_MASK) == MISDN_PID_MASTER) &&
 			    ((di->pid & MISDN_PID_CRVAL_MASK) == (pid & MISDN_PID_CRVAL_MASK))) {
-				if (VerifyOn > 2)
-					fprintf(stdout,"select pid %x for %x\n", pid, di->pid);
+				mylog(2, "select pid %x for %x\n", pid, di->pid);
 				di->pid = pid;
 			} else
-				fprintf(stdout,"got MT_ASSIGN for pid %x but already have pid %x\n", pid, di->pid);
+				mylog(0, "got MT_ASSIGN for pid %x but already have pid %x\n", pid, di->pid);
 		} else
-			fprintf(stdout,"got MT_ASSIGN for pid %x but already have pid %x\n", pid, di->pid);
-		return 0;
+			mylog(0, "got MT_ASSIGN for pid %x but already have pid %x\n", pid, di->pid);
+		goto free_msg;
 	case MT_SETUP:
-		if (!(di->flag & FLG_CALL_ORGINATE)) {
-			if (VerifyOn)
-				fprintf(stdout,"got setup pid(%x)\n", pid);
+		if (!di->orginate) {
+			mylog(1, "got setup pid(%x)\n", pid);
 			di->pid = pid;
-			if (!(di->flag & FLG_CALL_ACTIVE)) {
+			if (!di->active) {
 				ret = setup_channel(di, l3m);
 				if (ret) {
-					fprintf(stdout,"setup_channel returned error %d\n", ret);
-					di->layer3->to_layer3(di->layer3, MT_RELEASE_COMPLETE, di->pid, NULL);
-					di->flag |= FLG_STOP;
+					mylog(0, "setup_channel returned error %d\n", ret);
+					di->l3->to_layer3(di->l3, MT_RELEASE_COMPLETE, di->pid, NULL);
+					di->stop = 1;
 				}
-				pthread_mutex_unlock(&di->wait);
+				send_ctrl(di, cmd);
 			}
 		}
 		goto free_msg;
 	}
 	if (pid != di->pid) {
-		if (di->flag & FLG_NT_MODE) {
-			if ((di->flag & FLG_CALL_ORGINATE) && ((di->pid & MISDN_PID_CRTYPE_MASK) == MISDN_PID_MASTER) &&
+		if (di->nt) {
+			if (di->orginate && ((di->pid & MISDN_PID_CRTYPE_MASK) == MISDN_PID_MASTER) &&
 			    ((di->pid & MISDN_PID_CRVAL_MASK) == (pid & MISDN_PID_CRVAL_MASK))) {
-				if (VerifyOn > 2)
-					fprintf(stdout,"got message (%x) with pid(%x) for %x\n", cmd, pid, di->pid);
+				mylog(2, "got message (%x) with pid(%x) for %x\n", cmd, pid, di->pid);
 			} else {
-				fprintf(stdout,"got message (%x) with pid(%x) but not %x\n", cmd, pid, di->pid);
+				mylog(0, "got message (%x) with pid(%x) but not %x\n", cmd, pid, di->pid);
 				goto free_msg;
 			}
 		} else {
-			fprintf(stdout,"got message (%x) with pid(%x) but not %x\n", cmd, pid, di->pid);
+			mylog(0, "got message (%x) with pid(%x) but not %x\n", cmd, pid, di->pid);
 			goto free_msg;
 		}
 	}
 	switch (cmd) {
 	case MT_FREE:
 		if (di->pid == pid) {
-			di->pid = 0;
-			di->flag |= FLG_STOP;
-			pthread_mutex_unlock(&di->wait);
+			di->pid = MISDN_PID_NONE;
+			di->stop = 1;
+			send_ctrl(di, cmd);
 		}
 		break;
 	case MT_SETUP_ACKNOWLEDGE:
 	case MT_CALL_PROCEEDING:
 	case MT_ALERTING:
-		if (di->flag & FLG_NT_MODE) {
-			if (di->flag & FLG_CALL_ORGINATE) {
+		mylog(3, "got %s pid(%x)\n", mi_msg_type2str(cmd), pid);
+		if (!di->bch_OK)
+			get_bchannel(di, l3m);
+		if (di->nt) {
+			if (di->orginate) {
 				ret = setup_bchannel(di);
-				if (ret == 1) {
-					pthread_mutex_unlock(&di->wait);
-				} else if (ret) {
-					fprintf(stdout, "setup Bchannel error %d\n", ret);
+				if (ret) {
+					mylog(0, "setup Bchannel returned %d\n", ret);
 				}
 			}
 		} else {
-			if (di->flag & FLG_CALL_ORGINATE) {
-				if (!(di->flag & FLG_CALL_ACTIVE)) {
+			if (di->orginate) {
+				if (!di->active) {
 					ret = setup_channel(di, l3m);
 					if (ret) {
-						fprintf(stdout,"setup_channel returned error %d\n", ret);
-						di->layer3->to_layer3(di->layer3, MT_RELEASE_COMPLETE, di->pid, NULL);
-						di->flag |= FLG_STOP;
+						mylog(0, "setup_channel returned error %d\n", ret);
+						Dsend_answer(di, MT_RELEASE_COMPLETE, CAUSE_NORMAL_CLEARING);
+						di->stop= 1;
 					}
-					pthread_mutex_unlock(&di->wait);
 				}
 			}
 		}
+		send_ctrl(di, cmd);
 		break;
 	case MT_INFORMATION:
-		if (di->flag & FLG_NT_MODE) {
+		if (di->nt) {
 			ret = check_number(di, l3m);
 			if (ret) {
-				fprintf(stdout,"setup_channel returned error %d\n", ret);
+				mylog(0, "setup_channel returned error %d\n", ret);
 			}
 		}
 		break;
 	case MT_CONNECT:
-		if (di->flag & FLG_CALL_ORGINATE) {
-			/* We got connect, so bring B-channel up */
-			if (!(di->flag & FLG_BCHANNEL_SETUP)) {
-				fprintf(stdout,"CONNECT but no bchannel selected\n");
-				di->layer3->to_layer3(di->layer3, MT_RELEASE_COMPLETE, di->pid, NULL);
-				di->flag |= FLG_STOP;
-				pthread_mutex_unlock(&di->wait);
-				break;
-			}
-			if (!(di->flag & FLG_BCHANNEL_EARLY) && !(di->flag & FLG_BCHANNEL_LOOP)) {
-				if (!(di->flag & FLG_BCHANNEL_ACTDELAYED))
-					activate_bchan(di);
-			} else
-				di->flag |= FLG_BCHANNEL_DOACTIVE;
-			/* send a CONNECT_ACKNOWLEDGE */
-			ret = di->layer3->to_layer3(di->layer3, MT_CONNECT_ACKNOWLEDGE, di->pid, NULL);
-			if (ret < 0) {
-				fprintf(stdout, "to_layer3 error  %s\n", strerror(-ret));
-			}
-			switch (di->func) {
-			case 0:
-			case 2:
-			case 5:
-				if (di->play > -1)
-					play_msg(di);
-				break;
-			case 1:
-				/* send next after 2 sec */
-				di->timeout = 2;
-				di->flag |= FLG_SEND_TONE;
-				break;
-			case 3:
-			case 4:
-				/* setup B after 1 sec */
-				di->timeout = 1;
-				break;
-#ifdef NOTYET
-			case 6:
-				do_hw_loop(di);
-				break;
-#endif
-			}
+		if (di->orginate) {
+			if (!di->bch_OK)
+				get_bchannel(di, l3m);
+			send_ctrl(di, cmd);
 		}
 		break;
 	case MT_CONNECT_ACKNOWLEDGE:
-		if (!(di->flag & FLG_CALL_ORGINATE)) {
-			/* We got connect ack, so bring B-channel up */
-			if (!(di->flag & FLG_BCHANNEL_SETUP)) {
-				fprintf(stdout,"CONNECT but no bchannel selected\n");
-				di->layer3->to_layer3(di->layer3, MT_RELEASE_COMPLETE, di->pid, NULL);
-				di->flag |= FLG_STOP;
-				pthread_mutex_unlock(&di->wait);
-				break;
-			}
-			if (!(di->flag & FLG_BCHANNEL_EARLY) && !(di->flag & FLG_BCHANNEL_LOOP)) {
-				if (!(di->flag & FLG_BCHANNEL_ACTDELAYED))
-					activate_bchan(di);
-				else
-					di->flag |= FLG_BCHANNEL_DOACTIVE;
-			}
-			/* if here is outgoing data, send first part */
-			switch (di->func) {
-			case 0:
-			case 2:
-			case 5:
-				if (di->play > -1)
-					play_msg(di);
-				break;
-			case 1:
-				/* send next after 2 sec */
-				di->timeout = 2;
-				di->flag |= FLG_SEND_TONE;
-				break;
-			case 3:
-			case 4:
-				/* setup B after 1 sec */
-				di->timeout = 1;
-				break;
-#ifdef NOTYET
-			case 6:
-				do_hw_loop(di);
-				break;
-#endif
-			}
+		if (!di->orginate) {
+			if (!di->bch_OK)
+				get_bchannel(di, l3m);
+			send_ctrl(di, cmd);
 		}
 		break;
 	case MT_DISCONNECT:
-		/* send a RELEASE */
-		ret = di->layer3->to_layer3(di->layer3, MT_RELEASE, di->pid, NULL);
-		if (ret < 0) {
-			fprintf(stdout, "to_layer3 error  %s\n", strerror(-ret));
-		}
+		send_ctrl(di, cmd);
 		break;
 	case MT_RELEASE:
 	case MT_RELEASE_COMPLETE:
@@ -1090,15 +1130,14 @@ int do_dchannel(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, struct l
 		case 3:
 		case 4:
 		case 5:
+		case 7:
 			deactivate_bchan(di);
 			break;
 		}
+		send_ctrl(di, cmd);
 		break;
 	default:
-		if (VerifyOn) {
-			fprintf(stdout,"got unexpected D message cmd(%x) id(%x)\n",
-				cmd, pid);
-		}
+		mylog(0, "got unexpected D message cmd %s id(%x)\n", mi_msg_type2str(cmd), pid);
 		break;
 	}
 free_msg:
@@ -1107,15 +1146,306 @@ free_msg:
 	return 0;
 }
 
-int do_setup(devinfo_t *di) {
+static int do_control_worker(devinfo_t *di)
+{
+	unsigned int	cmd;
 	int		ret;
-	struct timeval	tv;
-	struct timespec	ts;
+
+	ret = read(di->ReadPipe, &cmd, sizeof(cmd));
+	if (ret < sizeof(cmd)) {
+		mylog(0, "read control pipe error ret=%d - %s\n", ret, strerror(errno));
+	} else {
+		switch (cmd) {
+		case MT_SETUP:
+			mylog(3, "Got setup - accept call\n");
+			break;
+		case MT_SETUP_ACKNOWLEDGE:
+		case MT_CALL_PROCEEDING:
+		case MT_ALERTING:
+			mylog(3, "got %s\n", mi_msg_type2str(cmd));
+			break;
+		case MT_CONNECT:
+			mylog(3, "got %s\n", mi_msg_type2str(cmd));
+			/* We got connect, so bring B-channel up */
+			if (!di->bch_setup) {
+				mylog(0, "CONNECT but no bchannel selected\n");
+				Dsend_answer(di, MT_RELEASE_COMPLETE, CAUSE_NORMAL_CLEARING);
+				di->stop = 1;
+				break;
+			}
+			if (!di->bch_early && !di->bch_loop) {
+				if (!di->bch_actdelayed)
+					activate_bchan(di);
+			} else
+				di->bch_doactive = 1;
+			/* send a CONNECT_ACKNOWLEDGE is done in library*/
+			switch (di->func) {
+			case 0:
+			case 2:
+			case 5:
+			case 7:
+				if (di->play > -1)
+					play_msg(di);
+				break;
+			case 1:
+				/* send next after 2 sec */
+				di->timeout = 2;
+				di->send_tone = 1;
+				break;
+			case 3:
+			case 4:
+				/* setup B after 1 sec */
+				di->timeout = 1;
+				break;
+#ifdef NOTYET
+			case 6:
+				do_hw_loop(di);
+				break;
+#endif
+			}
+		case MT_CONNECT_ACKNOWLEDGE:
+			mylog(3, "got %s\n", mi_msg_type2str(cmd));
+			/* We got connect ack, so bring B-channel up */
+			if (!di->bch_setup) {
+				mylog(0, "CONNECT but no bchannel selected\n");
+				di->l3->to_layer3(di->l3, MT_RELEASE_COMPLETE, di->pid, NULL);
+				di->stop = 1;
+				break;
+			}
+			if (!di->bch_early && !di->bch_loop) {
+				if (!di->bch_actdelayed)
+					activate_bchan(di);
+				else
+					di->bch_doactive = 1;
+			}
+			/* if here is outgoing data, send first part */
+			switch (di->func) {
+			case 0:
+			case 2:
+			case 5:
+			case 7:
+				if (di->play > -1)
+					play_msg(di);
+				break;
+			case 1:
+				/* send next after 2 sec */
+				di->timeout = 2;
+				di->send_tone = 1;
+				break;
+			case 3:
+			case 4:
+				/* setup B after 1 sec */
+				di->timeout = 1;
+				break;
+#ifdef NOTYET
+			case 6:
+				do_hw_loop(di);
+				break;
+#endif
+			}
+			break;
+		case MT_DISCONNECT:
+			mylog(3, "got %s\n", mi_msg_type2str(cmd));
+			Dsend_release(di, NO_CAUSE);
+			break;
+		case MT_RELEASE:
+		case MT_RELEASE_COMPLETE:
+			mylog(3, "got %s\n", mi_msg_type2str(cmd));
+			di->stop = 1;
+			break;
+		case PRIV_ADDBC_FD:
+			mylog(3, "Add BC fd to pollset nfds %d->%d\n", di->npfd, 2);
+			di->npfd = 2; /* include pfd[1] */
+			break;
+		default:
+			mylog(0, "control pipe unhandeld cmd %x - %s\n", cmd, mi_msg_type2str(cmd));
+			break;
+		}
+	}
+	return 0;
+}
+
+
+static int bch_worker(devinfo_t *di)
+{
+	unsigned char		buf[4104];
+	int			len, ret;
+	unsigned int		*tone;
+	struct mISDNhead	*hh;
+
+	hh = (struct  mISDNhead *)buf;
+
+	len = recv(di->bchan, buf, MAX_REC_BUF, 0);
+	if (len < 0) {
+		ret = -errno;
+		mylog(0, "recv error  %s\n", strerror(-ret));
+	} else {
+		if (len < MISDN_HEADER_LEN) {
+			mylog(1, "got short B frame %d\n", len);
+			ret = -EINVAL;
+		} else
+			ret = 0;
+
+		mylog(8, "read B%d prim %s  id(%x) len(%d)\n", di->used_bchannel, mi_msg_type2str(hh->prim), hh->id, len);
+
+		switch (hh->prim) {
+		case PH_DATA_IND:
+		case DL_DATA_IND:
+			/* received data, save it */
+			write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
+			break;
+		case PH_DATA_CNF:
+			/* get ACK of send data, so we can
+			 * send more
+			 */
+			mylog(7, "PH_DATA_CNF B%d id=%x\n", di->used_bchannel, hh->id);
+			switch (di->func) {
+				case 0:
+				case 2:
+				case 7:
+					if (di->play > -1)
+						play_msg(di);
+					break;
+			}
+			break;
+		case PH_CONTROL_IND:
+			tone = (unsigned int *)(buf + MISDN_HEADER_LEN);
+			if ((len == (4 + MISDN_HEADER_LEN)) && ((*tone & ~DTMF_TONE_MASK) == DTMF_TONE_VAL)) {
+				mylog(0, "GOT TT %c\n", DTMF_TONE_MASK & *tone);
+			} else
+				mylog(0, "unknown PH_CONTROL len %d/val %x\n", len, *tone);
+			break;
+		case PH_ACTIVATE_IND:
+		case PH_ACTIVATE_CNF:
+		case DL_ESTABLISH_IND:
+		case DL_ESTABLISH_CNF:
+			mylog(5, "Got %s B%d now active\n", mi_msg_type2str(hh->prim), di->used_bchannel);
+			di->bch_active = 1;
+			break;
+		case DL_RELEASE_CNF:
+		case PH_DEACTIVATE_IND:
+		case PH_DEACTIVATE_CNF:
+			mylog(1, "B%d got termination request\n", di->used_bchannel);
+			ret = 1;
+			break;
+		default:
+			mylog(1, "got unexpected B%d frame %s id(%x) len(%d)\n", di->used_bchannel, mi_msg_type2str(hh->prim),
+			      hh->id, len);
+			break;
+		}
+	}
+	return ret;
+}
+
+
+static int main_worker(devinfo_t *di)
+{
+	int ret, running = 1;
+	int retcode = 1;
+	time_t t, td;
+
+
+	while(running) {
+		ret = poll(di->pfd, di->npfd, di->worker_tick);
+		t = time(NULL);
+		td = t - di->lasttime;
+		if (ret < 0) {
+			mylog(0, "poll error(%d) - %s\n", errno, strerror(errno));
+		} else if (ret == 0) {
+			/* timeout */
+			mylog(6, "Timertick %d ms %li sec to go\n", di->worker_tick, di->timeout - td);
+			if (di->bch_active) {
+#ifdef NOTYET
+				if (di->send_tone) {
+					if (di->val) {
+						di->val--;
+						send_touchtone(di, tt_char[di->val]);
+					} else {
+						di->send_tone = 0;
+						/* After last tone disconnect */
+						Dsend_disconnect(di, CAUSE_NORMAL_CLEARING);
+					}
+				}
+#endif
+				if (di->send_data) {
+					if (di->play > -1)
+						send_data(di);
+					else
+						di->send_data = 0;
+				}
+			}
+			if (di->bch_doactive) {
+				ret = activate_bchan(di);
+				di->bch_doactive = 0;
+				if (!ret) {
+					mylog(0, "error on activate_bchan\n");
+					Dsend_disconnect(di, CAUSE_NORMAL_CLEARING);
+				}
+				di->send_data = 1;
+			}
+		} else {
+			/* some event */
+			mylog(9, "Poll ready for %d events\n", ret);
+			if (di->pfd[0].revents & POLLIN) {
+				do_control_worker(di);
+				if (di->stop) {
+					retcode = 0;
+					break;
+				}
+			}
+			if (di->pfd[1].revents & POLLIN) {
+				ret = bch_worker(di);
+				if (ret) {
+					mylog(1, "Bch worker returned %d\n", ret);
+					close(di->bchan);
+					di->bchan = -1;
+					di->bch_active = 0;
+					di->bch_setup = 0;
+					if (di->active)
+						Dsend_disconnect(di, CAUSE_NORMAL_CLEARING);
+					else
+						Dsend_answer(di, MT_RELEASE_COMPLETE, CAUSE_NORMAL_CLEARING);
+					di->active = 0;
+				}
+			}
+		}
+		if (td >= di->timeout) {
+			if (di->bchan > 0) {
+#ifdef NOTYET
+				if (di->bch_loop)
+					del_hw_loop(di);
+				else
+#endif
+				if (di->bch_active)
+					deactivate_bchan(di);
+				di->timeout += 2;
+				continue;
+			}
+			if (!di->hangup) {
+				di->hangup = 1;
+				if (di->active)
+					Dsend_disconnect(di, CAUSE_NORMAL_CLEARING);
+				else
+					Dsend_answer(di, MT_RELEASE_COMPLETE, CAUSE_NORMAL_CLEARING);
+				di->active = 0;
+				di->timeout += 2;
+				continue;
+			}
+			retcode = 3;
+			break;
+		}
+	}
+	return retcode;
+}
+
+static int do_setup(devinfo_t *di) {
+	int		ret;
 	unsigned int	prop, protocol;
 
 	switch (di->func) {
 		case 0:
 		case 5:
+		case 7:
 			di->bproto = ISDN_P_B_RAW;
 			di->si = 1;
 			break;
@@ -1137,85 +1467,72 @@ int do_setup(devinfo_t *di) {
 		case 4:
 			di->bproto = ISDN_P_B_X75SLP;
 			di->si = 7;
-			di->flag |= FLG_BCHANNEL_ACTDELAYED;
+			di->bch_actdelayed = 1;
 			break;
 #ifdef NOTYET
 		case 6:
 			di->bproto = ISDN_P_B_RAW;
 			di->si = 1;
-			di->flag |= FLG_BCHANNEL_LOOP;
+			di->bch_loop = 1;
 			break;
 #endif
 		default:
-			fprintf(stdout,"unknown program function %d\n",
+			mylog(0, "unknown program function %d\n",
 				di->func);
 			return 1;
 	}
-	if (VerifyOn > 8)
-		fprintf(stdout, "init_layer3(4)\n");
-	if (VerifyOn > 8)
-		fprintf(stdout, "done\n");
-	if (di->flag & FLG_NT_MODE) {
+	if (di->nt) {
 		protocol = L3_PROTOCOL_DSS1_NET;
 	} else {
 		protocol = L3_PROTOCOL_DSS1_USER;
 	}
-	prop = 0;
-	if (VerifyOn > 8)
-		fprintf(stdout, "open_layer3(%d, %x, %x, %p, %p)\n",
-			di->cardnr, protocol, prop , do_dchannel, di);
-	di->layer3 = open_layer3(di->cardnr, protocol, prop , do_dchannel, di);
-	if (VerifyOn > 8)
-		fprintf(stdout, "done\n");
-	if (!di->layer3) {
-		fprintf(stdout, "cannot open layer3\n");
+	if (di->PtP)
+		prop = MISDN_FLG_PTP | MISDN_FLG_L2_HOLD;
+	else
+		prop = 0;
+	mylog(6, "open_layer3(%d, %x, %x, %p, %p)\n",
+			di->contr, protocol, prop, from_layer3, di);
+	di->l3 = open_layer3(di->contr, protocol, prop, from_layer3, di);
+	mylog(6, "open_layer3 done\n");
+	if (!di->l3) {
+		mylog(0, "cannot open layer3\n");
 		return 2;
 	}
-	if (VerifyOn)
-		fprintf(stdout, "open card %d with %d channels options(%lx)\n", di->cardnr, di->layer3->nr_bchannel, di->layer3->options);
-	
-	pthread_mutex_init(&di->wait, NULL);
-	pthread_mutex_lock(&di->wait);
+	mylog(1, "open card %d with %d channels options(%lx)\n", di->contr, di->l3->nr_bchannel, di->l3->options);
 	
 	
 	if (strlen(di->phonenr)) {
-		di->flag |= FLG_CALL_ORGINATE;
-		send_SETUP(di, di->si, di->phonenr);
+		di->orginate = 1;
+		Dsend_SETUP(di);
 	}
-	di->timeout = 60;
-	ret = gettimeofday(&tv, NULL);
-	if (ret) {
-		fprintf(stdout, "cannot get time\n");
-		return 3;
-	}
-	ts.tv_sec = tv.tv_sec + di->timeout;
-	ts.tv_nsec = tv.tv_usec * 1000;
-	di->timeout = 60;
-	ret = pthread_mutex_timedlock(&di->wait, &ts);
-	if (ret) {
-		if (ret == ETIMEDOUT)
-			fprintf(stdout, "timed out, exit\n");
-		else
-			fprintf(stdout, "pthread_mutex_timedlock error %s\n", strerror(ret));
-		close_layer3(di->layer3 );
-		cleanup_layer3();
+	/* we run the worker as main thread here */
+
+	ret = pipe2(di->pipe, O_NONBLOCK);
+	if (ret < 0) {
+		fprintf(stderr, "Cannot create control pipe - %s\n", strerror(errno));
 		return 4;
 	}
-	if (VerifyOn)
-		fprintf(stdout, "got first answer continue\n");
-	if (di->flag & FLG_STOP) {
-		fprintf(stdout, "stop requested\n");
-		close_layer3(di->layer3 );
-		cleanup_layer3();
-		return 5;
+	di->npfd = 1;
+	di->pfd[0].fd = di->ReadPipe;
+	di->pfd[0].events = POLLIN;
+
+	di->worker_tick = 1000; /* 1 sec */
+	di->lasttime = time(NULL);
+	di->timeout = di->cfg_timeout;
+	ret = gettimeofday(&di->read_timeout, NULL);
+	if (ret) {
+		mylog(0, "cannot get time\n");
+		return 3;
 	}
-	/* wait for final hangup */
-	pthread_mutex_lock(&di->wait);
+	ret = main_worker(di);
+
+	mylog(0, "Worker terminated with %d\n", ret);
+
 	/* wait to clean up */
 	sleep(1);
-	close_layer3(di->layer3 );
+	close_layer3(di->l3 );
 	cleanup_layer3();
-	return 0;
+	return ret;
 }
 
 static int my_lib_debug(const char *file, int line, const char *func, int level, const char *fmt, va_list va)
@@ -1224,163 +1541,77 @@ static int my_lib_debug(const char *file, int line, const char *func, int level,
 	char log[256];
 
 	ret = vsnprintf(log, 256, fmt, va);
-	if (VerifyOn > 3) {
+	if (VerboseLevel > 6) {
 		if (level > MISDN_LIBDEBUG_WARN)
-			fprintf(stdout, "%20s:%4d %20s %s", file, line, func, log);
+			mylog(6, "%20s:%4d %20s %s", file, line, func, log);
 		else
-			fprintf(stderr, "%20s:%4d %20s %s", file, line, func, log);
+			mylog(0, "%20s:%4d %20s %s", file, line, func, log);
 	} else {
-		if (level > MISDN_LIBDEBUG_WARN)
-			fprintf(stdout, "%s", log);
-		else
-			fprintf(stderr, "%s", log);
+		mylog(0, "%s", log);
 	}
 	return ret;
 }
 
 static struct mi_ext_fn_s myfn = {
-			 .prt_debug = my_lib_debug,
+	.prt_debug = my_lib_debug,
 };
 
 int main(argc,argv)
 int argc;
 char *argv[];
 {
-	char FileName[200],FileNameOut[200];
-	int aidx=1,para=1, idx, af;
-	char sw;
-	devinfo_t mISDN;
+	char FileNameIn[200],FileNameOut[200];
+	devinfo_t DevInfo;
 	int err;
 
-	fprintf(stderr,"TestmISDN 1.0\n");
-	strcpy(FileName, "test_file");
-	memset(&mISDN, 0, sizeof(mISDN));
-	mISDN.cardnr = 0;
-	strcpy(mISDN.msn, "123");
-	if (argc<1) {
+	fprintf(stderr,"mISDN Test L3 2.0\n");
+
+	if (argc < 1) {
 		fprintf(stderr,"Error: Not enough arguments please check\n");
 		usage(argv[0]);
 		exit(1);
 	} else {
-		do {
-			if (argv[aidx] && argv[aidx][0]=='-') {
-				sw=argv[aidx][1];
-				switch (sw) {
-					 case 'v':
-					 case 'V':
-						VerifyOn=1;
-						if (argv[aidx][2]) {
-							VerifyOn=atol(&argv[aidx][2]);
-						}
-						break;
-					case 'a':
-						if (argv[aidx][2]) {
-							af=atol(&argv[aidx][2]);
-							if (set_af_isdn(af) < 0) {
-								fprintf(stderr, "Wrong address family number %s\n", &argv[aidx][2]);
-								exit(1);
-							}
-						}
-						break;
-					case 'c':
-						if (argv[aidx][2]) {
-							mISDN.cardnr=atol(&argv[aidx][2]);
-						}
-						break;
-					case 'F':
-						if (argv[aidx][2]) {
-							mISDN.func=atol(&argv[aidx][2]);
-						}
-						break;
-					case 'N':
-						mISDN.flag |= FLG_NT_MODE;
-						break;
-					case 'n':
-						if (!argv[aidx][2]) {
-							idx = 0;
-							aidx++;
-						} else {
-							idx=2;
-						}
-						if (aidx<=argc) {
-							strcpy(mISDN.phonenr, &argv[aidx][idx]);
-						} else {
-							fprintf(stderr," Switch %c without value\n",sw);
-							exit(1);
-						}
-						break;
-					case 'm':
-						if (!argv[aidx][2]) {
-							idx = 0;
-							aidx++;
-						} else {
-							idx=2;
-						}
-						if (aidx<=argc) {
-							strcpy(mISDN.msn, &argv[aidx][idx]);
-						} else {
-							fprintf(stderr," Switch %c without value\n",sw);
-							exit(1);
-						}
-						break;
-					case '?' :
-						usage(argv[0]);
-						exit(1);
-						break;
-					default  : fprintf(stderr,"Unknown Switch %c\n",sw);
-						usage(argv[0]);
-						exit(1);
-						break;
-				}
-			}  else {
-				if (para==1) {
-					if (argc > 1)
-						strcpy(FileName,argv[aidx]);
-					para++;
-				} else {
-					fprintf(stderr,"Undefined argument %s\n",argv[aidx]);
-					usage(argv[0]);
-					exit(1);
-				}
-			}
-			aidx++;
-		} while (aidx<argc);
+		err = opt_parse(&DevInfo, argc, argv);
+		if (err)
+			exit(1);
 	}
+	if (!DataFileName)
+		DataFileName = strdup("test_file");
+	if (!DevInfo.msn[0])
+		strcpy(DevInfo.msn, "123");
 
 	init_layer3(4, &myfn);
-	if (VerifyOn > 2)
-		mISDN_set_debug_level(0xffffffff);
+	mISDN_set_debug_level(LibDebug);
 
 	err = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (err < 0) {
-		printf("TestmISDN cannot open mISDN due to %s\n",
+		mylog(0, "TestmISDN cannot open mISDN due to %s\n",
 			strerror(errno));
 		return 1;
 	}
 	close(err);
-	sprintf(FileNameOut,"%s.out",FileName);
-	sprintf(FileName,"%s.in",FileName);
 
-	if (0>(mISDN.save = open(FileName, O_WRONLY|O_CREAT|O_TRUNC,S_IRWXU))) {
-		printf("TestmISDN cannot open %s due to %s\n",FileName,
-			strerror(errno));
+	sprintf(FileNameOut, "%s.out", DataFileName);
+	sprintf(FileNameIn, "%s.in", DataFileName);
+
+	if (0>(DevInfo.save = open(FileNameIn, O_WRONLY|O_CREAT|O_TRUNC,S_IRWXU))) {
+		mylog(0, "TestmISDN cannot open %s due to %s\n",FileNameIn, strerror(errno));
 		return 1;
 	}
-	if (0>(mISDN.play = open(FileNameOut, O_RDONLY))) {
-		printf("TestmISDN cannot open %s due to %s\n",FileNameOut,
-			strerror(errno));
-		mISDN.play = -1;
+	if (0>(DevInfo.play = open(FileNameOut, O_RDONLY))) {
+		mylog(0, "TestmISDN cannot open %s due to %s\n",FileNameOut, strerror(errno));
+		DevInfo.play = -1;
 	} else 
-		mISDN.fplay = fdopen(mISDN.play, "r");
-	if (VerifyOn>8)
-		fprintf(stdout,"fileno %d/%d\n",mISDN.save, mISDN.play);
-	
-	err = do_setup(&mISDN);
+		DevInfo.fplay = fdopen(DevInfo.play, "r");
 
-	close(mISDN.save);
-	if (mISDN.play>=0)
-		close(mISDN.play);
-	if (mISDN.bchan > 0)
-		close(mISDN.bchan);
+	mylog(8, "fileno %d/%d\n",DevInfo.save, DevInfo.play);
+	
+	err = do_setup(&DevInfo);
+
+	close(DevInfo.save);
+	if (DevInfo.play>=0)
+		close(DevInfo.play);
+	if (DevInfo.bchan > 0)
+		close(DevInfo.bchan);
 	return 0;
 }
