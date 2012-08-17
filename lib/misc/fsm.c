@@ -105,7 +105,7 @@ FsmInitTimer(struct FsmInst *fi, struct FsmTimer *ft)
 	if (ft->fi->debug)
 		ft->fi->printdebug(ft->fi, "FsmInitTimer %lx", (long) ft);
 #endif
-	init_timer(&ft->tl, ft->fi->l3, ft, FsmExpireTimer);
+	init_timer(&ft->tl, ft->fi->tb, ft, FsmExpireTimer);
 }
 
 void

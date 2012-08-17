@@ -23,9 +23,9 @@
 #include "helper.h"
 
 int
-init_timer(struct mtimer *mt, struct _layer3  *l3, void *data, mtimer_func_t *f)
+init_timer(struct mtimer *mt, struct timer_base  *tb, void *data, mtimer_func_t *f)
 {
-	mt->l3 = l3;
+	mt->tb = tb;
 	mt->id = 0;
 	mt->data = data;
 	mt->function = f;
@@ -39,11 +39,11 @@ add_timer(struct mtimer *mt, int tout)
 
 	mt->timeout = tout;
 	para = tout;
-	ret = ioctl(mt->l3->mdev, IMADDTIMER, (long)&para);
+	ret = ioctl(mt->tb->tdev, IMADDTIMER, (long)&para);
 	if (ret < 0)
 		return ret;
 	mt->id = para;
-	list_add_tail(&mt->list, &mt->l3->pending_timer);
+	list_add_tail(&mt->list, &mt->tb->pending_timer);
 	return ret;
 }
 
@@ -54,7 +54,7 @@ del_timer(struct mtimer *mt)
 
 	if (mt->id) {
 		list_del(&mt->list);
-		ret = ioctl(mt->l3->mdev, IMDELTIMER, (long)&mt->id);
+		ret = ioctl(mt->tb->tdev, IMDELTIMER, (long)&mt->id);
 		mt->id = 0;
 	}
 	return ret;
@@ -66,11 +66,11 @@ timer_pending(struct mtimer *mt)
 	return mt->id;
 }
 
-void expire_timer(struct _layer3 *l3, int id)
+void expire_timer(struct timer_base *tb, int id)
 {
 	struct mtimer	*mt;
 
-	list_for_each_entry(mt, &l3->pending_timer, list) {
+	list_for_each_entry(mt, &tb->pending_timer, list) {
 		if (mt->id == id) {
 			list_del(&mt->list);
 			mt->id = 0;

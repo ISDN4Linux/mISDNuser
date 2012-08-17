@@ -32,13 +32,13 @@ struct Fsm {
 };
 
 struct FsmInst {
-	struct Fsm	*fsm;
-	struct _layer3	*l3;
-	int		state;
-	int		debug;
-	void		*userdata;
-	int		userint;
-	void		(*printdebug) (struct FsmInst *, char *, ...);
+	struct Fsm		*fsm;
+	struct timer_base	*tb;
+	int			state;
+	int			debug;
+	void			*userdata;
+	int			userint;
+	void			(*printdebug)(struct FsmInst *, char *, ...);
 };
 
 struct FsmNode {

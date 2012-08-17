@@ -187,8 +187,8 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 		}
 	}
 	l3->l2sock = fd;
-	l3->mdev = open("/dev/mISDNtimer", O_RDWR);
-	if (l3->mdev < 0) {
+	l3->tbase.tdev = open("/dev/mISDNtimer", O_RDWR);
+	if (l3->tbase.tdev < 0) {
 		eprint("could not open /dev/mISDNtimer %s\n", strerror(errno));
 		eprint("It seems that you don't use udev filesystem. You may use this workarround:\n\n");
 		eprint("Do 'cat /proc/misc' and see the number in front of 'mISDNtimer'.\n");
@@ -196,14 +196,14 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 		eprint("Note: This number changes if you load modules in different order, that use misc device.\n");
 		goto fail;
 	}
-	if (l3->l2sock < l3->mdev)
-		l3->maxfd = l3->mdev;
+	if (l3->l2sock < l3->tbase.tdev)
+		l3->maxfd = l3->tbase.tdev;
 	else
 		l3->maxfd = l3->l2sock;
 	ret = l3_start(l3);
 	if (ret < 0) {
 		eprint("could not start layer3 thread for device %d\n", dev);
-		close(l3->mdev);
+		close(l3->tbase.tdev);
 		goto fail;
 	}
 
@@ -228,7 +228,7 @@ close_layer3(struct mlayer3 *ml3)
 	l3 = container_of(ml3, struct _layer3, ml3);
 	l3_stop(l3);
 	close(l3->l2sock);
-	close(l3->mdev);
+	close(l3->tbase.tdev);
 	release_l3(l3);
 	if (ml3->devinfo)
 		free(ml3->devinfo);

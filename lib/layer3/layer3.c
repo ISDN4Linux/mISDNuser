@@ -68,7 +68,8 @@ mIpc_debug(u_int dmask, l3_process_t *pc, char *fmt, ...)
 static void
 l3fi_debug(struct FsmInst *fi, char *fmt, ...)
 {
-	layer3_t *l3 = fi->l3;
+	struct l2l3if *l2i = fi->userdata;
+	layer3_t *l3 = l2i->l3;
 
 	va_list args;
 	char buf[256], *p;
@@ -196,7 +197,7 @@ L3TimerFunction(void *arg)
 static void
 L3TimerInit(layer3_t *l3, int pid, struct L3Timer *t)
 {
-	init_timer(&t->tl, l3, t, L3TimerFunction);
+	init_timer(&t->tl, &l3->tbase, t, L3TimerFunction);
 	t->pid = pid;
 	t->nr = 0;
 	t->l3 = l3;
@@ -647,7 +648,7 @@ to_layer3(struct mlayer3 *ml3, unsigned int prim, unsigned int pid, struct l3_ms
 		mqueue_tail(q, mb);
 		id = 0;
 		/* wake up worker */
-		ret = ioctl(l3->mdev, IMADDTIMER, &id);
+		ret = ioctl(l3->tbase.tdev, IMADDTIMER, &id);
 		if (ret)
 			eprint("%s wake up worker error %s\n", __FUNCTION__, strerror(errno));
 	}
@@ -663,7 +664,7 @@ init_l2if(struct l2l3if *l2i, layer3_t *l3)
 	l2i->l3m.fsm = &l3fsm;
 	l2i->l3m.state = ST_L3_LC_REL;
 	l2i->l3m.userdata = l2i;
-	l2i->l3m.l3 = l3;
+	l2i->l3m.tb = &l3->tbase;
 	l2i->l3m.userint = 0;
 	FsmInitTimer(&l2i->l3m, &l2i->l3m_timer);
 	l2i->l3m.printdebug = l3fi_debug;
@@ -703,6 +704,7 @@ void
 init_l3(layer3_t *l3)
 {
 	INIT_LIST_HEAD(&l3->plist);
+	INIT_LIST_HEAD(&l3->tbase.pending_timer);
 	l3->global.l2if = &l3->l2master;
 	l3->global.L3 = l3;
 	l3->dummy.l2if = &l3->l2master;
@@ -722,7 +724,6 @@ init_l3(layer3_t *l3)
 		l3->l2master.l3m.state = ST_L3_LC_ESTAB;
 	mqueue_init(&l3->app_queue);
 	mqueue_init(&l3->mgr_queue);
-	INIT_LIST_HEAD(&l3->pending_timer);
 	l3->ml3.to_layer3 = to_layer3;
 	pthread_mutex_init(&l3->run, NULL);
 	l3->next_cr = 1;
@@ -888,7 +889,7 @@ layer3_thread(void *arg)
 	while(!test_bit(FLG_ABORT, &l3->ml3.options)) {
 		FD_ZERO(&rfd);
 		FD_SET(l3->l2sock, &rfd);
-		FD_SET(l3->mdev, &rfd);
+		FD_SET(l3->tbase.tdev, &rfd);
 		ret = select(l3->maxfd +1, &rfd, NULL, NULL, NULL);
 		if (ret < 0) {
 			if (errno == EINTR)
@@ -896,13 +897,13 @@ layer3_thread(void *arg)
 			eprint("%s aborted: %s\n", __FUNCTION__, strerror(errno));
 			break;
 		}
-		if (FD_ISSET(l3->mdev, &rfd)) {
-			ret = read(l3->mdev, &id, sizeof(id));
+		if (FD_ISSET(l3->tbase.tdev, &rfd)) {
+			ret = read(l3->tbase.tdev, &id, sizeof(id));
 			if (ret < 0) {
 				eprint("%s read timer error %s\n", __FUNCTION__, strerror(errno));
 			} else {
 				if (ret == sizeof(id) && id) {
-					expire_timer(l3, id);
+					expire_timer(&l3->tbase, id);
 				}
 			}
 		}

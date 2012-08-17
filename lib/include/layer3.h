@@ -27,6 +27,8 @@
 
 typedef struct _l3_process	l3_process_t;
 
+struct _layer3;
+
 struct l3protocol {
 	char			*name;
 	unsigned int		protocol;
@@ -87,10 +89,9 @@ typedef struct _layer3 {
 	struct mlayer3		ml3;
 	pthread_t		worker;
 	int			l2sock;
-	int			mdev;
 	int			maxfd;
 	struct l2l3if		l2master;
-	struct list_head	pending_timer;
+	struct timer_base	tbase;
 	int			next_cr;
 	struct list_head	plist;
 	l3_process_t		global;

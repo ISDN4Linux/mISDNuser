@@ -20,23 +20,26 @@
 
 #include "mlist.h"
 
-struct mlayer3;
-
 typedef	void (mtimer_func_t)(void *);
+
+struct timer_base {
+	struct list_head	pending_timer;
+	int			tdev;
+};
 
 struct mtimer {
 	struct list_head	list;
-	struct _layer3		*l3;
+	struct timer_base	*tb;
 	int			id;
 	int			timeout;
 	void			*data;
 	mtimer_func_t		*function;
 };
 
-extern	int		init_timer(struct mtimer *, struct _layer3  *, void *, mtimer_func_t *);
+extern	int		init_timer(struct mtimer *, struct timer_base  *, void *, mtimer_func_t *);
 extern	int		add_timer(struct mtimer *, int);
 extern	int		del_timer(struct mtimer *);
 extern	int		timer_pending(struct mtimer *);
-extern	void		expire_timer(struct _layer3 *, int);
+extern	void		expire_timer(struct timer_base *, int);
 
 #endif
