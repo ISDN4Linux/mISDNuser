@@ -348,6 +348,9 @@ _alloc_mbuffer(int typ)
 	case MB_TYP_L2:
 		m =  mdequeue(&free_queue_l2);
 		break;
+	default:
+		eprint("%s: wrong type %d\n", __func__, typ);
+		return NULL;
 	}
 	if (!m)
 		m = _new_mbuffer(typ);

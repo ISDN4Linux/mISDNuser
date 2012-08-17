@@ -146,10 +146,10 @@ int ParseRecordedCurrency(struct asn1_parm *pc, u_char * p, u_char * end, struct
 
 // RecordedUnitsList
 
-int ParseRecordedUnitsList(struct asn1_parm *pc, u_char * p, u_char * end, int *recordedUnits)
+int ParseRecordedUnitsList(struct asn1_parm *pc, u_char * p, u_char * end, __u32 *recordedUnits)
 {
 	int i;
-	int units;
+	__u32 units;
 	INIT;
 
 	*recordedUnits = 0;
@@ -165,14 +165,14 @@ int ParseRecordedUnitsList(struct asn1_parm *pc, u_char * p, u_char * end, int *
 
 // TypeOfChargingInfo
 
-int ParseTypeOfChargingInfo(struct asn1_parm *pc, u_char * p, u_char * end, int *typeOfChargingInfo)
+int ParseTypeOfChargingInfo(struct asn1_parm *pc, u_char * p, u_char * end, __u32 *typeOfChargingInfo)
 {
 	return ParseEnum(pc, p, end, typeOfChargingInfo);
 }
 
 // RecordedUnits
 
-int ParseRecordedUnitsChoice(struct asn1_parm *pc, u_char * p, u_char * end, int *recordedUnits)
+int ParseRecordedUnitsChoice(struct asn1_parm *pc, u_char * p, u_char * end, __u32 *recordedUnits)
 {
 	INIT;
 
@@ -181,9 +181,9 @@ int ParseRecordedUnitsChoice(struct asn1_parm *pc, u_char * p, u_char * end, int
 	XCHOICE_DEFAULT;
 }
 
-int ParseRecordedUnits(struct asn1_parm *pc, u_char * p, u_char * end, int *recordedUnits)
+int ParseRecordedUnits(struct asn1_parm *pc, u_char * p, u_char * end, __u32 *recordedUnits)
 {
-	int typeOfUnit;
+	__u32 typeOfUnit;
 	INIT;
 
 	XSEQUENCE_1(ParseRecordedUnitsChoice, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, recordedUnits);
@@ -194,7 +194,7 @@ int ParseRecordedUnits(struct asn1_parm *pc, u_char * p, u_char * end, int *reco
 
 // AOCDBillingId
 
-int ParseAOCDBillingId(struct asn1_parm *pc, u_char * p, u_char * end, int *billingId)
+int ParseAOCDBillingId(struct asn1_parm *pc, u_char * p, u_char * end, __u32 *billingId)
 {
 	return ParseEnum(pc, p, end, billingId);
 }
@@ -263,7 +263,7 @@ int ParseAOCEChargingUnitInfo(struct asn1_parm *pc, u_char * p, u_char * end, st
 
 // AOCEBillingId
 
-int ParseAOCEBillingId(struct asn1_parm *pc, u_char * p, u_char * end, int *billingId)
+int ParseAOCEBillingId(struct asn1_parm *pc, u_char * p, u_char * end, __u32 *billingId)
 {
 	return ParseEnum(pc, p, end, billingId);
 }
@@ -333,7 +333,7 @@ int ParseChargingAssociation(struct asn1_parm *pc, u_char * p, u_char * end, str
 
 	if ((partyNumber.LengthOfNumber) && (partyNumber.LengthOfNumber <= 30)
 	    && (partyNumber.Number[0] != '\0'))
-		strcpy(chargeAssoc->chargeNumber, partyNumber.Number);
+		strncpy((char *)chargeAssoc->chargeNumber, (char *)partyNumber.Number, 30);
 
 	XCHOICE_1(ParseChargeIdentifier, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &chargeAssoc->chargeIdentifier);
 

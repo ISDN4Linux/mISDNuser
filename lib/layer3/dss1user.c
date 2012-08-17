@@ -1154,6 +1154,8 @@ l3dss1_suspend_ack(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m) {
 	newl3state(pc, 0);
 	/* We don't handle suspend_ack for IE errors now */
 	ret = check_infoelements(pc, l3m, ie_SUSPEND_ACKNOWLEDGE, MT_SUSPEND_ACKNOWLEDGE);
+	if (ret)
+		wprint("Got error %d from check_infoelements - ignored\n", ret);
 	mISDN_l3up(pc, MT_SUSPEND_ACKNOWLEDGE, l3m);
 	release_l3_process(pc);
 }
@@ -2209,6 +2211,7 @@ dss1_fromdown(layer3_t *l3, struct mbuffer *msg)
 					l3dss1_msg_without_setup(proc, CAUSE_NOTCOMPAT_STATE);
 				}
 			}
+			iprint("port%d: Got status state %d cause %d\n", msg->addr.dev, callState, cause);
 			goto freemsg;
 		} else if (msg->l3h.type == MT_RELEASE_COMPLETE) {
 			goto freemsg;

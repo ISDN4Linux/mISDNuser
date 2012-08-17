@@ -119,7 +119,7 @@ _mi_thread_create(pthread_t *thread, pthread_attr_t *attr, void *(*start_routine
 void
 mi_dhexprint(const char *file, int line, const char *func, char *head, unsigned char *buf, int len)
 {
-	int	ret = 0,i;
+	int	i;
 	char	*p,*obuf;
 
 

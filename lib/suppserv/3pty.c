@@ -30,7 +30,7 @@
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacBegin3PTY(__u8 * Dest, const struct asn1_parm *pc, void *unused)
+int encodeFacBegin3PTY(__u8 * Dest, const struct asn1_parm *pc, const void *unused)
 {
 	int Length;
 	__u8 *p;
@@ -74,7 +74,7 @@ int encodeFacBegin3PTY(__u8 * Dest, const struct asn1_parm *pc, void *unused)
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacEnd3PTY(__u8 * Dest, const struct asn1_parm *pc, void *unused)
+int encodeFacEnd3PTY(__u8 * Dest, const struct asn1_parm *pc, const void *unused)
 {
 	int Length;
 	__u8 *p;

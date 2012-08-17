@@ -344,7 +344,7 @@ static int encodeIntResult(__u8 * Dest, const struct FacForwardingRecord *IntRes
  */
 static int ParseIntResult(struct asn1_parm *pc, u_char * p, u_char * end, struct FacForwardingRecord *IntResult)
 {
-	int Value;
+	unsigned int Value;
 	INIT;
 
 	XSEQUENCE_1(ParseServedUserNumber_Full, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &IntResult->ServedUser);
@@ -549,7 +549,7 @@ int encodeFacActivationDiversion(__u8 * Dest, const struct asn1_parm *pc, const 
 int ParseActivationDiversion(struct asn1_parm *pc, u_char * p, u_char * end,
 				 struct FacActivationDiversion *ActivationDiversion)
 {
-	int Value;
+	unsigned int Value;
 	INIT;
 
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &Value);
@@ -634,7 +634,7 @@ int encodeFacDeactivationDiversion(__u8 * Dest, const struct asn1_parm *pc, cons
  */
 int ParseDeactivationDiversion(struct asn1_parm *pc, u_char * p, u_char * end, struct FacDeactivationDiversion *DeactivationDiversion)
 {
-	int Value;
+	unsigned int Value;
 	INIT;
 
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &Value);
@@ -697,7 +697,7 @@ int encodeFacActivationStatusNotificationDiv(__u8 * Dest, const struct asn1_parm
 int ParseActivationStatusNotificationDiv(struct asn1_parm *pc, u_char * p, u_char * end,
 					     struct FacActivationStatusNotificationDiv *ActivationStatusNotificationDiv)
 {
-	int Value;
+	unsigned int Value;
 	INIT;
 
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &Value);
@@ -761,7 +761,7 @@ int encodeFacDeactivationStatusNotificationDiv(__u8 * Dest, const struct asn1_pa
 int ParseDeactivationStatusNotificationDiv(struct asn1_parm *pc, u_char * p, u_char * end,
 					       struct FacDeactivationStatusNotificationDiv *DeactivationStatusNotificationDiv)
 {
-	int Value;
+	unsigned int Value;
 	INIT;
 
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &Value);
@@ -850,7 +850,7 @@ int encodeFacInterrogationDiversion(__u8 * Dest, const const struct asn1_parm *p
 int ParseInterrogationDiversion(struct asn1_parm *pc, u_char * p, u_char * end,
 				    struct FacInterrogationDiversion *InterrogationDiversion)
 {
-	int Value;
+	unsigned int Value;
 	INIT;
 
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &Value);
@@ -980,7 +980,7 @@ int ParseDiversionInformation(struct asn1_parm *pc, u_char * p, u_char * end,
 {
 	int xtag;
 	int xlen;
-	int Value;
+	unsigned int Value;
 	INIT;
 
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &Value);
@@ -1394,7 +1394,7 @@ int encodeFacDivertingLegInformation1(__u8 * Dest, const const struct asn1_parm 
 int ParseDivertingLegInformation1(struct asn1_parm *pc, u_char * p, u_char * end,
 				      struct FacDivertingLegInformation1 *DivertingLegInformation1)
 {
-	int Value;
+	unsigned int Value;
 	INIT;
 
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &Value);

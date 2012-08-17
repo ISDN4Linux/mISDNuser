@@ -1,5 +1,4 @@
 /*
- * $Id$
  *
  * Three Party (3PTY) Supplementary Services ETS 300 188-2
  *
@@ -15,8 +14,8 @@ extern "C" {
 
 /* ------------------------------------------------------------------- */
 
-	int encodeBegin3PTY(__u8 * Dest, const struct asn1_parm *pc, const void *val);
-	int encodeEnd3PTY(__u8 * Dest, const struct asn1_parm *pc, const void *val);
+int encodeFacBegin3PTY(__u8 * Dest, const struct asn1_parm *pc, const void *unused);
+int encodeFacEnd3PTY(__u8 * Dest, const struct asn1_parm *pc, const void *unused);
 
 /* ------------------------------------------------------------------- */
 

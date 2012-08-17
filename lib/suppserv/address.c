@@ -105,7 +105,7 @@ static int encodeNetworkPartyNumber(__u8 * Dest, const __s8 * Number, __u8 Lengt
  */
 static int ParseNetworkPartyNumber(struct asn1_parm *pc, u_char * p, u_char * end, struct FacPartyNumber *PartyNumber)
 {
-	int TypeOfNumber;
+	unsigned int TypeOfNumber;
 	INIT;
 
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &TypeOfNumber);
@@ -536,7 +536,7 @@ static int encodeAddressScreened_Full(__u8 * Dest, const struct FacAddressScreen
  */
 static int ParseAddressScreened_Full(struct asn1_parm *pc, u_char * p, u_char * end, struct FacAddressScreened *Address)
 {
-	int Value;
+	unsigned int Value;
 	INIT;
 
 	XSEQUENCE_1(ParsePartyNumber_Full, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &Address->Party);

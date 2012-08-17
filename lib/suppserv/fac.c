@@ -28,6 +28,7 @@
 #include <mISDN/q931.h>
 #include "ccbs.h"
 #include "ect.h"
+#include "3pty.h"
 #include <string.h>
 
 #define AOC_MAX_NUM_CHARGE_UNITS   0xFFFFFF
@@ -307,13 +308,9 @@ static int encodeFacMcidIvokeRequest(__u8 * dest, const struct asn1_parm *pc)
 {
 	int i = 0;
 	int result = -1;
-	unsigned char invokeId = 0;
-
 	__u8 *p = dest;
 
 	if (p != NULL) {
-		invokeId = pc->u.inv.invokeId;
-
 		p[i++] = IE_FACILITY;	// IE identifier
 		p[i++] = 0x09;	// length
 		p[i++] = SUPPLEMENTARY_SERVICE;	// remote operations protocol
@@ -463,7 +460,7 @@ static int encodeFacReturnError(__u8 * dest, const struct asn1_parm *pc)
  */
 static int encodeFacReject(__u8 * dest, const struct asn1_parm *pc)
 {
-        struct asn1Reject *rej = &pc->u.reject;
+        const struct asn1Reject *rej = &pc->u.reject;
         int len = -1;
         char ids[16];
 	__u8 *p;

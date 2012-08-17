@@ -440,19 +440,20 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 	struct l2l3if *l2i = fi->userdata;
 	struct mbuffer	*mb;
 	int dequeued = 0;
-	l3_process_t	*pc;
 
 	FsmChangeState(fi, ST_L3_LC_ESTAB);
 	while ((mb = mdequeue(&l2i->squeue))) {
 		l3down(l2i, DL_DATA_REQ, mb);
 		dequeued++;
 	}
+	dprint(DBGM_L3DATA, "port%d sent %d messages to L2\n",  l2i->l3->l2master.l2addr.dev, dequeued);
 //	pc = get_first_l3process4ces(l2i->l3, l2i->l2addr.channel);
 //	if ((!pc) && (!test_bit(MISDN_FLG_L2_HOLD, &l2i->l3->ml3.options)) && dequeued) {
 //		FsmEvent(fi, EV_RELEASE_REQ, NULL);
 //	} else {
-		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
+//		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
 //	}
+	l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
 	l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, l2i->l2addr.tei, NULL);
 }
 
@@ -462,7 +463,6 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 	struct l2l3if *l2i = fi->userdata;
 	struct mbuffer	*mb;
 	int dequeued = 0;
-	l3_process_t	*pc;
 
 	FsmDelTimer(&l2i->l3m_timer, 51);
 	FsmChangeState(fi, ST_L3_LC_ESTAB);
@@ -470,12 +470,14 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 		l3down(l2i, DL_DATA_REQ, mb);
 		dequeued++;
 	}
+	dprint(DBGM_L3DATA, "port%d sent %d messages to L2\n",  l2i->l3->l2master.l2addr.dev, dequeued);
 //	pc = get_first_l3process4ces(l2i->l3, l2i->l2addr.channel);
 //	if ((!pc) && (!test_bit(MISDN_FLG_L2_HOLD, &l2i->l3->ml3.options)) && dequeued) {
 //		FsmEvent(fi, EV_RELEASE_REQ, NULL);
 //	} else {
-		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
+//		l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
 //	}
+	l3ml3p(l2i->l3, DL_ESTABLISH_IND, l2i->l2addr.channel);
 	l2i->l3->ml3.from_layer3(&l2i->l3->ml3, MT_L2ESTABLISH, l2i->l2addr.tei, NULL);
 }
 

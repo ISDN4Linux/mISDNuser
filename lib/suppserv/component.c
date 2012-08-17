@@ -113,7 +113,7 @@ int ConvertEnumToOid(struct asn1Oid *oid, __u16 enumValue)
 	return status;
 }				/* end ConvertEnumToOid() */
 
-static int ParseOperationOid(struct asn1_parm *pc, u_char * p, u_char * end, int *operationValue)
+static int ParseOperationOid(struct asn1_parm *pc, u_char * p, u_char * end, unsigned int *operationValue)
 {
 	struct asn1Oid operationOid;
 	int rval;
@@ -124,7 +124,7 @@ static int ParseOperationOid(struct asn1_parm *pc, u_char * p, u_char * end, int
 	return rval;
 }				/* end ParseOperationOid() */
 
-static int ParseOperationValue(struct asn1_parm *pc, u_char * p, u_char * end, int *operationValue)
+static int ParseOperationValue(struct asn1_parm *pc, u_char * p, u_char * end, unsigned int *operationValue)
 {
 	INIT;
 
@@ -397,7 +397,7 @@ static int ParseReturnResultComponent(struct asn1_parm *pc, u_char * p, u_char *
 	return p - beg;
 }
 
-static int ParseErrorOid(struct asn1_parm *pc, u_char * p, u_char * end, int *errorValue)
+static int ParseErrorOid(struct asn1_parm *pc, u_char * p, u_char * end, unsigned int *errorValue)
 {
 	struct asn1Oid errorOid;
 	int rval;
@@ -408,7 +408,7 @@ static int ParseErrorOid(struct asn1_parm *pc, u_char * p, u_char * end, int *er
 	return rval;
 }				/* end ParseErrorOid() */
 
-static int ParseErrorValue(struct asn1_parm *pc, u_char * p, u_char * end, int *errorValue)
+static int ParseErrorValue(struct asn1_parm *pc, u_char * p, u_char * end, unsigned int *errorValue)
 {
 	INIT;
 
@@ -420,7 +420,7 @@ static int ParseErrorValue(struct asn1_parm *pc, u_char * p, u_char * end, int *
 int ParseReturnErrorComponent(struct asn1_parm *pc, u_char * p, u_char * end, int dummy)
 {
 	int invokeId;
-	int errorValue;
+	unsigned int errorValue;
 	char *error;
 	char msg[20];
 	INIT;

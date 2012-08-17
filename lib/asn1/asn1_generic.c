@@ -117,7 +117,7 @@ int ParseIA5String(struct asn1_parm *pc, u_char * p, u_char * end, struct asn1Pa
 	*buf = 0;
 	dprint(DBGM_ASN1_DEC, " DEBUG> IA5 = %s\n", str->buf);
 	if (0 < len) {
-		wprint("Discard %d IA5 max %d\n", len, str->maxSize);
+		wprint("Discard %d IA5 max %zd\n", len, str->maxSize);
 		/* Discard the remainder of the string.  We have no room left. */
 		p += len;
 	}
@@ -148,7 +148,7 @@ int ParseNumericString(struct asn1_parm *pc, u_char * p, u_char * end, struct as
 	*buf = 0;
 	dprint(DBGM_ASN1_DEC, " DEBUG> NumStr = %s\n", str->buf);
 	if (0 < len) {
-		wprint("Discard %d NumStr max %d\n", len, str->maxSize);
+		wprint("Discard %d NumStr max %zd\n", len, str->maxSize);
 		/* Discard the remainder of the string.  We have no room left. */
 		p += len;
 	}
@@ -169,7 +169,7 @@ int ParseOctetString(struct asn1_parm *pc, u_char * p, u_char * end, struct asn1
 		 * The octet string will not fit in the available buffer
 		 * and truncating it is not a good idea in all cases.
 		 */
-		eprint("OctetString does not fit %d max %d\n", len, str->maxSize);
+		eprint("OctetString does not fit %d max %zd\n", len, str->maxSize);
 		return -1;
 	}
 

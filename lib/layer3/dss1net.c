@@ -114,70 +114,6 @@ l3dss1_msg_without_setup(l3_process_t *pc, u_char cause)
 }
 
 static int
-l3dss1_check_messagetype_validity(l3_process_t *pc, int mt)
-{
-	switch (mt) {
-		case MT_ALERTING:
-		case MT_CALL_PROCEEDING:
-		case MT_CONNECT:
-		case MT_CONNECT_ACKNOWLEDGE:
-		case MT_DISCONNECT:
-		case MT_INFORMATION:
-		case MT_FACILITY:
-		case MT_NOTIFY:
-		case MT_PROGRESS:
-		case MT_RELEASE:
-		case MT_RELEASE_COMPLETE:
-		case MT_SETUP:
-		case MT_SETUP_ACKNOWLEDGE:
-		case MT_RESUME_ACKNOWLEDGE:
-		case MT_RESUME_REJECT:
-		case MT_SUSPEND_ACKNOWLEDGE:
-		case MT_SUSPEND_REJECT:
-		case MT_USER_INFORMATION:
-		case MT_RESTART:
-		case MT_RESTART_ACKNOWLEDGE:
-		case MT_CONGESTION_CONTROL:
-		case MT_STATUS:
-		case MT_STATUS_ENQUIRY:
-		case MT_HOLD:
-		case MT_HOLD_ACKNOWLEDGE:
-		case MT_HOLD_REJECT:
-		case MT_RETRIEVE:
-		case MT_RETRIEVE_ACKNOWLEDGE:
-		case MT_RETRIEVE_REJECT:
-		case MT_REGISTER:
-		case MT_RESUME:
-		case MT_SUSPEND:
-			break;
-		default:
-			l3dss1_status_send(pc, CAUSE_MT_NOTIMPLEMENTED);
-			return 1;
-	}
-	return 0;
-}
-
-static void
-l3dss1_std_ie_err(l3_process_t *pc, int ret) {
-
-	switch(ret) {
-		case 0:
-			break;
-		case Q931_ERROR_COMPREH:
-			l3dss1_status_send(pc, CAUSE_MANDATORY_IE_MISS);
-			break;
-		case Q931_ERROR_UNKNOWN:
-			l3dss1_status_send(pc, CAUSE_IE_NOTIMPLEMENTED);
-			break;
-		case Q931_ERROR_IELEN:
-			l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
-			break;
-		default:
-			break;
-	}
-}
-
-static int
 l3dss1_get_cid(l3_process_t *pc, struct l3_msg *l3m) {
 
 	memset(pc->cid, 0, 4); /* clear cid */
@@ -204,12 +140,12 @@ l3dss1_get_cid(l3_process_t *pc, struct l3_msg *l3m) {
 	}
 	if (test_bit(FLG_BASICRATE, &pc->L3->ml3.options)) {
 		if (l3m->channel_id[1] & 0x20) {
-			dprint(DBGM_L3, "%s ERROR: channel id not for BRI interface\n", pc->l2if->l2addr.dev);
+			dprint(DBGM_L3, "port%d: ERROR: channel id not for BRI interface\n", pc->l2if->l2addr.dev);
 			return -11;
 		}
 	} else { /* primary rate */
 		if (!(l3m->channel_id[1] & 0x20)) {
-			dprint(DBGM_L3, "%s ERROR: channel id not for PRI interface\n", pc->l2if->l2addr.dev);
+			dprint(DBGM_L3, "port%d ERROR: channel id not for PRI interface\n", pc->l2if->l2addr.dev);
 			return -11;
 		}
 		if (l3m->channel_id[0] < 3)
@@ -1869,6 +1805,7 @@ dl_data_mux(layer3_t *l3, struct mbuffer *msg)
 					l3dss1_msg_without_setup(proc, CAUSE_NOTCOMPAT_STATE);
 				}
 			}
+			iprint("port%d: Got status state %d cause %d\n", msg->addr.dev, callState, cause);
 			goto freemsg;
 		} else if (msg->l3h.type == MT_RELEASE_COMPLETE) {
 			goto freemsg;

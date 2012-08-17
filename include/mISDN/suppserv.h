@@ -1157,7 +1157,7 @@ extern "C" {
 	struct asn1ReturnResult {
 		__s16 invokeId;
 		int operationValuePresent;
-		int operationValue;
+		unsigned int operationValue;
 		union {
 			struct FacStatusRequest_RES StatusRequest;
 
@@ -1216,7 +1216,7 @@ extern "C" {
 		int invokeIdPresent;
 		int invokeId;
 		asn1Problem problem;
-		int problemValue;
+		unsigned int problemValue;
 	};
 
 	struct asn1_parm {

@@ -258,6 +258,7 @@ assembleQ931(l3_process_t *pc, struct l3_msg *l3m)
 	for (i=0; i<8; i++) {
 		/* handle other codeset elements */
 		if (l3m->extra[i].codeset) {
+			ie = 0x98 | l3m->extra[i].codeset;
 			*msg_put(mb, 1) = ie; /* shift codeset IE */
 			memcpy(msg_put(mb, l3m->extra[i].len), l3m->extra[i].val, l3m->extra[i].len);
 		}
@@ -1003,6 +1004,7 @@ mi_decode_redirecting_nr(struct l3_msg *l3m, int *count, int *type, int *plan, i
 	return 0;
 }
 
+int
 mi_decode_redirection_nr(struct l3_msg *l3m, int *type, int *plan, int *pres, char *nr)
 {
 	int _pres = 0, i = 2, l;

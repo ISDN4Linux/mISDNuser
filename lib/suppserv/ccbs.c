@@ -322,7 +322,7 @@ int encodeFacStatusRequest(__u8 * Dest, const struct asn1_parm *pc, const struct
  */
 int ParseStatusRequest(struct asn1_parm *pc, u_char * p, u_char * end, struct FacStatusRequest *StatusRequest)
 {
-	int CompatibilityMode;
+	unsigned int CompatibilityMode;
 	INIT;
 
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &CompatibilityMode);
@@ -346,7 +346,7 @@ int ParseStatusRequest(struct asn1_parm *pc, u_char * p, u_char * end, struct Fa
  */
 int ParseStatusRequest_RES(struct asn1_parm *pc, u_char * p, u_char * end, struct FacStatusRequest_RES *StatusRequest)
 {
-	int Status;
+	unsigned int Status;
 	int ret;
 	u_char *beg;
 
@@ -571,9 +571,9 @@ int encodeFacCCBSErase(__u8 * Dest, const struct asn1_parm *pc, const struct Fac
  */
 int ParseCCBSErase(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSErase *CCBSErase)
 {
-	int RecallMode;
+	unsigned int RecallMode;
 	unsigned int CCBSReference;
-	int EraseReason;
+	unsigned int EraseReason;
 	INIT;
 
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &RecallMode);
@@ -637,7 +637,7 @@ int encodeFacCCBSRemoteUserFree(__u8 * Dest, const struct asn1_parm *pc, const s
  */
 int ParseCCBSRemoteUserFree(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSRemoteUserFree *CCBSRemoteUserFree)
 {
-	int RecallMode;
+	unsigned int RecallMode;
 	unsigned int CCBSReference;
 	INIT;
 
@@ -747,7 +747,7 @@ int encodeFacCCBSBFree(__u8 * Dest, const struct asn1_parm *pc, const struct Fac
  */
 int ParseCCBSBFree(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSBFree *CCBSBFree)
 {
-	int RecallMode;
+	unsigned int RecallMode;
 	unsigned int CCBSReference;
 	INIT;
 
@@ -880,7 +880,7 @@ int encodeFacCCBSStatusRequest(__u8 * Dest, const struct asn1_parm *pc, const st
  */
 int ParseCCBSStatusRequest(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSStatusRequest *CCBSStatusRequest)
 {
-	int RecallMode;
+	unsigned int RecallMode;
 	unsigned int CCBSReference;
 	INIT;
 
@@ -1101,7 +1101,7 @@ int ParseCCNRRequest(struct asn1_parm *pc, u_char * p, u_char * end, struct FacC
  */
 int ParseCCBSRequest_RES(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSRequest_RES *CCBSRequest)
 {
-	int RecallMode;
+	unsigned int RecallMode;
 	unsigned int CCBSReference;
 	INIT;
 
@@ -1147,7 +1147,6 @@ static int encodeFacCCBSInterrogate_Invoke(__u8 * Dest, const struct asn1_parm *
 	int Length;
 	__u8 *p;
 	__u8 *SeqStart;
-	__u8 *ResultSeqStart;
 
 	p = encodeComponentInvoke_Head(Dest, pc->u.inv.invokeId, MsgType);
 
@@ -1336,7 +1335,7 @@ int ParseCCNRInterrogate(struct asn1_parm *pc, u_char * p, u_char * end, struct 
  */
 int ParseCCBSInterrogate_RES(struct asn1_parm *pc, u_char * p, u_char * end, struct FacCCBSInterrogate_RES *CCBSInterrogate)
 {
-	int RecallMode;
+	unsigned int RecallMode;
 	INIT;
 
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &RecallMode);

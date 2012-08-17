@@ -21,6 +21,6 @@ lib_LTLIBRARIES = libmisdn.la
 libmisdn_la_SOURCES = $(MISC_SRC) $(LAYER3_SRC) $(INCLUDE_SRC) $(ASN1_SRC) $(SUPPSERV_SRC)
 libmisdn_la_LDFLAGS = -version-info 1:0:0
 
-AM_CPPFLAGS = -I$(top_srcdir)/include -I$(srcdir)/include $(_MEMLEAKDEBUG)
+AM_CPPFLAGS = -I$(top_srcdir)/include -Wall -Werror -I$(srcdir)/include $(_MEMLEAKDEBUG)
 
 CLEANFILES = *~ */*~

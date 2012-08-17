@@ -285,7 +285,7 @@ int encodeFacEctInform(__u8 * Dest, const struct asn1_parm *pc, const struct Fac
  */
 int ParseEctInform(struct asn1_parm *pc, u_char * p, u_char * end, struct FacEctInform *EctInform)
 {
-	int Status;
+	unsigned int Status;
 	INIT;
 
 	XSEQUENCE_1(ParseEnum, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &Status);
@@ -388,7 +388,7 @@ int ParseEctLoopTest(struct asn1_parm *pc, u_char * p, u_char * end, struct FacE
  */
 int ParseEctLoopTest_RES(struct asn1_parm *pc, u_char * p, u_char * end, struct FacEctLoopTest_RES *EctLoopTest)
 {
-	int LoopResult;
+	unsigned int LoopResult;
 	int ret;
 	u_char *beg;
 

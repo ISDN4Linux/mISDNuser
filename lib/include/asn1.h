@@ -72,7 +72,7 @@ int ParseLen(u_char * p, u_char * end, int *len);
 #define INIT \
 	int tag, len; \
 	int ret; \
-	u_char *beg; \
+	u_char *beg __attribute__((unused)); \
 	\
 	beg = p; \
 	CallASN1(ret, p, end, ParseTag(p, end, &tag)); \
@@ -264,14 +264,14 @@ int ParseLen(u_char * p, u_char * end, int *len);
 	int ParseAOCDCurrencyInfo(struct asn1_parm *pc, u_char * p, u_char * end, struct FacAOCCurrency *cur);
 	int ParseAOCDChargingUnitInfo(struct asn1_parm *pc, u_char * p, u_char * end, struct FacAOCChargingUnit *chu);
 	int ParseRecordedCurrency(struct asn1_parm *pc, u_char * p, u_char * end, struct FacAOCCurrency *cur);
-	int ParseRecordedUnitsList(struct asn1_parm *pc, u_char * p, u_char * end, int *recordedUnits);
-	int ParseTypeOfChargingInfo(struct asn1_parm *pc, u_char * p, u_char * end, int *typeOfChargingInfo);
-	int ParseRecordedUnits(struct asn1_parm *pc, u_char * p, u_char * end, int *recordedUnits);
-	int ParseAOCDBillingId(struct asn1_parm *pc, u_char * p, u_char * end, int *billingId);
+	int ParseRecordedUnitsList(struct asn1_parm *pc, u_char * p, u_char * end, __u32 *recordedUnits);
+	int ParseTypeOfChargingInfo(struct asn1_parm *pc, u_char * p, u_char * end, __u32 *typeOfChargingInfo);
+	int ParseRecordedUnits(struct asn1_parm *pc, u_char * p, u_char * end, __u32 *recordedUnits);
+	int ParseAOCDBillingId(struct asn1_parm *pc, u_char * p, u_char * end, __u32 *billingId);
 	int ParseAOCECurrencyInfo(struct asn1_parm *pc, u_char * p, u_char * end, struct FacAOCCurrency *cur);
 	int ParseAOCEChargingUnit(struct asn1_parm *pc, u_char * p, u_char * end, struct FacAOCChargingUnit *chu);
 	int ParseAOCEChargingUnitInfo(struct asn1_parm *pc, u_char * p, u_char * end, struct FacAOCChargingUnit *chu);
-	int ParseAOCEBillingId(struct asn1_parm *pc, u_char * p, u_char * end, int *billingId);
+	int ParseAOCEBillingId(struct asn1_parm *pc, u_char * p, u_char * end, __u32 *billingId);
 	int ParseCurrency(struct asn1_parm *pc, u_char * p, u_char * end, char *currency);
 	int ParseAmount(struct asn1_parm *pc, u_char * p, u_char * end, struct FacAOCCurrency *cur);
 	int ParseCurrencyAmount(struct asn1_parm *pc, u_char * p, u_char * end, unsigned int *currencyAmount);
