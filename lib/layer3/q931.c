@@ -654,7 +654,7 @@ mi_encode_facility(struct l3_msg *l3m, struct asn1_parm *fac)
 	if (len <= 0)
 		return -EINVAL;
 	if (mb->ctail + len >= mb->cend) {
-		eprint("Msg buffer overflow %d needed %ld available\n", len + 1, mb->cend - mb->ctail);
+		eprint("Msg buffer overflow %d needed %d available\n", len + 1, (int)(mb->cend - mb->ctail));
 		return Q931_ERROR_OVERFLOW;
 	}
 	if (l3m->facility) {
@@ -687,6 +687,7 @@ mi_decode_progress(struct l3_msg *l3m, struct misdn_progress_info *progress)
 		return -EINVAL;
 	prg.loc = l3m->progress[1] &  0x7f;
 	prg.desc = l3m->progress[2] & 0x7f;
+	prg.resv = 0;
 	prg.ctrl = MI_PROG_CTRL_UPDATED;
 	_ASSIGN_PVAL(progress, prg);
 	return 0;
