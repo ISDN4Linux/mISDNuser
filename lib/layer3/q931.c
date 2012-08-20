@@ -408,6 +408,7 @@ mi_encode_channel_id(struct l3_msg *l3m, struct misdn_channel_info *ci)
 				ie[1] = 0x83;
 				break;
 			}
+			ie[2] = 0x80 | ci->nr;
 		}
 	} else { /* BRI */
 		l = 1;
