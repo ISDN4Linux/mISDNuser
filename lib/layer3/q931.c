@@ -391,15 +391,23 @@ mi_encode_channel_id(struct l3_msg *l3m, struct misdn_channel_info *ci)
 		} else {
 			l = 3;
 			ie[0] = 0x80 | 0x20 | (excl << 3) | 1;
-			if (ci->type & MI_CHAN_TYP_H0)
-				ie[1] = 0x86;
-			else if (ci->type & MI_CHAN_TYP_H11)
-				ie[1] = 0x88;
-			else if (ci->type & MI_CHAN_TYP_H12)
-				ie[1] = 0x89;
-			else /* default B-channel */
+			switch (ci->type) {
+			case MI_CHAN_TYP_B: /* most common */
 				ie[1] = 0x83;
-			ie[2] = 0x80 | ci->nr;
+				break;
+			case MI_CHAN_TYP_H0:
+				ie[1] = 0x86;
+				break;
+			case MI_CHAN_TYP_H11:
+				ie[1] = 0x88;
+				break;
+			case MI_CHAN_TYP_H12:
+				ie[1] = 0x89;
+				break;
+			default: /* use B-channel */
+				ie[1] = 0x83;
+				break;
+			}
 		}
 	} else { /* BRI */
 		l = 1;
