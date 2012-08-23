@@ -91,7 +91,11 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 		close(fd);
 		return NULL;
 	}
-	iprint("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
+
+	if (ver.release & MISDN_GIT_RELEASE)
+		iprint("mISDN kernel version %d.%02d.%d (git.misdn.eu) found\n", ver.major, ver.minor, ver.release & ~MISDN_GIT_RELEASE);
+	else
+		iprint("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
 	iprint("mISDN user   version %d.%02d.%d found\n", MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
 	iprint("mISDN library interface version %d release %d\n", MISDN_LIB_VERSION, MISDN_LIB_RELEASE);
 
@@ -238,6 +242,8 @@ close_layer3(struct mlayer3 *ml3)
 int
 mISDN_set_pcm_slots(struct mlayer3 *ml3, int channel, int tx, int rx)
 {
+/* need to be reimplemented */
+#ifdef MISDN_CTRL_SET_PCM_SLOTS
 	struct _layer3	*l3;
 	struct mISDN_ctrl_req ctrlrq;
 	int ret;
@@ -251,12 +257,18 @@ mISDN_set_pcm_slots(struct mlayer3 *ml3, int channel, int tx, int rx)
 	ret = ioctl(l3->l2sock, IMCTRLREQ, &ctrlrq);
 	if (ret < 0)
 		eprint("could not send IOCTL IMCTRLREQ %s\n", strerror(errno));
+#else
+	int ret = -EOPNOTSUPP;
+
+	eprint("%s not supported in this version\n", __func__);
+#endif
 	return ret;
 }
 
 int
 mISDN_get_pcm_slots(struct mlayer3 *ml3, int channel, int *txp, int *rxp)
 {
+#ifdef MISDN_CTRL_GET_PCM_SLOTS
 	struct _layer3	*l3;
 	struct mISDN_ctrl_req ctrlrq;
 	int ret;
@@ -274,5 +286,10 @@ mISDN_get_pcm_slots(struct mlayer3 *ml3, int channel, int *txp, int *rxp)
 		if (rxp)
 			*rxp = ctrlrq.p3;
 	}
+#else
+	int ret = -EOPNOTSUPP;
+
+	eprint("%s not supported in this version\n", __func__);
+#endif
 	return ret;
 }

@@ -234,7 +234,11 @@ char *argv[];
 		printf("ioctl error %s\n", strerror(errno));
 		exit(1);
 	}
-	printf("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
+	if (ver.release & MISDN_GIT_RELEASE)
+		printf("mISDN kernel version %d.%02d.%d (git.misdn.eu) found\n", ver.major, ver.minor, ver.release & ~MISDN_GIT_RELEASE);
+	else
+		printf("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
+
 	printf("mISDN user   version %d.%02d.%d found\n", MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
 
 	if (ver.major != MISDN_MAJOR_VERSION) {

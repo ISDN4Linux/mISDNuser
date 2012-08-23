@@ -347,7 +347,7 @@ static int phaseB_handler(t30_state_t *t30, void *user_data, int result)
 				creq.p1 = 1;
 				creq.p2 = 0;
 				creq.p2 |= 0xff & slin2alaw[0];
-				creq.p3 = 0;
+				creq.unused = 0;
 				ret = ioctl(fax->binst->fd, IMCTRLREQ, &creq);
 				/* MISDN_CTRL_FILL_EMPTY is not mandatory warn if not supported */
 				if (ret < 0)
@@ -356,7 +356,7 @@ static int phaseB_handler(t30_state_t *t30, void *user_data, int result)
 				creq.channel = fax->binst->nr;
 				creq.p1 = 1;
 				creq.p2 = 0;
-				creq.p3 = 0;
+				creq.unused = 0;
 				ret = ioctl(fax->binst->fd, IMCTRLREQ, &creq);
 				/* RX OFF is not mandatory warn if not supported */
 				if (ret < 0)
@@ -370,7 +370,7 @@ static int phaseB_handler(t30_state_t *t30, void *user_data, int result)
 					creq.channel = fax->binst->nr;
 					creq.p1 = 0;
 					creq.p2 = 0;
-					creq.p3 = 0;
+					creq.unused = 0;
 					ret = ioctl(fax->binst->fd, IMCTRLREQ, &creq);
 					if (ret < 0)
 						wprint("Error on MISDN_CTRL_RX_OFF ioctl - %s\n", strerror(errno));
@@ -382,7 +382,7 @@ static int phaseB_handler(t30_state_t *t30, void *user_data, int result)
 					creq.p1 = 0;
 					creq.p2 = 0;
 					creq.p2 = -1;
-					creq.p3 = 0;
+					creq.unused = 0;
 					ret = ioctl(fax->binst->fd, IMCTRLREQ, &creq);
 					/* MISDN_CTRL_FILL_EMPTY is not mandatory warn if not supported */
 					if (ret < 0)
@@ -643,13 +643,15 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 					return nf;
 				}
 			}
+#ifdef HW_FIFO_STATUS_ON
 			ncciL4L3(nf->ncci, PH_CONTROL_REQ, HW_FIFO_STATUS_ON, 0, NULL, NULL);
+#endif
 			/* Set buffersize */
 			creq.op = MISDN_CTRL_RX_BUFFER;
 			creq.channel = bi->nr;
 			creq.p1 = DEFAULT_PKT_SIZE; // minimum
 			creq.p2 = MISDN_CTRL_RX_SIZE_IGNORE; // do not change max
-			creq.p3 = 0;
+			creq.unused = 0;
 			ret = ioctl(bi->fd, IMCTRLREQ, &creq);
 			/* MISDN_CTRL_RX_BUFFER is not mandatory warn if not supported */
 			if (ret < 0)

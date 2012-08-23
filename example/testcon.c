@@ -39,6 +39,18 @@
 #include <mISDN/q931.h>
 #include <mISDN/mlayer3.h>
 
+/* We do not have the all the ioctl controls mainstream yet so define it here.
+ * It should still work then with the old standalone driver
+ */
+
+#ifndef MISDN_CTRL_L1_TESTS
+#define MISDN_CTRL_L1_TESTS		0x00010000
+#define MISDN_CTRL_L1_STATE_TEST	0x00010001
+#define MISDN_CTRL_L1_AIS_TEST		0x00010002
+#define MISDN_CTRL_L1_TS0_MODE		0x00010003
+#define MISDN_CTRL_L1_GET_SYNC_INFO	0x00010004
+#endif
+
 void usage(pname) 
 char *pname;
 {
@@ -417,6 +429,7 @@ do_hw_loop(devinfo_t *di)
 	struct mISDN_ctrl_req	creq;
 	int ret;
 
+	memset(&creq, 0, sizeof(creq));
 	creq.op = MISDN_CTRL_LOOP;
 	creq.channel = di->used_bchannel;
 	ret = ioctl(di->layer2, IMCTRLREQ, &creq);
@@ -434,6 +447,7 @@ del_hw_loop(devinfo_t *di)
 
 	if (!(di->flag & FLG_BCHANNEL_LOOPSET))
 		return;
+	memset(&creq, 0, sizeof(creq));
 	creq.op = MISDN_CTRL_LOOP;
 	creq.channel = 0;
 	ret = ioctl(di->layer2, IMCTRLREQ, &creq);
@@ -986,6 +1000,7 @@ int do_setup(devinfo_t *di) {
 		return 7;
 	}
 
+	memset(&creq, 0, sizeof(creq));
 	creq.op = MISDN_CTRL_GETOP;
 	ret = ioctl(di->layer2, IMCTRLREQ, &creq);
 	if (ret < 0) {
@@ -994,9 +1009,17 @@ int do_setup(devinfo_t *di) {
 	}
 	if (VerifyOn > 1)
 		fprintf(stdout, "supported IMCTRLREQ operations: %x\n", creq.op);
+
 	if (di->func == 6 || di->func == 7 || (di->func <= 11 && di->func >= 8)) {
 		if (!(creq.op & MISDN_CTRL_LOOP)) {
 			fprintf(stdout," hw loop not supported\n");
+			return 8;
+		}
+	}
+
+	if (di->func == 13 || di->func == 14 || di->func == 15) {
+		if (!(creq.op & MISDN_CTRL_L1_TESTS)) {
+			fprintf(stdout,"MISDN_CTRL_L1_TESTS not supported\n");
 			return 8;
 		}
 	}
@@ -1036,6 +1059,7 @@ int do_setup(devinfo_t *di) {
                 return ret;
 	}
 	if (di->func == 13) {
+
 		creq.op = MISDN_CTRL_L1_AIS_TEST;
 		creq.channel = 0;
 		creq.p1 = 1;

@@ -42,6 +42,20 @@
 #include <mISDN/mISDNif.h>
 #include <mISDN/af_isdn.h>
 
+
+/* We do not have the all the ioctl controls mainstream yet so define it here.
+ * It should still work then with the old standalone driver
+ */
+
+#ifndef MISDN_CTRL_L1_TESTS
+#define MISDN_CTRL_L1_TESTS		0x00010000
+#define MISDN_CTRL_L1_STATE_TEST	0x00010001
+#define MISDN_CTRL_L1_AIS_TEST		0x00010002
+#define MISDN_CTRL_L1_TS0_MODE		0x00010003
+#define MISDN_CTRL_L1_GET_SYNC_INFO	0x00010004
+#endif
+
+
 #define	FRAME_SIZE	32
 #define	SMFR_SIZE	(8 * FRAME_SIZE)
 #define MFR_SIZE	(2 * SMFR_SIZE)
@@ -1839,7 +1853,11 @@ char *argv[];
 		printf("ioctl error %s\n", strerror(errno));
 		exit(1);
 	}
-	printf("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
+	if (ver.release & MISDN_GIT_RELEASE)
+		printf("mISDN kernel version %d.%02d.%d (git.misdn.eu) found\n", ver.major, ver.minor, ver.release & ~MISDN_GIT_RELEASE);
+	else
+		printf("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
+
 	printf("mISDN user   version %d.%02d.%d found\n", MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
 
 	if (ver.major != MISDN_MAJOR_VERSION) {
@@ -1924,8 +1942,31 @@ char *argv[];
 
 	hh = (struct mISDNhead *)buffer;
 
+	creq.op = MISDN_CTRL_GETOP;
+	creq.channel = 0;
+	creq.p1 = 0;
+	creq.p2 = 0;
+	creq.unused = 0;
+
+	result = ioctl(log_socket, IMCTRLREQ, &creq);
+	if (result < 0) {
+		fprintf(stdout, "Error on MISDN_CTRL_L1_TS0_MODE ioctl - %s\n", strerror(errno));
+		close(log_socket);
+		exit(1);
+	}
+	if (!(creq.op & MISDN_CTRL_L1_TESTS)) {
+		fprintf(stdout, "MISDN_CTRL_L1_TESTS controls are not supported on this card/driver\n");
+		close(log_socket);
+		exit(1);
+	}
+
+
+	if (debuglevel)
+		fprintf(stdout,"MISDN_CTRL_GETOP ioctl supported operations %x\n", creq.op);
+
+
 	/* This set the register values in the card so, that the TS0  is not in full transparent mode,
-	 * so the receiver can syncronize - this allows to get the TS0 data on byte boundaries, so bit schifting all
+	 * so the receiver can syncronize - this allows to get the TS0 data on byte boundaries, so bit shifting all
 	 * incoming data is not needed. After we did detect syncron state for 3 times, will will switch off
 	 * autosync and put TS0 into full transparent mode */
 
@@ -1933,7 +1974,7 @@ char *argv[];
 	creq.channel = 0;
 	creq.p1 = 0x06; /* R_RX_SL0_CFG0 =  (V_AUTOSYNC | V_AUTO_RECO) */
 	creq.p2 = 0x31; /* R_TX_SL0_CFG1 = (V_TX_MF | V_TX_E | V_INV_E) */
-	creq.p3 = 0;
+	creq.unused = 0;
 	if (debuglevel)
 		fprintf(stdout,"L1 TS0  ioctl R_RX_SL0_CFG0=%02x R_TX_SL0_CFG1=%02x\n", creq.p1, creq.p2);
 	result = ioctl(log_socket, IMCTRLREQ, &creq);
@@ -1960,7 +2001,7 @@ char *argv[];
 	creq.channel = 0;
 	creq.p1 = 1;
 	creq.p2 = 0;
-	creq.p3 = 0;
+	creq.unused = 0;
 	result = ioctl(log_socket, IMCTRLREQ, &creq);
 	if (result < 0) {
 		fprintf(stdout, "Error on MISDN_CTRL_RX_OFF ioctl - %s\n", strerror(errno));
@@ -1969,7 +2010,7 @@ char *argv[];
 	}
 	if (debuglevel)
 		fprintf(stdout,"RX_OFF  result %d ioctl p1=%02x p2=%02x p3=%02x\n",
-			result, creq.p1, creq.p2, creq.p3);
+			result, creq.p1, creq.p2, creq.unused);
 
 	creq.op = MISDN_CTRL_L1_GET_SYNC_INFO;
 	creq.channel = 0;
@@ -1984,7 +2025,7 @@ char *argv[];
 		}
 		if (debuglevel)
 			fprintf(stdout,"L1 GET_SYNC_INFO ioctl p1=%02x p2=%02x p3=%02x\n",
-				creq.p1, creq.p2, creq.p3);
+				creq.p1, creq.p2, creq.unused);
 		if ((creq.p1 & 0xff07) == 0x2701) {
 			cnt++;
 			if (cnt == 3)
@@ -2007,7 +2048,7 @@ char *argv[];
 	creq.channel = 0;
 	creq.p1 = 0;
 	creq.p2 = 0;
-	creq.p3 = 0;
+	creq.unused = 0;
 	result = ioctl(log_socket, IMCTRLREQ, &creq);
 	if (result < 0) {
 		fprintf(stdout, "Error on MISDN_CTRL_RX_OFF ioctl - %s\n", strerror(errno));
@@ -2015,13 +2056,13 @@ char *argv[];
 		exit(1);
 	}
 	if (debuglevel)
-		fprintf(stdout,"RX_OFF  ioctl p1=%02x p2=%02x p3=%02x\n", creq.p1, creq.p2, creq.p3);
+		fprintf(stdout,"RX_OFF  ioctl p1=%02x p2=%02x p3=%02x\n", creq.p1, creq.p2, creq.unused);
 
 	creq.op = MISDN_CTRL_L1_TS0_MODE;
 	creq.channel = 0;
 	creq.p1 = 0x01; /* R_RX_SL0_CFG0 = (V_NO_INSYNC)  */
 	creq.p2 = 0x03; /* R_TX_SL0_CFG1 = (V_TX_MF | V_TRP_SL0) */
-	creq.p3 = 0;
+	creq.unused = 0;
 	if (debuglevel)
 		fprintf(stdout,"L1 TS0  ioctl R_RX_SL0_CFG0=%02x R_TX_SL0_CFG1=%02x\n", creq.p1, creq.p2);
 	result = ioctl(log_socket, IMCTRLREQ, &creq);
