@@ -8,6 +8,6 @@ misdn_cleanl2_SOURCES = cleanl2.c
 misdn_E1test_SOURCES = E1test.c
 isdn_text2wireshark_SOURCES = text_wireshark.c
 
-AM_CPPFLAGS = -Wall -I$(top_srcdir)/include $(_MEMLEAKDEBUG)
+AM_CPPFLAGS = -Wall -Werror -I$(top_srcdir)/include $(_MEMLEAKDEBUG)
 
 CLEANFILES = *~

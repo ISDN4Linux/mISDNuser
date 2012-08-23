@@ -1462,7 +1462,7 @@ static struct fr_flatdesc *make_flat_description(struct fr_cdesc *test, struct f
 {
 	struct fr_cdesc *dsc = test;
 	struct fr_flatdesc *flat = begin;
-	int count[8], repeat[8];
+	int repeat[8];
 	struct fr_flatdesc *seq, *end, *start[8];
 	int cnt, i, csp = 0, pos, mfpos;
 
@@ -1492,7 +1492,6 @@ static struct fr_flatdesc *make_flat_description(struct fr_cdesc *test, struct f
 			}
 			repeat[csp] = dsc->count;
 			start[csp] = flat;
-			count[csp] = 0;
 		} else if (dsc->type == ftCtrl_End) {
 			if (csp < 1) {
 				fprintf(stderr, "End of description, but no Repeatblock\n");
@@ -1706,7 +1705,7 @@ static struct fr_data *gen_flat_frame_desc(struct fr_cdesc *dsc)
 static int gen_flat_frame_data(struct fr_data *frd) {
 	struct fr_flatdesc *flat;
 	size_t size;
-	int cnt, ret = 0;
+	int ret = 0;
 	uint8_t crc, *p, dch_flags = 0x7e;
 
 	flat = frd->desc;
@@ -1760,7 +1759,6 @@ static int gen_flat_frame_data(struct fr_data *frd) {
 		flat++;
 	}
 	p = frd->data;
-	cnt = frd->count/8;
 	crc = 0; /* start value */
 	flat = frd->desc;
 	while (flat) {

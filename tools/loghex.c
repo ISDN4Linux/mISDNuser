@@ -156,7 +156,7 @@ char *argv[];
 	int	buflen = 512;
 	char	sw;
 	char	wfilename[512];
-	int	head;
+	int	head = 0;
 	char	*pn, pns[32];
 	u_char	buffer[buflen];
 	struct msghdr	mh;
@@ -420,7 +420,7 @@ char *argv[];
 				write_wfile(wfile, buffer, result, &cts.tv, di.protocol);
 
 			if (result > MISDN_HEADER_LEN) {
-				head += printf(" %3d bytes", result - MISDN_HEADER_LEN);
+				head += printf(" %3zd bytes", result - MISDN_HEADER_LEN);
 				printhex(&buffer[MISDN_HEADER_LEN], result - MISDN_HEADER_LEN, head);
 			} else
 				printf("\n");
