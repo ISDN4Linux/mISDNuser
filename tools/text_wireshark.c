@@ -178,8 +178,8 @@ main(argc, argv)
 int argc;
 char *argv[];
 {
-	char	*infilename;
-	char	*outfilename;
+	char	*infilename = NULL;
+	char	*outfilename = NULL;
 	char sw;
 	char	line[4096];
 	u_char  buffer[512];
