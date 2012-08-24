@@ -271,9 +271,10 @@ static void lPLCIInfoIndIE(struct lPLCI *lp, unsigned char ie, uint32_t mask, st
 	Send2Application(lp, mc);
 }
 
-uint16_t q931CIPValue(struct mc_buf * mc)
+uint16_t q931CIPValue(struct mc_buf * mc, uint32_t *m)
 {
 	uint16_t CIPValue = 0;
+	uint32_t CIPMask;
 	int capability, mode, rate, oct5;
 	int hlc = -1, ehlc = -1;
 	int ret, l;
@@ -337,6 +338,8 @@ uint16_t q931CIPValue(struct mc_buf * mc)
 		wprint("Invalid mode %d in bearer %s\n", mode, bdebug);
 		return 0;
 	}
+
+	CIPMask = 1 << CIPValue;
 
 	if (mc->l3m->hlc) {
 		ret = mi_decode_hlc(mc->l3m, &hlc, &ehlc);
@@ -402,6 +405,9 @@ uint16_t q931CIPValue(struct mc_buf * mc)
 		} else
 			wprint("Cannot decode HLC %s return %d - %s\n", bdebug, ret, strerror(-ret));
 	}
+	CIPMask |= 1 << CIPValue;
+	if (m)
+		*m = CIPMask;
 	return CIPValue;
 }
 
@@ -968,7 +974,7 @@ static void plci_cc_setup_ind(struct FsmInst *fi, int event, void *arg)
 
 	// FIXME: CW
 	if (mc->l3m) {
-		mc->cmsg.CIPValue = q931CIPValue(mc);
+		mc->cmsg.CIPValue = q931CIPValue(mc, NULL);
 		if (mc->l3m->called_nr && *mc->l3m->called_nr)
 			mc->cmsg.CalledPartyNumber = mc->l3m->called_nr;
 		if (mc->l3m->called_sub && *mc->l3m->called_sub)

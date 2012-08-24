@@ -151,9 +151,8 @@ static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 	uint8_t found = 0;
 	int ret;
 
-	CIPValue = q931CIPValue(mc);
+	CIPValue = q931CIPValue(mc, &CIPmask);
 	pc = plci->pc;
-	CIPmask = 1 << CIPValue;
 	dprint(MIDEBUG_PLCI, "PLCI %04x: Check CIPvalue %d (%08x) with CIPmask %08x\n", plci->plci, CIPValue, CIPmask, pc->CIPmask);
 	if (CIPValue && ((CIPmask & pc->CIPmask) || (pc->CIPmask & 1))) {
 		/* at least one Application is listen for this service */

@@ -222,7 +222,7 @@ int lPLCICreate(struct lPLCI **, struct lController *, struct mPLCI *);
 void lPLCI_free(struct lPLCI *);
 void lPLCI_l3l4(struct lPLCI *, int, struct mc_buf *);
 uint16_t lPLCISendMessage(struct lPLCI *, struct mc_buf *);
-uint16_t q931CIPValue(struct mc_buf *);
+uint16_t q931CIPValue(struct mc_buf *, uint32_t *);
 struct mNCCI *getNCCI4addr(struct lPLCI *, uint32_t, int);
 void lPLCIDelNCCI(struct mNCCI *);
 struct mNCCI *ConnectB3Request(struct lPLCI *, struct mc_buf *);
