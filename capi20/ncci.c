@@ -1226,6 +1226,8 @@ int ncciL4L3(struct mNCCI *ncci, uint32_t prim, int id, int len, void *data, str
 	struct mISDNhead *hh;
 	int ret, l = sizeof(*hh);
 
+	if (!ncci->BIlink)
+		return -ENOTCONN;
 	dprint(MIDEBUG_NCCI, "NCCI %06x: prim %s id %x len %d\n", ncci->ncci, _mi_msg_type2str(prim), id, len);
 	if (!mc) {
 		loc = alloc_mc_buf();

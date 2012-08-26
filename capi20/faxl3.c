@@ -767,6 +767,11 @@ static void FaxSendDown(struct fax *fax, int ind)
 	for (i = 0; i < ret; i++)
 		*p++ = slin2alaw[*w++];
 	pthread_mutex_lock(&ncci->lock);
+	if (!ncci->BIlink) {
+		wprint("NCCI %06x: BInstance is gone - packet ignored\n", ncci->ncci);
+		pthread_mutex_unlock(&ncci->lock);
+		return;
+	}
 	ncci->down_iv[1].iov_len = l;
 	ncci->down_iv[1].iov_base = sbuf;
 #endif
@@ -821,12 +826,17 @@ static int FaxDataInd(struct fax *fax, struct mc_buf *mc)
 	dlen = mc->len - sizeof(*hh);
 	pthread_mutex_lock(&ncci->lock);
 	if ((!ncci->BIlink) || (!fax->fax)) {
-		pthread_mutex_unlock(&ncci->lock);
-		wprint("NCCI %06x: frame with %d bytes dropped Blink(%p) or sandsp fax(%p) gone\n",
+		wprint("NCCI %06x: frame with %d bytes dropped Blink(%p) or spandsp fax(%p) gone\n",
 			ncci->ncci, dlen, ncci->BIlink, fax->fax);
+		pthread_mutex_unlock(&ncci->lock);
 		return -EINVAL;
 	} else
 		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: fax(%p)\n", ncci->ncci, fax->fax);
+	if (!fax->modem_active) {
+		wprint("NCCI %06x: Modem not active %d bytes dropped\n", ncci->ncci, dlen);
+		pthread_mutex_unlock(&ncci->lock);
+		return -ENOTCONN;
+	}
 	fst = fax->fax;
 	pthread_mutex_unlock(&ncci->lock);
 
@@ -894,14 +904,30 @@ static void FaxDataConf(struct fax *fax, struct mc_buf *mc)
 	struct mNCCI *ncci = fax->ncci;
 	struct mISDNhead *hh;
 
+	if (!fax || !ncci)
+		return;
+	pthread_mutex_lock(&ncci->lock);
+	if ((!ncci->BIlink) || (!fax->fax)) {
+		wprint("NCCI %06x: Blink(%p) or spandsp fax(%p) gone\n",
+			ncci->ncci, ncci->BIlink, fax->fax);
+		pthread_mutex_unlock(&ncci->lock);
+		free_mc_buf(mc);
+		return;
+	}
+	if (!fax->modem_active) {
+		wprint("NCCI %06x: Modem not active\n", ncci->ncci);
+		pthread_mutex_unlock(&ncci->lock);
+		free_mc_buf(mc);
+		return;
+	}
 	hh = (struct mISDNhead *)mc->rb;
 	if (ncci->flowmode != flmPHDATA) {
 		wprint("Fax NCCI %06x: Got DATA confirm for %x - but flow mode(%d)\n", ncci->ncci, hh->id, ncci->flowmode);
+		pthread_mutex_unlock(&ncci->lock);
 		free_mc_buf(mc);
 		return;
 	}
 
-	pthread_mutex_lock(&ncci->lock);
 	for (i = 0; i < ncci->window; i++) {
 		if (ncci->xmit_handles[i].PktId == hh->id) {
 			if (ncci->xmit_handles[i].pkt)
