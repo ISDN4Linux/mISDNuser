@@ -82,10 +82,13 @@ struct BInstance {
 	pthread_t		tid;
 	struct pollfd		pfd[4];
 	int			pcnt;
+	int			timeout;
 	int			cpipe[2];
 	sem_t			wait;
 	unsigned int		running:1;
 	unsigned int		waiting:1;
+	unsigned int		release_pending:1;
+	unsigned int		got_timeout:1;
 };
 
 int OpenBInstance(struct BInstance *, struct lPLCI *, enum BType);

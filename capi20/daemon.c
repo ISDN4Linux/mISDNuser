@@ -547,17 +547,48 @@ static int recv_tty(struct BInstance *bi)
 	return ret;
 }
 
+static char *_threadmsg1 = "running";
+static char *_threadmsg2 = "stopped after poll";
+static char *_threadmsg3 = "stopped after receive";
+static char *_threadmsg4 = "stopped via command";
+
 static void *BCthread(void *arg)
 {
 	struct BInstance *bi = arg;
 	unsigned char cmd;
+	char *msg = _threadmsg1;
 	int ret, i;
 
 	bi->running = 1;
+	bi->got_timeout = 0;
+	bi->release_pending = 0;
 	while (bi->running) {
-		ret = poll(bi->pfd, bi->pcnt, -1);
+		if (bi->pcnt == 0) {
+			wprint("Bchannel%d no filedescriptors to poll - abort thread=%x\n",
+				bi->nr, (unsigned int)pthread_self());
+			break;
+		}
+		ret = poll(bi->pfd, bi->pcnt, bi->timeout);
+		if (!bi->running) {
+			msg = _threadmsg2;
+			break;
+		}
 		if (ret < 0) {
 			wprint("Bchannel%d Error on poll - %s\n", bi->nr, strerror(errno));
+			continue;
+		}
+		if (ret == 0) { /* timeout */
+			wprint("Bchannel%d %stimeout (release %spending) thread=%x\n", bi->nr,
+				bi->got_timeout ? "2. " : "", bi->release_pending ? "" : "not ", (unsigned int)pthread_self());
+			if (bi->release_pending) {
+				if (bi->got_timeout) /* 2 times */
+					bi->running = 0;
+				else
+					bi->got_timeout = 1;
+				ret = bi->from_down(bi, NULL);
+				if (ret < 0)
+					wprint("Bchannel%d from down RELEASE return %d - %s\n", bi->nr, ret, strerror(-ret));
+			}
 			continue;
 		}
 		for (i = 1; i < bi->pcnt; i++) {
@@ -574,15 +605,22 @@ static void *BCthread(void *arg)
 				}
 			}
 		}
-
+		if (!bi->running) {
+			msg = _threadmsg3;
+			break;
+		}
 		if (bi->pfd[0].revents & POLLIN) {
 			ret = read(bi->pfd[0].fd, &cmd, 1);
+			iprint("Got control %d thread=%x\n", cmd, (unsigned int)pthread_self());
 			if (cmd == 42) {
 				bi->running = 0;
+				msg = _threadmsg4;
 			}
 		}
+		bi->got_timeout = 0;
 	}
-	return NULL;
+	iprint("thread=%x terminating with msg %s\n", (unsigned int)pthread_self(), msg);
+	return msg;
 }
 
 static int CreateBchannelThread(struct BInstance *bi, int pcnt)
@@ -609,6 +647,7 @@ static int CreateBchannelThread(struct BInstance *bi, int pcnt)
 	bi->pfd[1].fd = bi->fd;
 	bi->pfd[1].events = POLLIN | POLLPRI;
 	bi->pcnt = pcnt;
+	bi->timeout = 500; /* default poll timeout 500ms */
 	ret = pthread_create(&bi->tid, NULL, BCthread, bi);
 	if (ret) {
 		eprint("Cannot create thread error - %s\n", strerror(errno));
@@ -620,7 +659,7 @@ static int CreateBchannelThread(struct BInstance *bi, int pcnt)
 		for (i = 1; i < bi->pcnt; i++)
 			bi->pfd[i].fd = -1;
 	} else
-		iprint("Created Bchannel tread %d\n", (int)bi->tid);
+		iprint("Created Bchannel thread=%x\n", (unsigned int)bi->tid);
 	return ret;
 }
 
@@ -628,19 +667,30 @@ static int StopBchannelThread(struct BInstance *bi)
 {
 	int ret, i;
 	unsigned char cmd;
+	char *msg = NULL;
+	pthread_t self = pthread_self();
 
 	if (bi->running) {
 		cmd = 42;
 		if (bi->waiting)
 			sem_post(&bi->wait);
-		ret = write(bi->cpipe[1], &cmd, 1);
-		if (ret != 1)
-			wprint("Error on write control ret=%d - %s\n", ret, strerror(errno));
-		ret = pthread_join(bi->tid, NULL);
-		if (ret < 0)
-			wprint("Error on pthread_join - %s\n", strerror(errno));
-		else
-			iprint("Thread %d joined\n", (int)bi->tid);
+		if (self == bi->tid) {
+			/* we cannot join our self but we will terminate on return */
+			ret = pthread_detach(bi->tid);
+			if (ret)
+				wprint("Error on pthread_detach - %s\n", strerror(ret));
+			bi->running = 0;
+		} else {
+			ret = write(bi->cpipe[1], &cmd, 1);
+			if (ret != 1)
+				wprint("Error on write control ret=%d - %s\n", ret, strerror(errno));
+			/* not this do return the error code directely */
+			ret = pthread_join(bi->tid, (void **)&msg);
+			if (ret)
+				wprint("Error on pthread_join - %s\n", strerror(ret));
+			else
+				iprint("thread=%x joined to %x %s\n", (unsigned int)bi->tid, (unsigned int)pthread_self(), msg);
+		}
 		close(bi->cpipe[0]);
 		close(bi->cpipe[1]);
 		bi->pfd[0].fd = -1;
@@ -655,11 +705,18 @@ static int StopBchannelThread(struct BInstance *bi)
 
 static int dummy_btrans(struct BInstance *bi, struct mc_buf *mc)
 {
-	struct mISDNhead *hh = (struct mISDNhead *)mc->rb;
+	struct mISDNhead *hh;
 
-	wprint("Controller%d ch%d: Got %s id %x - but %s called\n", bi->pc->profile.ncontroller, bi->nr,
-		_mi_msg_type2str(hh->prim), hh->id, __func__);
-	return -EINVAL;
+	if (!mc) {
+		wprint("Controller%d ch%d: Got timeout RELEASE - but %s called thread=%x\n", bi->pc->profile.ncontroller, bi->nr,
+			__func__, (unsigned int)pthread_self());
+		return 0;
+	} else {
+		hh = (struct mISDNhead *)mc->rb;
+		wprint("Controller%d ch%d: Got %s id %x - but %s called thread=%x\n", bi->pc->profile.ncontroller, bi->nr,
+			_mi_msg_type2str(hh->prim), hh->id, __func__, (unsigned int)pthread_self());
+		return -EINVAL;
+	}
 }
 
 int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, enum BType btype)

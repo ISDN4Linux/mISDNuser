@@ -78,7 +78,6 @@ static void StopDownLink(struct fax *fax)
 	struct mc_buf *mc;
 
 	dprint(MIDEBUG_NCCI, "NCCI %06x: StopDownLink\n", ncci->ncci);
-	ncciL4L3(ncci, PH_DEACTIVATE_REQ, 0, 0, NULL, NULL);
 	pthread_mutex_lock(&ncci->lock);
 	fax->modem_active = 0;
 	for (i = 0; i < ncci->window; i++) {
@@ -92,6 +91,10 @@ static void StopDownLink(struct fax *fax)
 	ncci->dlbusy = 0;
 	ncci->oidx = 0;
 	ncci->iidx = 0;
+	if (ncci->BIlink) {
+		ncci->BIlink->release_pending = 1;
+		ncciL4L3(ncci, PH_DEACTIVATE_REQ, 0, 0, NULL, NULL);
+	}
 	pthread_mutex_unlock(&ncci->lock);
 }
 
@@ -1304,6 +1307,15 @@ int FaxRecvBData(struct BInstance *bi, struct mc_buf *mc)
 	struct fax *fax = bi->b3data;
 	int ret = 0;
 
+	if (!mc) {
+		/* timeout RELEASE */
+		if (fax) {
+			fax->modem_end = 1;
+			fax->modem_active = 0;
+			FaxB3Disconnect(fax);
+		}
+		return 0;
+	}
 	hh = (struct mISDNhead *)mc->rb;
 	switch (hh->prim) {
 	case PH_DATA_IND:

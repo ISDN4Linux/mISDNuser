@@ -213,7 +213,10 @@ static void ncci_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
 		FsmChangeState(fi, ST_NCCI_N_4);
 	}
 	prim = ncci->l1direct ? PH_DEACTIVATE_REQ : DL_RELEASE_REQ;
-	ncciL4L3(ncci, prim, 0, 0, NULL, NULL);
+	if (ncci->BIlink) {
+		ncci->BIlink->release_pending = 1;
+		ncciL4L3(ncci, prim, 0, 0, NULL, NULL);
+	}
 }
 
 static void ncci_disconnect_b3_conf(struct FsmInst *fi, int event, void *arg)
@@ -452,7 +455,10 @@ static void ncci_appl_release_disc(struct FsmInst *fi, int event, void *arg)
 	int prim;
 
 	prim = ncci->l1direct ? PH_DEACTIVATE_REQ : DL_RELEASE_REQ;
-	ncciL4L3(ncci, prim, 0, 0, NULL, NULL);
+	if (ncci->BIlink) {
+		ncci->BIlink->release_pending = 1;
+		ncciL4L3(ncci, prim, 0, 0, NULL, NULL);
+	}
 }
 
 static struct FsmNode fn_ncci_list[] = {
@@ -1293,6 +1299,11 @@ int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 	struct mNCCI *ncci = bi->b3data;
 	int ret = 0;
 
+	if (!mc) {
+		/* timeout release */
+		ncciReleaseLink(ncci);
+		return 0;
+	}
 	hh = (struct mISDNhead *)mc->rb;
 	switch (hh->prim) {
 	// we're not using the Fsm and _cmesg coding for DL_DATA for performance reasons
