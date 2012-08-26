@@ -55,6 +55,23 @@ struct mPLCI *new_mPLCI(struct pController *pc, int pid, struct lPLCI *lp)
 	return plci;
 }
 
+void dump_controller_plci(struct pController *pc)
+{
+	struct mPLCI *plci;
+
+	pthread_rwlock_rdlock(&pc->llock);
+	plci = pc->plciL;
+	while (plci) {
+		iprint("PLCI %04x pid=%x NumberAppl:%d %s %s\n", plci->plci, plci->pid, plci->nAppl,
+			plci->alerting ? "alerting" : "", plci->outgoing ? "outgoing" : "incoming");
+		pthread_rwlock_rdlock(&plci->llock);
+		dump_Lplcis(plci->lPLCIs);
+		pthread_rwlock_unlock(&plci->llock);
+		plci = plci->next;
+	}
+	pthread_rwlock_unlock(&pc->llock);
+}
+
 int free_mPLCI(struct mPLCI *plci)
 {
 	struct mPLCI *p;

@@ -81,6 +81,12 @@ void mc_buffer_cleanup(void)
 	iprint("Clean up mc buffers finished count %d\n", mcb_free_count);
 }
 
+void mc_buffer_dump_status(void)
+{
+	iprint("mc buffer status: %d  (min backlog %d) buffers allocated %d free  %d in use\n",
+		mcb_alloc_count, MI_MCBUFFER_DEBUG_BACKLOG, mcb_free_count, mcb_alloc_count - mcb_free_count);
+}
+
 struct mc_buf *__alloc_mc_buf(const char *file, int lineno, const char *func)
 {
 	struct mc_buf *mc;
@@ -164,6 +170,11 @@ void mc_buffer_init(void)
 void mc_buffer_cleanup(void)
 {
 }
+
+void mc_buffer_dump_status(void)
+{
+}
+
 
 #ifdef MEMLEAK_DEBUG
 /*

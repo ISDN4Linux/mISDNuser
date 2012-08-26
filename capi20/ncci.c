@@ -641,7 +641,7 @@ void ncciFree(struct mNCCI *ncci)
 {
 	int i;
 
-	dprint(MIDEBUG_NCCI, "NCCI %06x: free\n", ncci->ncci);
+	dprint(MIDEBUG_NCCI, "NCCI %06x: freeing\n", ncci->ncci);
 
 	/* cleanup data queues */
 	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
@@ -652,8 +652,36 @@ void ncciFree(struct mNCCI *ncci)
 		lPLCIDelNCCI(ncci);
 	else
 		wprint("NCCI %06x: PLCI not linked\n", ncci->ncci);
-	dprint(MIDEBUG_NCCI, "NCCI %06x: freed\n", ncci->ncci);
+	dprint(MIDEBUG_NCCI, "NCCI %06x: freeing done\n", ncci->ncci);
 	free(ncci);
+}
+
+void dump_ncci(struct lPLCI *lp)
+{
+	struct mNCCI *ncci;
+
+	pthread_rwlock_rdlock(&lp->lock);
+	ncci = lp->Nccis;
+	while (ncci) {
+		iprint("NCCI %06x state:%s Appl:%d %s%s%s%s%s flowmode=%d %s\n",
+			ncci->ncci, str_st_ncci[ncci->ncci_m.state], ncci->appl->AppId,
+			ncci->l1trans ? "L1trans " : "", ncci->l2trans ? "L2trans " : "", ncci->l3trans ? "L3trans " : "",
+			ncci->l1direct ? "L1direct " : "", ncci->dtmflisten ? "DTMFListen " : "",
+			ncci->flowmode, ncci->dlbusy ? "DLBUSY " : "");
+		iprint("NCCI %06x isize:%d osize:%d iidx:%d oidx:%d ridx:%d\n", ncci->ncci, ncci->isize, ncci->osize,
+			ncci->iidx, ncci->oidx, ncci->ridx);
+		if (!pthread_mutex_trylock(&ncci->lock)) {
+			if (ncci->BIlink) {
+				if (ncci->BIlink && ncci->BIlink->type == BType_Fax)
+					dump_fax_status(ncci->BIlink);
+			}
+			pthread_mutex_unlock(&ncci->lock);
+		} else {
+			iprint("NCCI %06x locked no BIlink dumping\n", ncci->ncci);
+		}
+		ncci = ncci->next;
+	}
+	pthread_rwlock_unlock(&lp->lock);
 }
 
 void ncciDel_lPlci(struct mNCCI *ncci)
@@ -1177,7 +1205,7 @@ int ncciB3Data(struct BInstance *bi, struct mc_buf *mc)
 	struct mNCCI *ncci;
 
 	if (mc->cmsg.Command == CAPI_CONNECT_B3 && mc->cmsg.Subcommand == CAPI_REQ) {
-		pthread_mutex_lock(&bi->lp->lock);
+		pthread_rwlock_wrlock(&bi->lp->lock);
 		ncci = bi->b3data;
 		if (ncci)
 			wprint("NCCI %06x: already assigned\n", ncci->ncci);
@@ -1185,7 +1213,7 @@ int ncciB3Data(struct BInstance *bi, struct mc_buf *mc)
 			ncci = ConnectB3Request(bi->lp, mc);
 			bi->b3data = ncci;
 		}
-		pthread_mutex_unlock(&bi->lp->lock);	
+		pthread_rwlock_unlock(&bi->lp->lock);
 	} else
 		ncci = bi->b3data;
 	if (!ncci) {
@@ -1336,15 +1364,15 @@ int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 	case PH_ACTIVATE_CNF:
 	case DL_ESTABLISH_CNF:
 		if (!ncci) {
-			pthread_mutex_lock(&bi->lp->lock);
+			pthread_rwlock_wrlock(&bi->lp->lock);
 			ncci = ncciCreate(bi->lp);
 			if (!ncci) {
-				pthread_mutex_unlock(&bi->lp->lock);
+				pthread_rwlock_unlock(&bi->lp->lock);
 				eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
 				return -ENOMEM;
 			} else
 				bi->b3data = ncci;
-			pthread_mutex_unlock(&bi->lp->lock);
+			pthread_rwlock_unlock(&bi->lp->lock);
 		}
 		FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_CONF, mc);
 #ifdef UNSINN
@@ -1360,15 +1388,15 @@ int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 	case PH_ACTIVATE_IND:
 	case DL_ESTABLISH_IND:
 		if (!ncci) {
-			pthread_mutex_lock(&bi->lp->lock);
+			pthread_rwlock_wrlock(&bi->lp->lock);
 			ncci = ncciCreate(bi->lp);
 			if (!ncci) {
-				pthread_mutex_unlock(&bi->lp->lock);
+				pthread_rwlock_unlock(&bi->lp->lock);
 				eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
 				return -ENOMEM;
 			} else
 				bi->b3data = ncci;
-			pthread_mutex_unlock(&bi->lp->lock);
+			pthread_rwlock_unlock(&bi->lp->lock);
 		} else
 			dprint(MIDEBUG_NCCI, "NCCI %06x: %s on existing NCCIx\n", ncci->ncci, _mi_msg_type2str(hh->prim));
 		FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_IND, mc);

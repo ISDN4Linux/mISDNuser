@@ -56,6 +56,7 @@ struct mc_buf {
 
 extern void mc_buffer_init(void);
 extern void mc_buffer_cleanup(void);
+extern void mc_buffer_dump_status(void);
 
 #ifdef MI_MCBUFFER_DEBUG
 extern void __free_mc_buf(struct mc_buf *, const char *file, int lineno, const char *func);

@@ -65,6 +65,9 @@ enum BType {
 	BType_tty = 3
 };
 
+const char *BItype2str(enum BType);
+
+
 struct BInstance {
 	int 			nr;
 	int			usecnt;
@@ -130,6 +133,7 @@ struct pController *get_mController(int);
 struct pController *get_cController(int);
 struct BInstance *ControllerSelChannel(struct pController *, int, int);
 int OpenLayer3(struct pController *);
+void dump_controller_plci(struct pController *);
 
 /* This is a struct for the logical controller per application, also has the listen statemachine */
 struct lController {
@@ -152,6 +156,7 @@ struct lController *addlController(struct mApplication *, struct pController *, 
 void rm_lController(struct lController *lc);
 void free_lController(struct lController *lc);
 int listenRequest(struct lController *, struct mc_buf *);
+void dump_lcontroller(struct lController *);
 
 struct mApplication {
 	struct mApplication	*next;
@@ -167,6 +172,7 @@ struct mApplication {
 	uint32_t		UserFlags;
 };
 
+int mApplication_init(void);
 struct mApplication *RegisterApplication(uint16_t, uint32_t, uint32_t, uint32_t);
 void ReleaseApplication(struct mApplication *);
 int PutMessageApplication(struct mApplication *, struct mc_buf *);
@@ -174,6 +180,7 @@ void SendMessage2Application(struct mApplication *, struct mc_buf *);
 void SendCmsg2Application(struct mApplication *, struct mc_buf *);
 void SendCmsgAnswer2Application(struct mApplication *, struct mc_buf *, uint16_t);
 int ListenController(struct pController *);
+void dump_applications(void);
 
 struct mPLCI {
 	struct mPLCI		*next;
@@ -207,7 +214,7 @@ struct lPLCI {
 	struct mPLCI			*PLCI;
 	struct FsmInst			plci_m;
 	struct BInstance		*BIlink;
-	pthread_mutex_t			lock;
+	pthread_rwlock_t		lock;
 	int NcciCnt;
 	struct mNCCI			*Nccis;
 	int				cause;
@@ -231,6 +238,8 @@ void lPLCIDelNCCI(struct mNCCI *);
 struct mNCCI *ConnectB3Request(struct lPLCI *, struct mc_buf *);
 void B3ReleaseLink(struct lPLCI *, struct BInstance *);
 struct lPLCI *get_lPLCI4plci(struct mApplication *, uint32_t);
+void dump_Lplcis(struct lPLCI *);
+
 
 #define GET_NCCI_EXACT		1
 #define GET_NCCI_ONLY_PLCI	2
@@ -297,11 +306,15 @@ void ncciReleaseLink(struct mNCCI *);
 void ncciDel_lPlci(struct mNCCI *);
 int ncciL4L3(struct mNCCI *, uint32_t, int, int, void *, struct mc_buf *);
 void AnswerDataB3Req(struct mNCCI *, struct mc_buf *, uint16_t);
+void dump_ncci(struct lPLCI *);
 
 #ifdef USE_SOFTFAX
 int FaxRecvBData(struct BInstance *, struct mc_buf *);
 int FaxB3Message(struct BInstance *, struct mc_buf *);
 void FaxReleaseLink(struct BInstance *);
+void dump_fax_status(struct BInstance *);
+#else
+static inline void dump_fax_status(struct BInstance *bi) {};
 #endif
 
 #define MC_BUF_ALLOC(a) if (!(a = alloc_mc_buf())) {eprint("Cannot allocate mc_buff\n");return;}

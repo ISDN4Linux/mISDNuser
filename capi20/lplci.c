@@ -1606,7 +1606,7 @@ int lPLCICreate(struct lPLCI **lpp, struct lController *lc, struct mPLCI *plci)
 	lp->plci_m.printdebug = lPLCI_debug;
 	lp->chid.nr = MI_CHAN_NONE;
 	lp->autohangup = 1;
-	pthread_mutex_init(&lp->lock, NULL);
+	pthread_rwlock_init(&lp->lock, NULL);
 	*lpp = lp;
 	return 0;
 }
@@ -1619,7 +1619,7 @@ void lPLCI_free(struct lPLCI *lp)
 	if (lp->BIlink)
 		CloseBInstance(lp->BIlink);
 	if (lp->PLCI) {
-		dprint(MIDEBUG_PLCI, "PLCI:%04x plci state %s\n", lp->plci, str_st_plci[lp->plci_m.state]);
+		dprint(MIDEBUG_PLCI, "PLCI:%04x plci state:%s\n", lp->plci, str_st_plci[lp->plci_m.state]);
 		if (lp->plci_m.state != ST_PLCI_P_0) {
 			struct l3_msg *l3m = alloc_l3_msg();
 
@@ -1640,6 +1640,28 @@ void lPLCI_free(struct lPLCI *lp)
 		nc = nn;
 	}
 	free(lp);
+}
+
+void dump_Lplcis(struct lPLCI *lp) {
+	struct BInstance *bi;
+	while (lp) {
+		iprint("LPLCI %04x state:%s chid.nr:0x%x NCCIs:%d autohangup:%s disc_req:%s\n", lp->plci,
+			str_st_plci[lp->plci_m.state], lp->chid.nr, lp->NcciCnt, lp->autohangup ? "yes" : "no",
+			lp->disc_req ? "yes" : "no");
+		iprint("LPLCI %04x l1dtmf:%s cause:0x%02x loc:%x\n", lp->plci, lp->l1dtmf ? "yes" : "no",
+			lp->cause, lp->cause_loc);
+		bi = lp->BIlink;
+		if (bi) {
+			iprint("LPLCI %04x BI[%d] used:%d proto:%x fd:%d tty:%d type:%s DownId:%d UpId:%d\n",
+				lp->plci, bi->nr,  bi->usecnt, bi->proto, bi->fd, bi->tty, BItype2str(bi->type), bi->DownId,
+				bi->UpId);
+			iprint("LPLCI %04x BI[%d] tid:%x pcnt:%d running:%s waiting:%s\n", lp->plci, bi->nr,
+				(unsigned int)bi->tid, bi->pcnt, bi->running ? "yes" : "no", bi->waiting ? "yes" : "no");
+			iprint("LPLCI %04x no binstance\n", lp->plci);
+		}
+		dump_ncci(lp);
+		lp = lp->next;
+	}
 }
 
 void lPLCIRelease(struct lPLCI *lp)
@@ -1792,7 +1814,7 @@ void lPLCIDelNCCI(struct mNCCI *ncci)
 	struct lPLCI *lp = ncci->lp;
 	struct mNCCI *nc, *onc;
 
-	pthread_mutex_lock(&lp->lock);
+	pthread_rwlock_wrlock(&lp->lock);
 	nc = lp->Nccis;
 	onc = NULL;
 	while (nc) {
@@ -1820,7 +1842,7 @@ void lPLCIDelNCCI(struct mNCCI *ncci)
 			lp->BIlink = NULL;
 		}
 	}
-	pthread_mutex_unlock(&lp->lock);
+	pthread_rwlock_unlock(&lp->lock);
 }
 
 void B3ReleaseLink(struct lPLCI *lp, struct BInstance *bi)

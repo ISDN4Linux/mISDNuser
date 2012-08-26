@@ -71,6 +71,28 @@ struct fax {
 	int			phE_res;
 };
 
+void dump_fax_status(struct BInstance *bi)
+{
+	struct fax *f = bi->b3data;
+
+	if (!f) {
+		iprint("FaxCh[%d] no fax data assigned\n", bi->nr);
+	} else {
+		iprint("FaxCh[%d] %s modem:%sactive,%send startdownlink:%s b3transfer:%sactive,%send\n",
+			bi->nr, f->outgoing ? "outgoing" : "incoming", f->modem_active ? "" : "not ", f->modem_end ? "" : "not ",
+			f->startdownlink ? "yes" : "no", f->b3transfer_active ? "" : "not ", f->b3transfer_end ? "" : "not ");
+		iprint("FaxCh[%d] high_res:%s polling:%s more_doc:%s ecm:%s b3data:%smapped B3Disconnect:%sdone\n",
+			bi->nr, f->high_res ? "yes" : "no", f->polling ? "yes" : "no", f->more_doc ? "yes" : "no",
+			f->no_ecm ? "no" : "yes", f->b3data_mapped ? "" : "not ", f->B3DisconnectDone ? "" : "not ");
+		iprint("FaxCh[%d] b3transfer_error:%d b3_format:%d b3data_size:%zd b3data_pos:%zd\n", bi->nr,
+			f->b3transfer_error, f->b3_format, f->b3data_size, f->b3data_pos);
+		iprint("FaxCh[%d] File:%s  fd: %d\n", bi->nr, f->file_name, f->file_d);
+		iprint("FaxCh[%d] StationID:%s RemoteID:%s HeaderInfo:%s\n", bi->nr, f->StationID, f->RemoteID, f->HeaderInfo);
+		iprint("FaxCh[%d] compressions:0x%x resolutions:0x%x image_sizes:0x%x rate:%d modems:0x%x\n", bi->nr,
+			f->compressions, f->resolutions, f->image_sizes, f->rate, f->modems);
+	}
+}
+
 static void StopDownLink(struct fax *fax)
 {
 	int i;
@@ -575,11 +597,11 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 	time_t cur_time;
 	struct mISDN_ctrl_req creq;
 
-	pthread_mutex_lock(&bi->lp->lock);
+	pthread_rwlock_wrlock(&bi->lp->lock);
 	nf = bi->b3data;
 	if (nf) {
 		dprint(MIDEBUG_NCCI, "PLCI %04x: already created NCCI: %06x\n", bi->lp->plci, nf->ncci->ncci);
-		pthread_mutex_unlock(&bi->lp->lock);
+		pthread_rwlock_unlock(&bi->lp->lock);
 		return nf;
 	}
 	nf = calloc(1, sizeof(*nf));
@@ -617,7 +639,7 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 					wprint("Cannot InitFax for incoming PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
 					free(nf);
 					nf = NULL;
-					pthread_mutex_unlock(&bi->lp->lock);
+					pthread_rwlock_unlock(&bi->lp->lock);
 					return nf;
 				}
 			}
@@ -644,7 +666,7 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 		}
 	}
 	bi->b3data = nf;
-	pthread_mutex_unlock(&bi->lp->lock);
+	pthread_rwlock_unlock(&bi->lp->lock);
 	return nf;
 }
 

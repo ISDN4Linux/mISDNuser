@@ -18,14 +18,26 @@
 #include "mc_buffer.h"
 
 static struct mApplication *mApplications;
+static pthread_rwlock_t mAppListLock;
+
+int mApplication_init(void)
+{
+	int ret;
+
+	ret = pthread_rwlock_init(&mAppListLock, NULL);
+	return ret;
+}
 
 struct mApplication *RegisterApplication(uint16_t ApplId, uint32_t MaxB3Connection, uint32_t MaxB3Blks, uint32_t MaxSizeB3)
 {
-	struct mApplication *appl, *old = mApplications;
+	struct mApplication *appl, *old;
 
+	pthread_rwlock_wrlock(&mAppListLock);
+	old = mApplications;
 	while (old) {
 		if (old->AppId == ApplId) {
 			wprint("Application %d already registered\n", ApplId);
+			pthread_rwlock_unlock(&mAppListLock);
 			return NULL;
 		}
 		if (!old->next)
@@ -33,18 +45,20 @@ struct mApplication *RegisterApplication(uint16_t ApplId, uint32_t MaxB3Connecti
 		old = old->next;
 	}
 	appl = calloc(1, sizeof(*appl));
-	if (!appl) {
+	if (appl) {
+		pthread_rwlock_init(&appl->llock, NULL);
+		appl->AppId = ApplId;
+		appl->MaxB3Con = MaxB3Connection;
+		appl->MaxB3Blk = MaxB3Blks;
+		appl->MaxB3Size = MaxSizeB3;
+		if (old)
+			old->next = appl;
+		else
+			mApplications = appl;
+	} else {
 		eprint("No memory for application (%zd bytes)\n", sizeof(*appl));
-		return NULL;
 	}
-	appl->AppId = ApplId;
-	appl->MaxB3Con = MaxB3Connection;
-	appl->MaxB3Blk = MaxB3Blks;
-	appl->MaxB3Size = MaxSizeB3;
-	if (old)
-		old->next = appl;
-	else
-		mApplications = appl;
+	pthread_rwlock_unlock(&mAppListLock);
 	return appl;
 }
 
@@ -62,10 +76,12 @@ struct mApplication *RegisterApplication(uint16_t ApplId, uint32_t MaxB3Connecti
  */
 void ReleaseApplication(struct mApplication *appl)
 {
-	struct mApplication *ma = mApplications;
+	struct mApplication *ma;
 	struct lController *lc, *lcn;
 
 	/* first remove from list */
+	pthread_rwlock_wrlock(&mAppListLock);
+	ma = mApplications;
 	while (ma) {
 		if (ma == appl) {
 			mApplications = appl->next;
@@ -78,6 +94,7 @@ void ReleaseApplication(struct mApplication *appl)
 		}
 		ma = ma->next;
 	}
+	pthread_rwlock_unlock(&mAppListLock);
 	/* remove assigned logical controllers */
 	pthread_rwlock_wrlock(&appl->llock);
 	lc = appl->contL;
@@ -92,6 +109,28 @@ void ReleaseApplication(struct mApplication *appl)
 	pthread_rwlock_unlock(&appl->llock);
 	pthread_rwlock_destroy(&appl->llock);
 	free(appl);
+}
+
+void dump_applications(void)
+{
+	struct mApplication *ap;
+	struct lController *lc;
+
+	pthread_rwlock_rdlock(&mAppListLock);
+	ap = mApplications;
+	while (ap) {
+		iprint("Application Id:%d MaxB3Con:%d MaxB3Blk:%d MaxB3Size:%d\n", ap->AppId, ap->MaxB3Con, ap->MaxB3Blk,
+			ap->MaxB3Size);
+		pthread_rwlock_rdlock(&ap->llock);
+		lc = ap->contL;
+		while (lc) {
+			dump_lcontroller(lc);
+			lc = lc->nextA;
+		}
+		pthread_rwlock_unlock(&ap->llock);
+		ap = ap->next;
+	}
+	pthread_rwlock_unlock(&mAppListLock);
 }
 
 struct lController *get_lController(struct mApplication *app, int cont)

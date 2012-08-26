@@ -215,6 +215,12 @@ int listenHandle(struct lController *lc, uint16_t CIPValue)
 	return 0;
 }
 
+void dump_lcontroller(struct lController *lc)
+{
+	iprint("Listen ContrNo:%d InfoMask:%08x CIPmask:%08x CIPmask2:%08x state:%s\n", lc->Contr->profile.ncontroller,
+		lc->InfoMask, lc->CIPmask, lc->CIPmask2, str_st_listen[lc->listen_m.state]);
+}
+
 void init_listen(void)
 {
 	listen_fsm.state_count = ST_LISTEN_COUNT;

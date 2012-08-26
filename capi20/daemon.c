@@ -89,6 +89,50 @@ char *TempDirectory = NULL;
 
 #define MISDND_TEMP_DIR	"/tmp"
 
+static char *__pinfonames[] = {
+	"None",
+	"Control",
+	"mISDNmain",
+	"CAPImain",
+	"NewConn",
+	"Application",
+	"Bchannel",
+	"unknown"
+};
+
+static char *pinfo2str(pollInfo_t pit)
+{
+	char *p;
+
+	switch(pit) {
+	case PIT_None:
+		p = __pinfonames[0];
+		break;
+	case PIT_Control:
+		p = __pinfonames[1];
+		break;
+	case PIT_mISDNmain:
+		p = __pinfonames[2];
+		break;
+	case PIT_CAPImain:
+		p = __pinfonames[3];
+		break;
+	case PIT_NewConn:
+		p = __pinfonames[4];
+		break;
+	case PIT_Application:
+		p = __pinfonames[5];
+		break;
+	case PIT_Bchannel:
+		p = __pinfonames[6];
+		break;
+	default:
+		p = __pinfonames[7];
+		break;
+	}
+	return p;
+}
+
 static void usage(void)
 {
 	fprintf(stderr, "Usage: mISDNcapid [OPTIONS]\n");
@@ -265,6 +309,70 @@ termHandler(int sig)
 	return;
 }
 
+
+
+/**********************************************************************
+Signal handler for dumping state info
+***********************************************************************/
+static void dump_mainpoll(void)
+{
+	int i;
+
+	for (i = 0; i < mainpoll_max; i++) {
+		iprint("Poll[%i] fd:%d mask:%04x/%04x data:%p type:%s\n",
+			i, mainpoll[i].fd, mainpoll[i].events, mainpoll[i].revents, pollinfo[i].data, pinfo2str(pollinfo[i].type));
+	}
+}
+
+static void dump_controller(void)
+{
+	int i;
+
+	for (i = 0; i < mI_count; i++) {
+		if (mI_Controller[i].enable) {
+			iprint("Controller%d mISDN No:%d Bchannels:%d capiNr:%d ApplCnt:%d\n", i, mI_Controller[i].mNr,
+				mI_Controller[i].devinfo.nrbchan, mI_Controller[i].profile.ncontroller, mI_Controller[i].appCnt);
+			iprint("Controller%d InfoMask:%08x CIPMask:%08x CIP2Mask:%08x\n", i, mI_Controller[i].InfoMask,
+				mI_Controller[i].CIPmask, mI_Controller[i].CIPmask2);
+			dump_controller_plci(&mI_Controller[i]);
+		} else {
+			iprint("Controller%d disabled\n", i);
+		}
+	}
+}
+
+const char *_BTypes[] = {
+	"None",
+	"Direct",
+	"Fax",
+	"tty",
+	"Wrong value"
+};
+
+const char *BItype2str(enum BType bt)
+{
+	const char *r;
+	unsigned int i = (unsigned int)bt;
+
+	if (i <= BType_tty)
+		r = _BTypes[i];
+	else
+		r = _BTypes[4];
+	return r;
+}
+
+static void
+dumpHandler(int sig)
+{
+
+	iprint("Received  signal %d -- start dumping\n", sig);
+	dump_applications();
+	dump_controller();
+	mc_buffer_dump_status();
+	dump_mainpoll();
+	iprint("dumping ends\n");
+}
+
 static int add_mainpoll(int fd, pollInfo_t pit)
 {
 	struct pollfd *newmp;
@@ -438,7 +546,7 @@ struct BInstance *ControllerSelChannel(struct pController *pc, int nr, int proto
 
 	if (nr >= pc->BImax) {
 		wprint("Request for channel number %d but controller %d only has %d channels\n",
-		       nr, pc->profile.ncontroller, pc->BImax);
+		       nr, pc->profile.ncontroller, pc->devinfo.nrbchan);
 		return NULL;
 	}
 	if (ISDN_P_B_START <= proto) {
@@ -1535,7 +1643,7 @@ static struct mi_ext_fn_s l3dbg = {
 	.prt_debug = my_lib_debug,
 };
 
-static struct sigaction mysig_act;
+static struct sigaction mysig_term, mysig_dump;
 
 int main(int argc, char *argv[])
 {
@@ -1577,6 +1685,12 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 		iprint("Did set eGID to %s gid:%d\n", MISDN_GROUP, (int)grp->gr_gid);
+	}
+
+	ret = mApplication_init();
+	if (ret) {
+		fprintf(stderr, "Cannot init mApplication -%s\n", strerror(ret));
+		return 1;
 	}
 
 	mc_buffer_init();
@@ -1752,19 +1866,26 @@ retry_Csock:
 	g3_gen_tables();
 #endif
 	/* setup signal handler */
-	memset(&mysig_act, 0, sizeof(mysig_act));
-	mysig_act.sa_handler = termHandler;
-	ret = sigaction(SIGTERM, &mysig_act, NULL);
+	memset(&mysig_term, 0, sizeof(mysig_term));
+	mysig_term.sa_handler = termHandler;
+	ret = sigaction(SIGTERM, &mysig_term, NULL);
 	if (ret) {
 		wprint("Error to setup signal handler for SIGTERM - %s\n", strerror(errno));
 	}
-	ret = sigaction(SIGHUP, &mysig_act, NULL);
+	ret = sigaction(SIGHUP, &mysig_term, NULL);
 	if (ret) {
 		wprint("Error to setup signal handler for SIGHUP - %s\n", strerror(errno));
 	}
-	ret = sigaction(SIGINT, &mysig_act, NULL);
+	ret = sigaction(SIGINT, &mysig_term, NULL);
 	if (ret) {
 		wprint("Error to setup signal handler for SIGINT - %s\n", strerror(errno));
+	}
+
+	memset(&mysig_dump, 0, sizeof(mysig_dump));
+	mysig_dump.sa_handler = dumpHandler;
+	ret = sigaction(SIGUSR1, &mysig_dump, NULL);
+	if (ret) {
+		wprint("Error to setup signal handler for SIGUSR1 - %s\n", strerror(errno));
 	}
 	exitcode = main_loop();
 	free_ncci_fsm();
