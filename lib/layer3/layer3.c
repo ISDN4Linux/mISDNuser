@@ -703,6 +703,8 @@ create_l2l3if(layer3_t *l3, struct sockaddr_mISDN *addr)
 void
 init_l3(layer3_t *l3)
 {
+	int err;
+
 	INIT_LIST_HEAD(&l3->plist);
 	INIT_LIST_HEAD(&l3->tbase.pending_timer);
 	l3->global.l2if = &l3->l2master;
@@ -725,7 +727,9 @@ init_l3(layer3_t *l3)
 	mqueue_init(&l3->app_queue);
 	mqueue_init(&l3->mgr_queue);
 	l3->ml3.to_layer3 = to_layer3;
-	pthread_mutex_init(&l3->run, NULL);
+	err = pthread_mutex_init(&l3->run, NULL);
+	if (err)
+		eprint("error on init l3 mutex - %s\n", strerror(err));
 	l3->next_cr = 1;
 }
 
@@ -983,7 +987,7 @@ l3_start(struct _layer3 *l3)
 	test_and_set_bit(FLG_RUN_WAIT, &l3->ml3.options);
 	ret = mi_thread_create(&l3->worker, NULL, layer3_thread, (void *)l3);
 	if (ret) {
-		eprint("%s cannot start worker thread  %s\n", __FUNCTION__, strerror(errno));
+		eprint("%s cannot start worker thread  %s\n", __FUNCTION__, strerror(ret));
 	} else
 		pthread_mutex_lock(&l3->run); // wait until tread is running
 	return ret;
@@ -997,8 +1001,8 @@ l3_stop(struct _layer3 *l3)
 	test_and_set_bit(FLG_ABORT, &l3->ml3.options);
 	ret = pthread_cancel(l3->worker);
 	if (ret)
-		eprint("%s cannot cancel worker thread  %s\n", __FUNCTION__, strerror(errno));
+		eprint("%s cannot cancel worker thread  %s\n", __FUNCTION__, strerror(ret));
 	ret = pthread_join(l3->worker, NULL);
 	if (ret)
-		eprint("%s cannot join worker thread  %s\n", __FUNCTION__, strerror(errno));
+		eprint("%s cannot join worker thread  %s\n", __FUNCTION__, strerror(ret));
 }
