@@ -421,6 +421,31 @@ static void ncci_appl_release(struct FsmInst *fi, int event, void *arg)
 	ncciFree(fi->userdata);
 }
 
+static void ncci_clearing_stateN_0(struct FsmInst *fi, int event, void *arg)
+{
+	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = alloc_mc_buf();
+	int ret;
+
+	FsmChangeState(fi, ST_NCCI_N_5);
+	if (mc) {
+		if (ncci->BIlink) {
+			ncciCmsgHeader(ncci, mc, CAPI_DISCONNECT_B3, CAPI_RESP);
+			capi_cmsg2message(&mc->cmsg, mc->rb);
+			mc->len = CAPIMSG_LEN(mc->rb);
+			ret = ncci->BIlink->from_up(ncci->BIlink, mc);
+		} else
+			ret = -EINVAL;
+		if (ret) { /* no handler - free anyway */
+			ncciFree(ncci);
+			free_mc_buf(mc);
+		}
+	} else {
+		eprint("Cannot allocate buffer\n");
+		ncciFree(ncci);
+	}
+}
+
 static void ncci_appl_release_disc(struct FsmInst *fi, int event, void *arg)
 {
 	struct mNCCI *ncci = fi->userdata;
@@ -436,6 +461,9 @@ static struct FsmNode fn_ncci_list[] = {
 	{ST_NCCI_N_0, EV_DL_ESTABLISH_CONF, ncci_n0_dl_establish_ind_conf},
 	{ST_NCCI_N_0, EV_DL_ESTABLISH_IND, ncci_n0_dl_establish_ind_conf},
 	{ST_NCCI_N_0, EV_AP_RELEASE, ncci_appl_release},
+	{ST_NCCI_N_0, EV_NC_DISCONNECT_B3_IND, ncci_clearing_stateN_0},
+	{ST_NCCI_N_0, EV_DL_RELEASE_IND, ncci_clearing_stateN_0},
+	{ST_NCCI_N_0, EV_NC_LINKDOWN, ncci_clearing_stateN_0},
 
 	{ST_NCCI_N_0_1, EV_NC_CONNECT_B3_CONF, ncci_connect_b3_conf},
 	{ST_NCCI_N_0_1, EV_AP_MANUFACTURER_REQ, ncci_manufacturer_req},

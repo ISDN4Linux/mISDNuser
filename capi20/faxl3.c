@@ -47,6 +47,7 @@ struct fax {
 	unsigned int		more_doc:1;
 	unsigned int		no_ecm:1;
 	unsigned int		b3data_mapped:1;
+	unsigned int		B3DisconnectDone:1;
 	int			b3transfer_error;
 	int			b3_format;
 	unsigned char		*b3data;
@@ -99,8 +100,11 @@ static void FaxB3Disconnect(struct fax *fax)
 	unsigned char ncpi[32], len, ncpi_len;
 	struct mc_buf *mc;
 
+	if (!fax || fax->B3DisconnectDone)
+		return;
 	mc = alloc_mc_buf();
 	if (mc) {
+		fax->B3DisconnectDone = 1;
 		ncciCmsgHeader(fax->ncci, mc, CAPI_DISCONNECT_B3, CAPI_IND);
 		ncpi_len = 8;
 		capimsg_setu16(ncpi, 1, fax->t30stats.bit_rate & 0xffff);
@@ -436,7 +440,6 @@ static void phaseE_handler(t30_state_t *t30, void *user_data, int result)
 		}
 	} else {
 		fax->b3transfer_error = 1;
-		FaxB3Disconnect(fax);
 	}
 }
 
@@ -630,6 +633,7 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 				dprint(MIDEBUG_NCCI, "NCCI %06x: MISDN_CTRL_RX_BUFFER  values: min=%d -> %d max=%d\n",
 					nf->ncci->ncci, creq.p1, DEFAULT_PKT_SIZE, creq.p2);
 			nf->startdownlink = 1;
+			nf->modem_active = 1;
 		} else {
 			eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
 			free(nf);
@@ -1341,6 +1345,7 @@ int FaxRecvBData(struct BInstance *bi, struct mc_buf *mc)
 		}
 		fax->modem_end = 1;
 		fax->modem_active = 0;
+		FaxB3Disconnect(fax);
 		ret = 1;
 		break;
 	case PH_DEACTIVATE_CNF:
@@ -1352,6 +1357,7 @@ int FaxRecvBData(struct BInstance *bi, struct mc_buf *mc)
 		}
 		fax->modem_end = 1;
 		fax->modem_active = 0;
+		FaxB3Disconnect(fax);
 		ret = 1;
 		break;
 	case PH_CONTROL_CNF:
