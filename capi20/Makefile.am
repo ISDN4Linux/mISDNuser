@@ -1,9 +1,9 @@
 export _USE_SOFTFAX
 
 sbin_PROGRAMS = mISDNcapid
-mISDNcapid_SOURCES = daemon.c application.c lplci.c mplci.c ncci.c m_capi.h m_capi_sock.h \
+mISDNcapid_SOURCES = daemon.c application.c lplci.c mplci.c ncci.c m_capi.h m_capi_sock.h ncci.h \
 			mc_buffer.c mc_buffer.h SupplementaryService.h SupplementaryService.c listen.c faxl3.c alaw.c alaw.h \
-			sff.h sff.c g3_mh.h g3_mh.c
+			sff.h sff.c g3_mh.h g3_mh.c capi_obj.c
 mISDNcapid_LDADD = ../lib/libmisdn.la -lcapi20
 mISDNcapid_LDFLAGS = -shared
 

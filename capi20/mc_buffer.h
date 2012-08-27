@@ -42,6 +42,7 @@ enum mstate {
 struct mc_buf {
 	struct l3_msg	*l3m;
 	_cmsg		cmsg;
+	int		refcnt;
 	int		len;
 	unsigned char	rb[MC_RB_SIZE];
 	unsigned char	*rp;

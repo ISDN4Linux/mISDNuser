@@ -24,16 +24,15 @@
 #include <fcntl.h>
 #include <mISDN/q931.h>
 #include <spandsp.h>
+#include "ncci.h"
 #include "alaw.h"
 #include "sff.h"
 #include "g3_mh.h"
 
 #ifdef USE_SOFTFAX
 
-#define DEFAULT_PKT_SIZE	512
-
-struct fax {
-	struct mNCCI		*ncci;
+struct mFAX {
+	struct mCAPIobj		cobj;
 	struct BInstance	*binst;
 	struct lPLCI		*lplci;
 	unsigned int		outgoing:1;
@@ -42,12 +41,14 @@ struct fax {
 	unsigned int		startdownlink:1;
 	unsigned int		b3transfer_active:1;
 	unsigned int		b3transfer_end:1;
+	unsigned int		extended:1;
 	unsigned int		high_res:1;
 	unsigned int		polling:1;
 	unsigned int		more_doc:1;
 	unsigned int		no_ecm:1;
 	unsigned int		b3data_mapped:1;
 	unsigned int		B3DisconnectDone:1;
+	unsigned char		phase; /* A B C D E */
 	int			b3transfer_error;
 	int			b3_format;
 	unsigned char		*b3data;
@@ -70,36 +71,120 @@ struct fax {
 	t30_stats_t		t30stats;
 	int			phE_res;
 };
+#ifdef MISDN_CAPI_REFCOUNT_DEBUG
+#define get_faxncci(f)	__get_faxncci(f, __FILE__, __LINE__)
+#define put_ncci(n)	__put_ncci(n, __FILE__, __LINE__)
+#define get_mFAX(f)	__get_mFAX(f, __FILE__, __LINE__)
+#define put_mFAX(f)	__put_mFAX(f, __FILE__, __LINE__)
+
+#define _Xget_cobj(c)	__get_cobj(c, file, lineno)
+#define _Xput_cobj(c)   __put_cobj(c, file, lineno)
+#else
+#define _Xget_cobj(c)	get_cobj(c)
+#define _Xput_cobj(c)   put_cobj(c)
+#endif
+
+
+#ifdef MISDN_CAPI_REFCOUNT_DEBUG
+static struct mNCCI *__get_faxncci(struct mFAX *fax, const char *file, int lineno)
+#else
+static struct mNCCI *get_faxncci(struct mFAX *fax)
+#endif
+{
+	struct mNCCI *ncci = NULL;
+	struct mCAPIobj *co;
+
+	if (fax && fax->cobj.parent) {
+		co = _Xget_cobj(fax->cobj.parent);
+		if (co)
+			ncci = container_of(co, struct mNCCI, cobj);
+	}
+	return ncci;
+}
+
+#ifdef MISDN_CAPI_REFCOUNT_DEBUG
+static int __put_ncci(struct mNCCI *ncci, const char *file, int lineno)
+#else
+static int put_ncci(struct mNCCI *ncci)
+#endif
+{
+	int ret;
+
+	if (ncci)
+		ret = _Xput_cobj(&ncci->cobj);
+	else
+		ret = -EINVAL;
+	return ret;
+}
+
+#ifdef MISDN_CAPI_REFCOUNT_DEBUG
+static struct mFAX *__get_mFAX(struct mFAX *fax, const char *file, int lineno)
+#else
+static struct mFAX *get_mFAX(struct mFAX *fax)
+#endif
+{
+	struct mCAPIobj *co;
+
+	if (fax) {
+		co = _Xget_cobj(&fax->cobj);
+		if (!co)
+			fax = NULL;
+	}
+	return fax;
+}
+
+#ifdef MISDN_CAPI_REFCOUNT_DEBUG
+static int __put_mFAX(struct mFAX *fax, const char *file, int lineno)
+#else
+static int put_mFAX(struct mFAX *fax)
+#endif
+{
+	int ret;
+
+	if (fax)
+		ret = _Xput_cobj(&fax->cobj);
+	else
+		ret = -EINVAL;
+	return ret;
+}
 
 void dump_fax_status(struct BInstance *bi)
 {
-	struct fax *f = bi->b3data;
+	struct mFAX *f = get_mFAX(bi->b3data);
+	const char *ids;
 
 	if (!f) {
 		iprint("FaxCh[%d] no fax data assigned\n", bi->nr);
 	} else {
-		iprint("FaxCh[%d] %s modem:%sactive,%send startdownlink:%s b3transfer:%sactive,%send\n",
-			bi->nr, f->outgoing ? "outgoing" : "incoming", f->modem_active ? "" : "not ", f->modem_end ? "" : "not ",
-			f->startdownlink ? "yes" : "no", f->b3transfer_active ? "" : "not ", f->b3transfer_end ? "" : "not ");
-		iprint("FaxCh[%d] high_res:%s polling:%s more_doc:%s ecm:%s b3data:%smapped B3Disconnect:%sdone\n",
-			bi->nr, f->high_res ? "yes" : "no", f->polling ? "yes" : "no", f->more_doc ? "yes" : "no",
-			f->no_ecm ? "no" : "yes", f->b3data_mapped ? "" : "not ", f->B3DisconnectDone ? "" : "not ");
-		iprint("FaxCh[%d] b3transfer_error:%d b3_format:%d b3data_size:%zd b3data_pos:%zd\n", bi->nr,
+		ids = CAPIobjIDstr(&f->cobj);
+		iprint("%s: phase:%c %s modem:%sactive,%send startdownlink:%s polling:%s\n",
+			ids, f->phase, f->outgoing ? "outgoing" : "incoming", f->modem_active ? "" : "not ",
+			f->modem_end ? "" : "not ", f->startdownlink ? "yes" : "no", f->polling ? "yes" : "no");
+		iprint("%s: modems:0x%x b3transfer:%sactive,%send B3Disconn:%sdone\n", ids,
+			f->modems, f->b3transfer_active ? "" : "not ", f->b3transfer_end ? "" : "not ",
+			f->B3DisconnectDone ? "" : "not ");
+
+		iprint("%s: high_res:%s more_doc:%s ecm:%s extended:%s b3data:%smapped\n",
+			ids, f->high_res ? "yes" : "no", f->more_doc ? "yes" : "no", f->no_ecm ? "no" : "yes",
+			f->extended ? "yes" : "no", f->b3data_mapped ? "" : "not ");
+		iprint("%s: b3transfer_error:%d b3_format:%d b3data_size:%zd b3data_pos:%zd\n", ids,
 			f->b3transfer_error, f->b3_format, f->b3data_size, f->b3data_pos);
-		iprint("FaxCh[%d] File:%s  fd: %d\n", bi->nr, f->file_name, f->file_d);
-		iprint("FaxCh[%d] StationID:%s RemoteID:%s HeaderInfo:%s\n", bi->nr, f->StationID, f->RemoteID, f->HeaderInfo);
-		iprint("FaxCh[%d] compressions:0x%x resolutions:0x%x image_sizes:0x%x rate:%d modems:0x%x\n", bi->nr,
-			f->compressions, f->resolutions, f->image_sizes, f->rate, f->modems);
+		iprint("%s: File:%s  fd: %d\n", ids, f->file_name, f->file_d);
+		iprint("%s: StationID:%s RemoteID:%s HeaderInfo:%s\n", ids, f->StationID, f->RemoteID, f->HeaderInfo);
+		iprint("%s: compressions:0x%x resolutions:0x%x image_sizes:0x%x rate:%d\n", ids,
+			f->compressions, f->resolutions, f->image_sizes, f->rate);
+		put_mFAX(f);
 	}
 }
 
-static void StopDownLink(struct fax *fax)
+static void StopDownLink(struct mFAX *fax, struct mNCCI *ncci)
 {
 	int i;
-	struct mNCCI *ncci = fax->ncci;
 	struct mc_buf *mc;
 
-	dprint(MIDEBUG_NCCI, "NCCI %06x: StopDownLink\n", ncci->ncci);
+	dprint(MIDEBUG_NCCI, "%s: StopDownLink phase:%c\n", CAPIobjIDstr(&fax->cobj), fax->phase);
+	if (!ncci)
+		return;
 	pthread_mutex_lock(&ncci->lock);
 	fax->modem_active = 0;
 	for (i = 0; i < ncci->window; i++) {
@@ -120,38 +205,77 @@ static void StopDownLink(struct fax *fax)
 	pthread_mutex_unlock(&ncci->lock);
 }
 
-static void FaxB3Disconnect(struct fax *fax)
+static _cbyte *CodeNCPI(struct mFAX *fax, struct mNCCI *ncci, uint16_t pages, int OnlyExtended)
 {
-	unsigned char ncpi[32], len, ncpi_len;
+	_cbyte l, *ncpi;
+	uint16_t opt;
+
+	if (!ncci)
+		return NULL;
+	if (OnlyExtended && !fax->extended) {
+		ncpi = NULL;
+	} else {
+		l = strlen(fax->RemoteID);
+		ncpi = calloc(1, l + 12);
+		if (ncpi) {
+			opt = fax->high_res ? 0x0001 : 0;
+			if (fax->extended) {
+				/* Bprotocol.B3 == 5 */
+				opt |= fax->polling  ? 0x0002 : 0;
+				opt |= fax->more_doc ? 0x0004 : 0;
+				opt |= fax->no_ecm   ? 0x8000 : 0;
+			}
+			capimsg_setu16(ncpi, 1, fax->rate);
+			capimsg_setu16(ncpi, 3, opt);
+			capimsg_setu16(ncpi, 5, fax->b3_format);
+			capimsg_setu16(ncpi, 7, pages);
+			l = strlen(fax->RemoteID);
+			ncpi[9] = l;
+			strcpy((char *)&ncpi[10], fax->RemoteID);
+			l += 9;
+			ncpi[0] = l;
+		} else
+			eprint("%s: no memory for NCPI(%d bytes)\n", CAPIobjIDstr(&fax->cobj),  l + 12);
+	}
+	pthread_mutex_lock(&ncci->lock);
+	if (ncci->ncpi)
+		free(ncci->ncpi);
+	ncci->ncpi = ncpi;
+	pthread_mutex_unlock(&ncci->lock);
+	return ncpi;
+}
+
+static void FaxB3Disconnect(struct mFAX *fax, struct mNCCI *ncci)
+{
 	struct mc_buf *mc;
 
-	if (!fax || fax->B3DisconnectDone)
+	if (!fax || !ncci) {
+		wprint("called with NULL fax struct\n");
 		return;
+	}
+	dprint(MIDEBUG_NCCI, "%s: phase:%c B3DisconnectDone:%s b3transfer_active:%s\n",
+		CAPIobjIDstr(&fax->cobj), fax->phase, fax->B3DisconnectDone ? "yes" : "no", fax->b3transfer_active ? "yes" : "no");
+	if (fax->B3DisconnectDone || fax->b3transfer_active)
+		return;
+
+	if (fax->phase != 'E')
+		fax->phase = 'e';
+
 	mc = alloc_mc_buf();
 	if (mc) {
 		fax->B3DisconnectDone = 1;
-		ncciCmsgHeader(fax->ncci, mc, CAPI_DISCONNECT_B3, CAPI_IND);
-		ncpi_len = 8;
-		capimsg_setu16(ncpi, 1, fax->t30stats.bit_rate & 0xffff);
-		/* todo set from stats */
-		capimsg_setu16(ncpi, 3, 0);
-		capimsg_setu16(ncpi, 5, fax->b3_format);
-		capimsg_setu16(ncpi, 7, fax->t30stats.pages_in_file);
-		len = (uint8_t)strlen(fax->RemoteID);
-		if (len > 20)
-			len = 20;
-		ncpi[9] = len;
-		ncpi_len += 1 + len;
-		if (len)
-			strncpy((char *)&ncpi[10], fax->RemoteID, len);
-		ncpi[0] = ncpi_len;
-		mc->cmsg.NCPI = ncpi;
+		ncciCmsgHeader(ncci, mc, CAPI_DISCONNECT_B3, CAPI_IND);
+		fax->rate = fax->t30stats.bit_rate & 0xffff;
+		mc->cmsg.NCPI = CodeNCPI(fax, ncci, fax->t30stats.pages_in_file, 0);
 		if (fax->b3transfer_error) {
 			/* TODO error mapping */
-			mc->cmsg.Reason_B3 = 0x3301;
-		} else
+			ncci->Reason_B3 = CapiProtocolErrorLayer1;
+			mc->cmsg.Reason_B3 = CapiProtocolErrorLayer1;
+		} else {
+			ncci->Reason_B3 = 0;
 			mc->cmsg.Reason_B3 = 0;
-		ncciB3Message(fax->ncci, mc);
+		}
+		ncciB3Message(ncci, mc);
 		free_mc_buf(mc);
 	} else {
 		eprint("No msg buffer\n");
@@ -159,17 +283,18 @@ static void FaxB3Disconnect(struct fax *fax)
 	}
 }
 
-static void FaxB3Ind(struct fax *fax)
+static void FaxB3Ind(struct mFAX *fax, struct mNCCI *ncci)
 {
-	struct mNCCI *ncci = fax->ncci;
 	int ret, tot;
 	uint16_t dlen, dh;
 	unsigned char *dp;
 
+	if (!ncci)
+		return;
 	pthread_mutex_lock(&ncci->lock);
 	if (ncci->recv_handles[ncci->ridx] != 0) {
 		pthread_mutex_unlock(&ncci->lock);
-		wprint("NCCI %06x: Send FaxInd queue full\n", ncci->ncci);
+		wprint("%s: Send FaxInd queue full\n", CAPIobjIDstr(&fax->cobj));
 		return;
 	}
 	tot = fax->b3data_size	- fax->b3data_pos;
@@ -210,29 +335,30 @@ static void FaxB3Ind(struct fax *fax)
 
 	pthread_mutex_unlock(&ncci->lock);
 	if (ret != tot) {
-		wprint("NCCI %06x: : frame with %d + %d bytes only %d bytes are sent - %s\n",
-			ncci->ncci, dlen, CAPI_B3_DATA_IND_HEADER_SIZE, ret, strerror(errno));
+		wprint("%s: : frame with %d + %d bytes only %d bytes are sent - %s\n",
+			CAPIobjIDstr(&fax->cobj), dlen, CAPI_B3_DATA_IND_HEADER_SIZE, ret, strerror(errno));
 	} else
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: frame with %d + %d bytes handle %d was sent ret %d\n",
-			ncci->ncci, CAPI_B3_DATA_IND_HEADER_SIZE, dlen, dh, ret);
+		dprint(MIDEBUG_NCCI_DATA, "%s: phase:%c DATA_B3_IND with %d + %d bytes handle %d was sent ret %d\n",
+			CAPIobjIDstr(&fax->cobj), fax->phase, CAPI_B3_DATA_IND_HEADER_SIZE, dlen, dh, ret);
 }
 
-static int FaxPrepareReceivedTiff(struct fax *fax)
+static int FaxPrepareReceivedTiff(struct mFAX *fax)
 {
-	struct mNCCI *ncci = fax->ncci;
 	int ret, fd;
 	struct stat fst;
 
 	fd = open(fax->file_name, O_RDONLY);
 	if (fd < 0) {
 		fax->b3transfer_error = errno;
-		wprint("NCCI %06x: Cannot open received file %s - %s\n", ncci->ncci, fax->file_name, strerror(fax->b3transfer_error));
+		wprint("%s: Cannot open received file %s - %s\n", CAPIobjIDstr(&fax->cobj), fax->file_name,
+			strerror(fax->b3transfer_error));
 		return -fax->b3transfer_error;
 	}
 	ret = fstat(fd, &fst);
 	if (ret) {
 		fax->b3transfer_error = errno;
-		wprint("NCCI %06x: Cannot fstat received file %s - %s\n", ncci->ncci, fax->file_name, strerror(fax->b3transfer_error));
+		wprint("%s: Cannot fstat received file %s - %s\n", CAPIobjIDstr(&fax->cobj), fax->file_name,
+			strerror(fax->b3transfer_error));
 		close(fd);
 		return -fax->b3transfer_error;
 	}
@@ -240,7 +366,8 @@ static int FaxPrepareReceivedTiff(struct fax *fax)
 	fax->b3data = mmap(NULL, fax->b3data_size, PROT_READ, MAP_FILE, fd, 0);
 	if (!fax->b3data) {
 		fax->b3transfer_error = errno;
-		wprint("NCCI %06x: Cannot map received file %s - %s\n", ncci->ncci, fax->file_name, strerror(fax->b3transfer_error));
+		wprint("%s: Cannot map received file %s - %s\n", CAPIobjIDstr(&fax->cobj), fax->file_name,
+			strerror(fax->b3transfer_error));
 		close(fd);
 		return -fax->b3transfer_error;
 	}
@@ -249,9 +376,8 @@ static int FaxPrepareReceivedTiff(struct fax *fax)
 	return 0;
 }
 
-static void FaxPrepareReceivedData(struct fax *fax)
+static void FaxPrepareReceivedData(struct mFAX *fax, struct mNCCI *ncci)
 {
-	struct mNCCI *ncci = fax->ncci;
 	int ret;
 
 	switch (fax->b3_format) {
@@ -266,64 +392,67 @@ static void FaxPrepareReceivedData(struct fax *fax)
 		ret = FaxPrepareReceivedTiff(fax);
 		break;
 	default:
-		eprint("NCCI %06x: B3 data format %d not supported\n", ncci->ncci, fax->b3_format);
+		eprint("%s: B3 data format %d not supported\n", CAPIobjIDstr(&fax->cobj), fax->b3_format);
 		ret = -1;
 		break;
 	}
 	if (ret < 0)
-		FaxB3Disconnect(fax);
+		FaxB3Disconnect(fax, ncci);
 	else {
 		fax->b3transfer_active = 1;
 		fax->b3data_pos = 0;
-		FaxB3Ind(fax);
+		FaxB3Ind(fax, ncci);
 	}
 }
 
-static void FaxConnectActiveB3(struct fax *fax, struct mc_buf *mc) {
+static void FaxConnectActiveB3(struct mFAX *fax, struct mNCCI *ncci, struct mc_buf *mc) {
 	struct mc_buf *lmc = mc;
-	struct mNCCI *ncci = fax->ncci;
-	unsigned char ncpi[32];
 
+	if (!ncci)
+		return;
 	if (!mc)
 		lmc = alloc_mc_buf();
-	if (fax->lplci->Bprotocol.B3 == 4) {
-		ncpi[0] = 0;
-	} else {
-		capimsg_setu16(ncpi, 1, 14400); // FIXME
-		capimsg_setu16(ncpi, 3, fax->high_res);
-		capimsg_setu16(ncpi, 5, fax->b3_format);
-		capimsg_setu16(ncpi, 7, 0);
-		ncpi[9] = strlen(fax->RemoteID);
-		strncpy((char *)&ncpi[10], fax->RemoteID, 20);
-		ncpi[0] = 10 + ncpi[9];
-	}
-	
+
 	ncciCmsgHeader(ncci, lmc, CAPI_CONNECT_B3_ACTIVE, CAPI_IND);
-	lmc->cmsg.NCPI = ncpi;
-	ncciB3Message(fax->ncci, lmc);
+	if (!fax->outgoing)
+		fax->phase = 'C';
+	lmc->cmsg.NCPI = CodeNCPI(fax, ncci, 0, 1);
+
+	ncciB3Message(ncci, lmc);
 	if (!mc)
 		free_mc_buf(lmc);
 }
 
 static void rt_frame_handler(t30_state_t *t30, void *user_data, int direction, const uint8_t *msg, int len)
 {
-	struct fax *fax = user_data;
-	struct mNCCI *ncci = fax->ncci;
+	struct mFAX *fax = get_mFAX(user_data);
+	const char *ids;
 
-	dprint(MIDEBUG_NCCI, "NCCI %06x: RT handler direction %d msg %p len %d\n", ncci->ncci, direction, msg, len);
-	dhexprint(MIDEBUG_NCCI_DATA, "RT msg:", (unsigned char *)msg, len);
+	if (!fax) {
+		eprint("Unsuccessful get_mFAX()\n");
+		return;
+	}
+	ids = CAPIobjIDstr(&fax->cobj);
+	dprint(MIDEBUG_NCCI, "%s: phase:%c RT handler direction %d msg %p len %d\n",
+		ids, fax->phase, direction, msg, len);
+	dhexprint(MIDEBUG_NCCI_DATA, (char *)ids, (unsigned char *)msg, len);
+	put_mFAX(fax);
 }
 
 static int phaseB_handler(t30_state_t *t30, void *user_data, int result)
 {
-	struct fax *fax = user_data;
-	struct mNCCI *ncci = fax->ncci;
 	const char *ident = "no T30";
-	unsigned char ncpi[132];
 	struct mc_buf *mc;
 	int ret;
 	struct mISDN_ctrl_req creq;
+	struct mNCCI *ncci;
+	struct mFAX *fax = get_mFAX(user_data);
 
+
+	if (!fax) {
+		eprint("Unsuccessful get_mFAX()\n");
+		return 0;
+	}
 	if (fax->outgoing)
 		ident = t30_get_tx_ident(t30);
 	else
@@ -335,10 +464,11 @@ static int phaseB_handler(t30_state_t *t30, void *user_data, int result)
 		ident = t30_get_rx_ident(t30);
 		if (!ident)
 			ident = "no ident";
-		dprint(MIDEBUG_NCCI, "NCCI %06x: PhaseB DIS %s\n", ncci->ncci, ident);
+		dprint(MIDEBUG_NCCI, "%s: PhaseB DIS %s\n", CAPIobjIDstr(&fax->cobj), ident);
 		strncpy(fax->RemoteID, ident, 20);
-		if (fax->lplci->Bprotocol.B3 == 5) {
-			FaxConnectActiveB3(fax, NULL);
+		if (fax->extended) {
+			ncci = get_faxncci(fax);
+			FaxConnectActiveB3(fax, ncci, NULL);
 			if (fax->binst) {
 				fax->binst->waiting = 1;
 				/* Send silence when Underrun */
@@ -375,8 +505,8 @@ static int phaseB_handler(t30_state_t *t30, void *user_data, int result)
 					if (ret < 0)
 						wprint("Error on MISDN_CTRL_RX_OFF ioctl - %s\n", strerror(errno));
 					else
-						dprint(MIDEBUG_NCCI, "NCCI %06x: Dropped %d bytes during waiting\n",
-							ncci->ncci, creq.p2);
+						dprint(MIDEBUG_NCCI, "%s: Dropped %d bytes during waiting\n",
+							CAPIobjIDstr(&fax->cobj), creq.p2);
 					creq.op = MISDN_CTRL_FILL_EMPTY;
 					creq.channel = fax->binst->nr;
 					creq.p1 = 0;
@@ -386,94 +516,125 @@ static int phaseB_handler(t30_state_t *t30, void *user_data, int result)
 					ret = ioctl(fax->binst->fd, IMCTRLREQ, &creq);
 					/* MISDN_CTRL_FILL_EMPTY is not mandatory warn if not supported */
 					if (ret < 0)
-						wprint("NCCI %06x: Error on MISDN_CTRL_FILL_EMPTY ioctl - %s\n",
-							ncci->ncci, strerror(errno));
+						wprint("%s: Error on MISDN_CTRL_FILL_EMPTY ioctl - %s\n",
+							CAPIobjIDstr(&fax->cobj), strerror(errno));
 				}
 			}
-			dprint(MIDEBUG_NCCI, "NCCI %06x: PhaseB wait resumed %d (%d)\n", ncci->ncci,
-				(int)pthread_self(), (int)fax->binst->tid);
+			put_ncci(ncci);
+			dprint(MIDEBUG_NCCI, "%s: PhaseB wait resumed %05d (%05d)\n", CAPIobjIDstr(&fax->cobj),
+				gettid(), fax->binst->tid);
+			fax->phase = 'C';
 		}
 		break;
 	case T30_DCN:
-		dprint(MIDEBUG_NCCI, "NCCI %06x: PhaseB DCN %s\n", ncci->ncci, ident);
+		dprint(MIDEBUG_NCCI, "NCCI %s: PhaseB DCN %s\n", CAPIobjIDstr(&fax->cobj), ident);
 		break;
 	case T30_DCS:
 	case T30_DCS | 0x01:
-		dprint(MIDEBUG_NCCI, "NCCI %06x: PhaseB DCS %s\n", ncci->ncci, ident);
-		if (!fax->outgoing) {
-			mc = alloc_mc_buf();
-			if (mc) {
-				ncciCmsgHeader(fax->ncci, mc, CAPI_CONNECT_B3, CAPI_IND);
-				if (fax->lplci->Bprotocol.B3 == 4) {
-					ncpi[0] = 0;
-				} else {
-					/* TODO proto 5 */
-					ncpi[0] = 0;
-				}
-				mc->cmsg.NCPI = ncpi;
-				ncciB3Message(fax->ncci, mc);
-				free_mc_buf(mc);
-			} else
-				eprint("No msg buffer\n");
-		}
+		dprint(MIDEBUG_NCCI, "NCCI %s: PhaseB DCS(%x) %s\n", CAPIobjIDstr(&fax->cobj), result, ident);
 		strncpy(fax->RemoteID, ident, 20);
+		if (!fax->outgoing) {
+			ncci = get_faxncci(fax);
+			if (ncci) {
+				if (ncci->ncci_m.state == ST_NCCI_N_0) {
+					mc = alloc_mc_buf();
+					if (mc) {
+						ncciCmsgHeader(ncci, mc, CAPI_CONNECT_B3, CAPI_IND);
+						mc->cmsg.NCPI = CodeNCPI(fax, ncci, 0, 1);
+						ncciB3Message(ncci, mc);
+						free_mc_buf(mc);
+					} else
+						eprint("No msg buffer\n");
+				} else
+					wprint("%s: Received second DCS in state %s - ignored\n",
+						CAPIobjIDstr(&fax->cobj), _mi_ncci_st2str(ncci));
+				put_ncci(ncci);
+			} else
+				wprint("%s: NCCI gone - no CAPI_CONNECT_B3 sent\n", CAPIobjIDstr(&fax->cobj));
+		}
 		break;
 	default:
-		dprint(MIDEBUG_NCCI, "NCCI %06x: PhaseB called result 0x%02x :%s: ident %s\n", ncci->ncci,
+		dprint(MIDEBUG_NCCI, "%s: PhaseB called result 0x%02x :%s: ident %s\n", CAPIobjIDstr(&fax->cobj),
 			result, t30_frametype(result), ident);
 		break;
 	}
+	put_mFAX(fax);
 	return 0;
 }
 
 static int phaseD_handler(t30_state_t *t30, void *user_data, int result)
 {
-	struct fax *fax = user_data;
-	struct mNCCI *ncci = fax->ncci;
+	struct mFAX *fax = get_mFAX(user_data);
 
-	dprint(MIDEBUG_NCCI, "NCCI %06x: PhaseD called result 0x%02x :%s:\n", ncci->ncci,
+	if (!fax) {
+		eprint("Unsuccessful get_mFAX()\n");
+		return 0;
+	}
+	fax->phase = 'D';
+	dprint(MIDEBUG_NCCI, "%s: PhaseD called result 0x%02x :%s:\n", CAPIobjIDstr(&fax->cobj),
 		result, t30_frametype(result));
+	switch(result) {
+	case T30_MPS:
+	case T30_MPS | 1:
+	case T30_MCF:
+	case T30_MCF | 1:
+		fax->phase = 'C';
+		break;
+	default:
+		break;
+	}
+	put_mFAX(fax);
 	return 0;
 }
 
 static void phaseE_handler(t30_state_t *t30, void *user_data, int result)
 {
-	struct fax *fax = user_data;
-	struct mNCCI *ncci = fax->ncci;
+	const char *ids;
+	struct mFAX *fax = get_mFAX(user_data);
+	struct mNCCI *ncci;
 
-	dprint(MIDEBUG_NCCI, "NCCI %06x: PhaseE called result 0x%02x\n", ncci->ncci, result);
+	if (!fax) {
+		eprint("Unsuccessful get_mFAX()\n");
+		return;
+	}
+	fax->phase = 'E';
+	dprint(MIDEBUG_NCCI, "%s: PhaseE called result 0x%02x\n", CAPIobjIDstr(&fax->cobj), result);
 	fax->phE_res = result;
 	t30_get_transfer_statistics(t30, &fax->t30stats);
-	StopDownLink(fax);
-	dprint(MIDEBUG_NCCI, "NCCI %06x: BitRate %d\n", ncci->ncci, fax->t30stats.bit_rate);
-	dprint(MIDEBUG_NCCI, "NCCI %06x: Pages RX: %d   TX: %d InFile: %d\n", ncci->ncci,
+	ncci = get_faxncci(fax);
+	StopDownLink(fax, ncci);
+	ids = CAPIobjIDstr(&fax->cobj);
+	dprint(MIDEBUG_NCCI, "%s: BitRate %d\n", ids, fax->t30stats.bit_rate);
+	dprint(MIDEBUG_NCCI, "%s: Pages RX: %d   TX: %d InFile: %d\n", ids,
 		fax->t30stats.pages_rx, fax->t30stats.pages_tx, fax->t30stats.pages_in_file);
-	dprint(MIDEBUG_NCCI, "NCCI %06x: Resolution X: %d    Y: %d\n", ncci->ncci,
+	dprint(MIDEBUG_NCCI, "%s: Resolution X: %d    Y: %d\n", ids,
 		fax->t30stats.x_resolution, fax->t30stats.y_resolution);
-	dprint(MIDEBUG_NCCI, "NCCI %06x: Width: %d  Length: %d\n", ncci->ncci, fax->t30stats.width, fax->t30stats.length);
-	dprint(MIDEBUG_NCCI, "NCCI %06x: Size: %d  Encoding: %d\n", ncci->ncci,
+	dprint(MIDEBUG_NCCI, "%s: Width: %d  Length: %d\n", ids, fax->t30stats.width, fax->t30stats.length);
+	dprint(MIDEBUG_NCCI, "%s: Size: %d  Encoding: %d\n", ids,
 		fax->t30stats.image_size, fax->t30stats.encoding);
-	dprint(MIDEBUG_NCCI, "NCCI %06x: Bad Rows: %d longest: %d\n", ncci->ncci,
+	dprint(MIDEBUG_NCCI, "%s: Bad Rows: %d longest: %d\n", ids,
 		fax->t30stats.bad_rows, fax->t30stats.longest_bad_row_run);
-	dprint(MIDEBUG_NCCI, "NCCI %06x: ECM Retries:%d  Status: %d\n", ncci->ncci,
+	dprint(MIDEBUG_NCCI, "%s: ECM Retries:%d  Status: %d\n", ids,
 		fax->t30stats.error_correcting_mode_retries, fax->t30stats.current_status);
 	if (result == 0) {
 		if (fax->outgoing) {
-			FaxB3Disconnect(fax);
+			FaxB3Disconnect(fax, ncci);
 		} else {
-			FaxPrepareReceivedData(fax);
+			FaxPrepareReceivedData(fax, ncci);
 		}
 	} else {
 		fax->b3transfer_error = 1;
 	}
+	put_ncci(ncci);
+	put_mFAX(fax);
 }
 
 static void spandsp_msg_log(int level, const char *text)
 {
-	dprint(MIDEBUG_NCCI, "Spandsp: L%d, %s", level, text);
+	dprint(MIDEBUG_NCCI_DATA, "Spandsp: L%d, %s", level, text);
 }
 
-static int InitFax(struct fax *fax)
+static int InitFax(struct mFAX *fax)
 {
 	int ret = 0, l;
 	unsigned char *p;
@@ -572,7 +733,7 @@ static int InitFax(struct fax *fax)
 		dprint(MIDEBUG_NCCI, "Ident:%s Header: %s\n", fax->StationID, fax->HeaderInfo);
 
 		if (fax->outgoing) {
-			if (fax->lplci->Bprotocol.B3 == 4)
+			if (!fax->extended)
 				t30_set_tx_file(fax->t30, fax->file_name, -1, -1);
 		} else
 			t30_set_rx_file(fax->t30, fax->file_name, -1);
@@ -590,29 +751,39 @@ static int InitFax(struct fax *fax)
 	return ret;
 }
 
-static struct fax *mFaxCreate(struct BInstance	*bi)
+static struct mFAX *mFaxCreate(struct BInstance	*bi)
 {
-	struct fax *nf;
+	struct mFAX *nf;
 	int ret, val;
 	time_t cur_time;
-	struct mISDN_ctrl_req creq;
+	struct mPLCI *plci;
+	struct mNCCI *ncci;
 
-	pthread_rwlock_wrlock(&bi->lp->lock);
 	nf = bi->b3data;
 	if (nf) {
-		dprint(MIDEBUG_NCCI, "PLCI %04x: already created NCCI: %06x\n", bi->lp->plci, nf->ncci->ncci);
-		pthread_rwlock_unlock(&bi->lp->lock);
+		wprint("PLCI %04x: already created %s\n", bi->lp->cobj.id, CAPIobjIDstr(&nf->cobj));
 		return nf;
 	}
 	nf = calloc(1, sizeof(*nf));
 	if (nf) {
 		nf->file_d = -2;
-		nf->ncci = ncciCreate(bi->lp);
-		if (nf->ncci) {
+		ncci = ncciCreate(bi->lp);
+		if (ncci) {
+			nf->cobj.id2 = bi->nr;
+			ret = init_cobj_registered(&nf->cobj, &ncci->cobj, Cot_FAX, 0x00ffffff);
+			if (ret) {
+				cleanup_ncci(ncci);
+				put_cobj(&ncci->cobj);
+				free(nf);
+				return NULL;
+			}
+			nf->phase = 'A'; /* initial */
 			nf->binst = bi;
 			nf->lplci = bi->lp;
-			nf->outgoing = nf->lplci->PLCI->outgoing;
-			dprint(MIDEBUG_NCCI, "NCCI %06x: create %s\n", nf->ncci->ncci, nf->outgoing ? "outgoing" : "incoming");
+			plci = p4lPLCI(bi->lp);
+			nf->outgoing = plci->outgoing;
+			dprint(MIDEBUG_NCCI, "%s: create %s\n", CAPIobjIDstr(&ncci->cobj),
+				nf->outgoing ? "outgoing" : "incoming");
 			if (nf->lplci->Bprotocol.B1cfg[0])
 				nf->rate = CAPIMSG_U16(nf->lplci->Bprotocol.B1cfg, 1);
 			if (nf->lplci->Bprotocol.B3cfg[0]) {
@@ -622,6 +793,7 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 					if (val)
 						nf->high_res = 1;
 				} else { /* 5 - extended */
+					nf->extended = 1;
 					if (val & 0x0001)
 						nf->high_res = 1;
 					if (val & 0x0002)
@@ -636,60 +808,49 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 			if (!nf->outgoing) {
 				ret = InitFax(nf);
 				if (ret) {
-					wprint("Cannot InitFax for incoming PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
+					wprint("Cannot InitFax for incoming PLCI %04x\n", bi->lp ? bi->lp->cobj.id : 0xffff);
+					cleanup_ncci(ncci);
+					put_cobj(&ncci->cobj);
 					free(nf);
 					nf = NULL;
-					pthread_rwlock_unlock(&bi->lp->lock);
 					return nf;
 				}
 			}
 #ifdef HW_FIFO_STATUS_ON
-			ncciL4L3(nf->ncci, PH_CONTROL_REQ, HW_FIFO_STATUS_ON, 0, NULL, NULL);
+			ncciL4L3(ncci, PH_CONTROL_REQ, HW_FIFO_STATUS_ON, 0, NULL, NULL);
 #endif
-			/* Set buffersize */
-			creq.op = MISDN_CTRL_RX_BUFFER;
-			creq.channel = bi->nr;
-			creq.p1 = DEFAULT_PKT_SIZE; // minimum
-			creq.p2 = MISDN_CTRL_RX_SIZE_IGNORE; // do not change max
-			creq.unused = 0;
-			ret = ioctl(bi->fd, IMCTRLREQ, &creq);
-			/* MISDN_CTRL_RX_BUFFER is not mandatory warn if not supported */
-			if (ret < 0)
-				wprint("Error on MISDN_CTRL_RX_BUFFER  ioctl - %s\n", strerror(errno));
-			else
-				dprint(MIDEBUG_NCCI, "NCCI %06x: MISDN_CTRL_RX_BUFFER  values: min=%d -> %d max=%d\n",
-					nf->ncci->ncci, creq.p1, DEFAULT_PKT_SIZE, creq.p2);
 			nf->startdownlink = 1;
 			nf->modem_active = 1;
+			put_ncci(ncci);
 		} else {
-			eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
+			eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->cobj.id : 0xffff);
 			free(nf);
 			nf = NULL;
 		}
 	}
-	bi->b3data = nf;
-	pthread_rwlock_unlock(&bi->lp->lock);
+	bi->b3data = get_mFAX(nf);
 	return nf;
 }
 
-void mFaxFree(struct fax *fax)
+void Free_Faxobject(struct mCAPIobj *co)
 {
+	struct mFAX *fax;
 	int ret;
 
-	dprint(MIDEBUG_NCCI, "Free fax data structs:%s%s%s%s\n",
+	fax = container_of(co, struct mFAX, cobj);
+	dprint(MIDEBUG_NCCI, "%s: phase:%c free fax data structs:%s%s%s\n",
+		CAPIobjIDstr(&fax->cobj), fax->phase,
 		fax->fax ? " SPANDSP" : "",
-		fax->ncci ? " NCCI" : "",
 		fax->sff.data ? " SFF data" : "",
 		fax->b3data ? " B3" :"");
-	if (fax->fax)
+
+	if (fax->fax) {
 		fax_free(fax->fax);
-	fax->fax = NULL;
-	if (fax->ncci)
-		ncciReleaseLink(fax->ncci);
-	fax->ncci = NULL;
+		fax->fax = NULL;
+	}
 	if (fax->sff.data) {
-		dprint(MIDEBUG_NCCI, "SFF data:%p fax->b3data %p\n",
-			fax->sff.data, fax->b3data);
+		dprint(MIDEBUG_NCCI, "%s: SFF data:%p fax->b3data %p\n",
+			CAPIobjIDstr(&fax->cobj), fax->sff.data, fax->b3data);
 		if (fax->sff.data && fax->b3data != fax->sff.data)
 			free(fax->sff.data);
 		fax->sff.data = NULL;
@@ -705,62 +866,144 @@ void mFaxFree(struct fax *fax)
 	if (!KeepTemporaryFiles) {
 		ret = unlink(fax->file_name);
 		if (ret)
-			wprint("Temporary file %s - not deleted because %s\n", fax->file_name, strerror(errno));
+			wprint("%s: Temporary file %s - not deleted because %s\n", CAPIobjIDstr(&fax->cobj),
+				fax->file_name, strerror(errno));
 		else
-			dprint(MIDEBUG_NCCI, "Removed temporary file %s\n", fax->file_name);
+			dprint(MIDEBUG_NCCI, "%s: Removed temporary file %s\n", CAPIobjIDstr(&fax->cobj), fax->file_name);
 	}
-	free(fax);
+	if (co->parent) {
+		if (co->parent->listhead)
+			delist_cobj(co);
+		put_cobj(co->parent);
+	}
+	free_capiobject(&fax->cobj, fax);
 }
 
-static void mFaxRelease(struct fax *fax)
+
+static void cleanup_Fax(struct mFAX *fax, struct mNCCI *ncci)
 {
-	dprint(MIDEBUG_NCCI, "fax->binst %p b3data %p\n", fax->binst, fax->binst ? fax->binst->b3data : NULL);
-	if (fax->binst) {
-		fax->binst->b3data = NULL;
+	if (fax->cobj.cleaned) {
+		wprint("%s: already cleaned\n", CAPIobjIDstr(&fax->cobj));
+		return;
 	}
-	mFaxFree(fax);
+
+	dprint(MIDEBUG_NCCI, "%s: cleaning phase:%c\n",
+		CAPIobjIDstr(&fax->cobj), fax->phase);
+
+	fax->cobj.cleaned = 1;
+
+	if (ncci)
+		pthread_mutex_lock(&ncci->lock);
+	fax->modem_active = 0;
+	fax->modem_end = 1;
+	if (ncci)
+		pthread_mutex_unlock(&ncci->lock);
+	if (ncci) {
+		if (!fax->B3DisconnectDone) {
+			fax->B3DisconnectDone = 1;
+			ncciReleaseLink(ncci);
+		}
+		delist_cobj(&fax->cobj);
+	}
+}
+
+static void mFaxRelease(struct mFAX *fax, struct mNCCI *ncci)
+{
+	dprint(MIDEBUG_NCCI, "%s: phase:%c fax->binst %p b3data %p\n",
+		CAPIobjIDstr(&fax->cobj), fax->phase, fax->binst, fax->binst ? fax->binst->b3data : NULL);
+	if (fax->binst) {
+		if (fax->binst->b3data) {
+			fax->binst->b3data = NULL;
+			put_mFAX(fax); /* b3data ref gone */
+		}
+	}
+	cleanup_Fax(fax, ncci);
 }
 
 void FaxReleaseLink(struct BInstance *bi)
 {
-	struct fax *fax;
+	struct mFAX *fax;
+	struct mNCCI *ncci;
 
 	if (!bi) {
 		eprint("B instance gone\n");
 		return;
 	}
-	fax = bi->b3data;
+	fax = get_mFAX(bi->b3data);
 	if (!fax) {
 		eprint("No fax struct\n");
 		return;
 	}
+	ncci = get_faxncci(fax);
 	bi->b3data = NULL;
-	ncciReleaseLink(fax->ncci);
-	fax->ncci = NULL;
-	mFaxRelease(fax);
+	put_mFAX(fax);	/* ref to b3data */
+	mFaxRelease(fax, ncci);
+	put_ncci(ncci);
+	put_mFAX(fax);	/* ref from get_mFAX() */
 }
 
-static void FaxSendDown(struct fax *fax, int ind)
+static int DisconnectIndication(struct mFAX *fax, struct mNCCI *ncci, struct mc_buf *mc)
+{
+	int ret = 0;
+
+	dprint(MIDEBUG_NCCI, "%s: phase:%c D-channel disconnect\n",
+		CAPIobjIDstr(&fax->cobj), fax->phase);
+	if (fax->cobj.cleaned)
+		return ret; /* Do disconnect in lPLCI */
+
+	if (ncci) {
+		switch (fax->phase) {
+		case 'A':
+			ncci->Reason_B3 = CapiConnectionNoSuccess_noG3;
+			break;
+		case 'B':
+			if (fax->RemoteID[0]) {
+				ncci->Reason_B3 = CapiConnectionNoSuccess_TrainingErr;
+				CodeNCPI(fax, ncci, 0, 0);
+			} else
+				ncci->Reason_B3 = CapiConnectionNoSuccess_noG3;
+			break;
+		case 'C':
+			ncci->Reason_B3 = CapiDisconnectDuringTrans_RemoteAbort;
+			CodeNCPI(fax, ncci, 0, 0);
+			break;
+		default: /* phase D or E */
+			ret = -EBUSY;
+			break;
+		}
+	}
+
+	return ret;
+}
+
+static void FaxSendDown(struct mFAX *fax, struct mNCCI *ncci, int ind)
 {
 	int pktid, l, tot, ret, i;
-	struct mNCCI *ncci = fax->ncci;
 	//struct mc_buf *mc;
 	int16_t wav_buf[MAX_DATA_SIZE];
 	int16_t *w;
 	uint8_t *p, sbuf[MAX_DATA_SIZE];
 
+	if (!ncci)
+		return;
 	pthread_mutex_lock(&ncci->lock);
+	if (!fax->modem_active) {
+		dprint(MIDEBUG_NCCI, "%s: Modem not active%s - do not send down anymore\n",
+			CAPIobjIDstr(&fax->cobj), fax->modem_active ? " and end" : "");
+		pthread_mutex_unlock(&ncci->lock);
+		return;
+	}
 #ifdef USE_DLBUSY
 	if (!ncci->xmit_handles[ncci->oidx].pkt) {
 		ncci->dlbusy = 0;
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: no data\n", ncci->ncci);
+		dprint(MIDEBUG_NCCI_DATA, "%s: no data\n", CAPIobjIDstr(&fax->cobj));
 		pthread_mutex_unlock(&ncci->lock);
 		return;
 	}
 	mc = ncci->xmit_handles[ncci->oidx].pkt;
 #endif
 	if (!ncci->BIlink) {
-		wprint("NCCI %06x: BInstance is gone - packet ignored\n", ncci->ncci);
+		wprint("%s: BInstance is gone - packet ignored\n", CAPIobjIDstr(&fax->cobj));
 		pthread_mutex_unlock(&ncci->lock);
 		return;
 	}
@@ -773,7 +1016,7 @@ static void FaxSendDown(struct fax *fax, int ind)
 	ncci->xmit_handles[ncci->oidx].PktId = pktid;
 	if (ncci->flowmode == flmPHDATA) {
 		if (ncci->dlbusy) {
-			wprint("NCCI %06x: dlbusy set\n", ncci->ncci);
+			wprint("%s: dlbusy set\n", CAPIobjIDstr(&fax->cobj));
 			pthread_mutex_unlock(&ncci->lock);
 			return;
 		} else
@@ -785,11 +1028,16 @@ static void FaxSendDown(struct fax *fax, int ind)
 	ncci->down_iv[1].iov_base = mc->rp;
 	ncci->xmit_handles[ncci->oidx].sent = l;
 #else
+	l = ncci->BIlink->rx_min;
 	pthread_mutex_unlock(&ncci->lock);
-	l = DEFAULT_PKT_SIZE;
-	ret = fax_tx(fax->fax, wav_buf, l);
-	dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: got %d/%d samples from faxmodem(%p)\n",
-		ncci->ncci, ret, l, fax->fax);
+	if (fax->fax) {
+		ret = fax_tx(fax->fax, wav_buf, l);
+	} else {
+		wprint("%s: fax status gone - do not send down anymore\n", CAPIobjIDstr(&fax->cobj));
+		return;
+	}
+	dprint(MIDEBUG_NCCI_DATA, "%s: phase:%c got %d/%d samples from faxmodem(%p)\n",
+		CAPIobjIDstr(&fax->cobj), fax->phase, ret, l, fax->fax);
 
 	w = wav_buf;
 	p = sbuf;
@@ -799,7 +1047,13 @@ static void FaxSendDown(struct fax *fax, int ind)
 		*p++ = slin2alaw[*w++];
 	pthread_mutex_lock(&ncci->lock);
 	if (!ncci->BIlink) {
-		wprint("NCCI %06x: BInstance is gone - packet ignored\n", ncci->ncci);
+		wprint("%s: BInstance is gone - packet ignored\n", CAPIobjIDstr(&fax->cobj));
+		pthread_mutex_unlock(&ncci->lock);
+		return;
+	}
+	if (!fax->modem_active) {
+		dprint(MIDEBUG_NCCI, "%s: Modem not active%s - do not send down anymore\n",
+			CAPIobjIDstr(&fax->cobj), fax->modem_active ? " and end" : "");
 		pthread_mutex_unlock(&ncci->lock);
 		return;
 	}
@@ -811,8 +1065,8 @@ static void FaxSendDown(struct fax *fax, int ind)
 	tot = l + ncci->down_iv[0].iov_len;
 	ret = sendmsg(ncci->BIlink->fd, &ncci->down_msg, MSG_DONTWAIT);
 	if (ret != tot) {
-		wprint("NCCI %06x: send returned %d while sending %d bytes type %s id %d - %s\n", ncci->ncci, ret, tot,
-		       _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, strerror(errno));
+		wprint("%s: send returned %d while sending %d bytes type %s id %d - %s\n", CAPIobjIDstr(&fax->cobj),
+			ret, tot, _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, strerror(errno));
 #ifdef USE_DLBUSY
 		ncci->dlbusy = 0;
 		ncci->xmit_handles[ncci->oidx].pkt = NULL;
@@ -825,13 +1079,14 @@ static void FaxSendDown(struct fax *fax, int ind)
 		return;
 	} else
 #ifdef USE_DLBUSY
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send down %d bytes type %s id %d current oidx[%d] sent %d/%d %s\n",
-			ncci->ncci, ret, _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, ncci->oidx,
+		dprint(MIDEBUG_NCCI_DATA, "%s: send down %d bytes type %s id %d current oidx[%d] sent %d/%d %s\n",
+			CAPIobjIDstr(&fax->cobj), ret, _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, ncci->oidx,
 			ncci->xmit_handles[ncci->oidx].sent, ncci->xmit_handles[ncci->oidx].dlen,
 			ind ? "ind" : "cnf");
 #else
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send down %d bytes type %s id %d sent %d - %p\n",
-			ncci->ncci, ret, _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, ret, fax->fax);
+		dprint(MIDEBUG_NCCI_DATA, "%s: send down %d bytes type %s id %d sent %d - %p\n",
+			CAPIobjIDstr(&fax->cobj), ret, _mi_msg_type2str(ncci->down_header.prim),
+			ncci->down_header.id, ret, fax->fax);
 #endif
 #ifdef USE_DLBUSY
 	ncci->dlbusy = 1;
@@ -842,10 +1097,9 @@ static void FaxSendDown(struct fax *fax, int ind)
 	pthread_mutex_unlock(&ncci->lock);
 }
 
-static int FaxDataInd(struct fax *fax, struct mc_buf *mc)
+static int FaxDataInd(struct mFAX *fax, struct mNCCI *ncci, struct mc_buf *mc)
 {
 	int i, ret;
-	struct mNCCI *ncci = fax->ncci;
 	uint16_t dlen;
 	struct mISDNhead *hh;
 	int16_t wav_buf[MAX_DATA_SIZE];
@@ -855,16 +1109,17 @@ static int FaxDataInd(struct fax *fax, struct mc_buf *mc)
 
 	hh = (struct mISDNhead *)mc->rb;
 	dlen = mc->len - sizeof(*hh);
+	if (!ncci)
+		return -EINVAL;
 	pthread_mutex_lock(&ncci->lock);
 	if ((!ncci->BIlink) || (!fax->fax)) {
-		wprint("NCCI %06x: frame with %d bytes dropped Blink(%p) or spandsp fax(%p) gone\n",
-			ncci->ncci, dlen, ncci->BIlink, fax->fax);
+		wprint("%s: frame with %d bytes dropped Blink(%p) or spandsp fax(%p) gone\n",
+			CAPIobjIDstr(&fax->cobj), dlen, ncci->BIlink, fax->fax);
 		pthread_mutex_unlock(&ncci->lock);
 		return -EINVAL;
-	} else
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: fax(%p)\n", ncci->ncci, fax->fax);
+	}
 	if (!fax->modem_active) {
-		wprint("NCCI %06x: Modem not active %d bytes dropped\n", ncci->ncci, dlen);
+		wprint("%s: Modem not active %d bytes dropped\n", CAPIobjIDstr(&fax->cobj), dlen);
 		pthread_mutex_unlock(&ncci->lock);
 		return -ENOTCONN;
 	}
@@ -872,7 +1127,7 @@ static int FaxDataInd(struct fax *fax, struct mc_buf *mc)
 	pthread_mutex_unlock(&ncci->lock);
 
 	if (dlen > MAX_DATA_SIZE) {
-		wprint("NCCI %06x: frame overflow %d/%d - truncated\n", ncci->ncci, dlen, MAX_DATA_SIZE);
+		wprint("%s: frame overflow %d/%d - truncated\n", CAPIobjIDstr(&fax->cobj), dlen, MAX_DATA_SIZE);
 		dlen =  MAX_DATA_SIZE;
 	}
 	w = wav_buf;
@@ -883,7 +1138,8 @@ static int FaxDataInd(struct fax *fax, struct mc_buf *mc)
 		*w++ = alaw2lin[*p++];
 
 	ret = fax_rx(fst, wav_buf, dlen);
-	dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send %d samples to faxmodem(%p)ret %d\n", ncci->ncci, dlen, fax->fax, ret);
+	dprint(MIDEBUG_NCCI_DATA, "%s: phase:%c send %d samples to faxmodem(%p)ret %d\n",
+		CAPIobjIDstr(&fax->cobj), fax->phase, dlen, fax->fax, ret);
 #ifdef USE_DLBUSY
 	/* try to get same amount from faxmodem */
 	ret = fax_tx(fst, wav_buf, dlen);
@@ -899,7 +1155,7 @@ static int FaxDataInd(struct fax *fax, struct mc_buf *mc)
 	pthread_mutex_lock(&ncci->lock);
 
 	if (ncci->xmit_handles[ncci->iidx].pkt) {
-		wprint("Fax NCCI %06x: SendQueueFull\n", ncci->ncci);
+		wprint("%s: SendQueueFull\n", CAPIobjIDstr(&fax->cobj));
 		pthread_mutex_unlock(&ncci->lock);
 		return -EBUSY;
 	}
@@ -917,43 +1173,42 @@ static int FaxDataInd(struct fax *fax, struct mc_buf *mc)
 		ret = 0;
 	pthread_mutex_unlock(&ncci->lock);
 	if (ret)
-		FaxSendDown(fax, 1);
+		FaxSendDown(fax, ncci, 1);
 #else
 	free_mc_buf(mc);
 	if (fax->startdownlink) {
 		fax->startdownlink = 0;
-		FaxSendDown(fax, 1);
+		FaxSendDown(fax, ncci, 1);
 	}
 #endif
 	return 0;
 }
 
-static void FaxDataConf(struct fax *fax, struct mc_buf *mc)
+static void FaxDataConf(struct mFAX *fax, struct mNCCI *ncci, struct mc_buf *mc)
 {
 #ifdef USE_DLBUSY
 	int i;
-	struct mNCCI *ncci = fax->ncci;
 	struct mISDNhead *hh;
 
 	if (!fax || !ncci)
 		return;
 	pthread_mutex_lock(&ncci->lock);
 	if ((!ncci->BIlink) || (!fax->fax)) {
-		wprint("NCCI %06x: Blink(%p) or spandsp fax(%p) gone\n",
-			ncci->ncci, ncci->BIlink, fax->fax);
+		wprint("%s: Blink(%p) or spandsp fax(%p) gone\n", CAPIobjIDstr(&fax->cobj), ncci->BIlink, fax->fax);
 		pthread_mutex_unlock(&ncci->lock);
 		free_mc_buf(mc);
 		return;
 	}
 	if (!fax->modem_active) {
-		wprint("NCCI %06x: Modem not active\n", ncci->ncci);
+		wprint("%s: Modem not active\n", CAPIobjIDstr(&fax->cobj));
 		pthread_mutex_unlock(&ncci->lock);
 		free_mc_buf(mc);
 		return;
 	}
 	hh = (struct mISDNhead *)mc->rb;
 	if (ncci->flowmode != flmPHDATA) {
-		wprint("Fax NCCI %06x: Got DATA confirm for %x - but flow mode(%d)\n", ncci->ncci, hh->id, ncci->flowmode);
+		wprint("%s: Got DATA confirm for %x - but flow mode(%d)\n", CAPIobjIDstr(&fax->cobj),
+			hh->id, ncci->flowmode);
 		pthread_mutex_unlock(&ncci->lock);
 		free_mc_buf(mc);
 		return;
@@ -966,15 +1221,15 @@ static void FaxDataConf(struct fax *fax, struct mc_buf *mc)
 		}
 	}
 	if (i == ncci->window) {
-		wprint("Fax NCCI %06x: Got DATA confirm for %x - but ID not found\n", ncci->ncci, hh->id);
+		wprint("%s: Got DATA confirm for %x - but ID not found\n", CAPIobjIDstr(&fax->cobj), hh->id);
 		for (i = 0; i < ncci->window; i++)
-			wprint("Fax NCCI %06x: PktId[%d] %x\n", ncci->ncci, i, ncci->xmit_handles[i].PktId);
+			wprint("%s: PktId[%d] %x\n", CAPIobjIDstr(&fax->cobj), i, ncci->xmit_handles[i].PktId);
 		pthread_mutex_unlock(&ncci->lock);
 		free_mc_buf(mc);
 		return;
 	}
-	dprint(MIDEBUG_NCCI_DATA, "Fax NCCI:%06x: confirm xmit_handles[%d] pktid=%x handle=%d\n", ncci->ncci, i, hh->id,
-	       ncci->xmit_handles[i].DataHandle);
+	dprint(MIDEBUG_NCCI_DATA, "%s: phase:%c confirm xmit_handles[%d] pktid=%x handle=%d\n",
+		CAPIobjIDstr(&fax->cobj), fax->phase, i, hh->id, ncci->xmit_handles[i].DataHandle);
 	free_mc_buf(mc);
 	mc = ncci->xmit_handles[i].pkt;
 	ncci->xmit_handles[i].pkt = NULL;
@@ -982,23 +1237,25 @@ static void FaxDataConf(struct fax *fax, struct mc_buf *mc)
 	ncci->dlbusy = 0;
 	free_mc_buf(mc);
 	pthread_mutex_unlock(&ncci->lock);
-	FaxSendDown(fax, 0);
+	FaxSendDown(fax, ncci, 0);
 #else
 	free_mc_buf(mc);
-	FaxSendDown(fax, 0);
+	FaxSendDown(fax, ncci, 0);
 #endif
 }
 
-static void FaxDataResp(struct fax *fax, struct mc_buf *mc)
+static void FaxDataResp(struct mFAX *fax, struct mNCCI *ncci, struct mc_buf *mc)
 {
 	int i;
-	struct mNCCI *ncci = fax->ncci;
 	uint16_t dh = CAPIMSG_RESP_DATAHANDLE(mc->rb);
 
+	if (!ncci)
+		return;
 	pthread_mutex_lock(&ncci->lock);
 	for (i = 0; i < ncci->window; i++) {
 		if (ncci->recv_handles[i] == dh) {
-			dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: data handle %d acked at pos %d\n", ncci->ncci, dh, i);
+			dprint(MIDEBUG_NCCI_DATA, "%s: data handle %d acked at pos %d\n",
+				CAPIobjIDstr(&fax->cobj), dh, i);
 			ncci->recv_handles[i] = 0;
 			break;
 		}
@@ -1009,16 +1266,16 @@ static void FaxDataResp(struct fax *fax, struct mc_buf *mc)
 		dp = deb;
 		for (i = 0; i < ncci->window; i++)
 			dp += sprintf(dp, " [%d]=%d", i, ncci->recv_handles[i]);
-		wprint("NCCI %06x: data handle %d not in%s\n", ncci->ncci, dh, deb);
+		wprint("%s: data handle %d not in%s\n", CAPIobjIDstr(&fax->cobj), dh, deb);
 	}
 	pthread_mutex_unlock(&ncci->lock);
 	if (fax->b3transfer_active)
-		FaxB3Ind(fax);
+		FaxB3Ind(fax, ncci);
 	if (fax->b3transfer_end)
-		FaxB3Disconnect(fax);
+		FaxB3Disconnect(fax, ncci);
 }
 
-static int FaxWriteTiff(struct fax *fax, struct mc_buf *mc)
+static int FaxWriteTiff(struct mFAX *fax, struct mc_buf *mc)
 {
 	int ret, res = 0;
 
@@ -1026,7 +1283,8 @@ static int FaxWriteTiff(struct fax *fax, struct mc_buf *mc)
 		fax->file_d = open(fax->file_name, O_WRONLY | O_CREAT, S_IWUSR | S_IRUSR | S_IRGRP);
 		if (fax->file_d < 0) {
 			res = -errno;
-			wprint("NCCI %06x: Cannot open TIFF %s for writing - %s\n", fax->ncci->ncci, fax->file_name, strerror(errno));
+			wprint("%s: Cannot open TIFF %s for writing - %s\n", CAPIobjIDstr(&fax->cobj),
+				fax->file_name, strerror(errno));
 		}
 	}
 	if (fax->file_d < 0) {
@@ -1036,8 +1294,8 @@ static int FaxWriteTiff(struct fax *fax, struct mc_buf *mc)
 		ret = write(fax->file_d, mc->rp, mc->len);
 		if (ret != mc->len) {
 			res = -errno;
-			wprint("NCCI %06x: Write data to %s only %d/%d - %s\n", fax->ncci->ncci, fax->file_name,
-					ret, mc->len, strerror(ret));
+			wprint("%s: Write data to %s only %d/%d - %s\n", CAPIobjIDstr(&fax->cobj),
+				fax->file_name, ret, mc->len, strerror(ret));
 			if (!res)
 				res = -1;
 		}
@@ -1045,16 +1303,17 @@ static int FaxWriteTiff(struct fax *fax, struct mc_buf *mc)
 	return res;
 }
 
-static int FaxDataB3Req(struct fax *fax, struct mc_buf *mc)
+static int FaxDataB3Req(struct mFAX *fax, struct mNCCI *ncci, struct mc_buf *mc)
 {
-	struct mNCCI *ncci = fax->ncci;
 	int ret;
 	uint16_t off, dlen, flg, dh, info;
 	// unsigned char *dp;
 
+	if (!ncci)
+		return -EINVAL;
 	off = CAPIMSG_LEN(mc->rb);
 	if (off != 22 && off != 30) {
-		wprint("NCCI %06x: Illegal message len %d\n", ncci->ncci, off);
+		wprint("%s: Illegal message len %d\n", CAPIobjIDstr(&fax->cobj), off);
 		AnswerDataB3Req(ncci, mc, CapiIllMessageParmCoding);
 		return 0;
 	}
@@ -1086,17 +1345,17 @@ static int FaxDataB3Req(struct fax *fax, struct mc_buf *mc)
 		ret = FaxWriteTiff(fax, mc);
 		break;
 	default:
-		wprint("NCCI %06x: B3 data format %d not supported\n", ncci->ncci, fax->b3_format);
+		wprint("%s: B3 data format %d not supported\n", CAPIobjIDstr(&fax->cobj), fax->b3_format);
 		ret = -EINVAL;
 		break;
 	}
 	if (ret < 0) {
-		wprint("Fax NCCI %06x: handle = %d flags = %04x data offset %d delivered error ret %d\n",
-			ncci->ncci, CAPIMSG_REQ_DATAHANDLE(mc->rb), flg, off, ret);
+		wprint("%s: handle = %d flags = %04x data offset %d delivered error ret %d\n",
+			CAPIobjIDstr(&fax->cobj), CAPIMSG_REQ_DATAHANDLE(mc->rb), flg, off, ret);
 		fax->b3transfer_error = ret;
 	} else
-		dprint(MIDEBUG_NCCI_DATA, "Fax NCCI %06x: handle = %d flags = %04x data offset %d delivered ret %d\n",
-			ncci->ncci, CAPIMSG_REQ_DATAHANDLE(mc->rb), flg, off, ret);
+		dprint(MIDEBUG_NCCI_DATA, "%s: handle = %d flags = %04x data offset %d delivered ret %d\n",
+			CAPIobjIDstr(&fax->cobj), CAPIMSG_REQ_DATAHANDLE(mc->rb), flg, off, ret);
 
 	pthread_mutex_unlock(&ncci->lock);
 	free_mc_buf(mc);
@@ -1116,34 +1375,35 @@ static int FaxDataB3Req(struct fax *fax, struct mc_buf *mc)
 			}
 		}
 		if (fax->b3transfer_error) {
-			FaxB3Disconnect(fax);
+			FaxB3Disconnect(fax, ncci);
 			if (fax->binst && fax->binst->waiting)
 				sem_post(&fax->binst->wait);
 		} else {
-			if (fax->lplci->Bprotocol.B3 == 4) {
-				ret = InitFax(fax);
-				if (ret) {
-					wprint("Fax NCCI %06x: cannot init Faxmodem return %d\n", ncci->ncci, ret);
-					fax->b3transfer_error = 1;
-					FaxB3Disconnect(fax);
-				}
-			} else {
+			if (fax->extended) {
 				t30_set_tx_file(fax->t30, fax->file_name, -1, -1);
 				if (fax->binst && fax->binst->waiting)
 					sem_post(&fax->binst->wait);
+			} else {
+				ret = InitFax(fax);
+				if (ret) {
+					wprint("%s: cannot init Faxmodem return %d\n", CAPIobjIDstr(&fax->cobj), ret);
+					fax->b3transfer_error = 1;
+					FaxB3Disconnect(fax, ncci);
+				}
 			}
 		}
 	}
 	return 0;
 }
 
-static int FaxDisconnectB3Req(struct fax *fax, struct mc_buf *mc)
+static int FaxDisconnectB3Req(struct mFAX *fax, struct mNCCI *ncci, struct mc_buf *mc)
 {
-	struct mNCCI *ncci = fax->ncci;
 	int ret;
 
-	dprint(MIDEBUG_NCCI, "Fax NCCI %06x: DisconnectB3Req b3transfer %s\n",
-		ncci->ncci, fax->b3transfer_active ? "active" : "not active");
+	dprint(MIDEBUG_NCCI, "%s: phase:%c DisconnectB3Req b3transfer %s\n",
+		CAPIobjIDstr(&fax->cobj), fax->phase, fax->b3transfer_active ? "active" : "not active");
+	if (!ncci)
+		return -EINVAL;
 	SendCmsgAnswer2Application(ncci->appl, mc, 0);
 	pthread_mutex_lock(&ncci->lock);
 	if (fax->b3transfer_active) {
@@ -1151,7 +1411,7 @@ static int FaxDisconnectB3Req(struct fax *fax, struct mc_buf *mc)
 		fax->b3transfer_active = 0;
 		switch (fax->b3_format) {
 		case FAX_B3_FORMAT_SFF:
-			wprint("Fax NCCI %06x: got no EOF - fax document incomplete\n", ncci->ncci);
+			wprint("%s: got no EOF - fax document incomplete\n", CAPIobjIDstr(&fax->cobj));
 			fax->b3transfer_error = -1;
 			break;
 		case FAX_B3_FORMAT_TIFF:
@@ -1167,18 +1427,19 @@ static int FaxDisconnectB3Req(struct fax *fax, struct mc_buf *mc)
 			break;
 		}
 		if (fax->b3transfer_error) {
-			FaxB3Disconnect(fax);
+			FaxB3Disconnect(fax, ncci);
 		} else {
-			if (fax->lplci->Bprotocol.B3 == 4) {
-				ret = InitFax(fax);
-				if (ret) {
-					wprint("Fax NCCI %06x: cannot init Faxmodem return %d\n", ncci->ncci, ret);
-					fax->b3transfer_error = 1;
-					FaxB3Disconnect(fax);
-				}
-			} else {
+			if (fax->extended) {
 				if (fax->binst && fax->binst->waiting)
 					sem_post(&fax->binst->wait);
+			} else {
+				ret = InitFax(fax);
+				if (ret) {
+					wprint("%s: cannot init Faxmodem return %d\n",
+						CAPIobjIDstr(&fax->cobj), ret);
+					fax->b3transfer_error = 1;
+					FaxB3Disconnect(fax, ncci);
+				}
 			}
 		}
 	} else {
@@ -1190,17 +1451,19 @@ static int FaxDisconnectB3Req(struct fax *fax, struct mc_buf *mc)
 }
 
 
-static int FaxConnectB3Req(struct fax *fax, struct mc_buf *mc)
+static int FaxConnectB3Req(struct mFAX *fax, struct mNCCI *ncci, struct mc_buf *mc)
 {
-	struct mNCCI *ncci = fax->ncci;
 	uint16_t info = 0;
 	int ret = 0;
 	int val;
 
+	if (!ncci)
+		return -EINVAL;
 	if (mc->cmsg.NCPI && mc->cmsg.NCPI[0]) {
 		val = CAPIMSG_U16(mc->cmsg.NCPI, 5);
 		if (val != fax->b3_format) {
-			dprint(MIDEBUG_NCCI, "NCCI %06x: Fax changed format %d ->%d\n", ncci->ncci, fax->b3_format, val);
+			dprint(MIDEBUG_NCCI, "%s: Fax changed format %d ->%d\n", CAPIobjIDstr(&fax->cobj),
+				fax->b3_format, val);
 			switch (val) {
 			case FAX_B3_FORMAT_SFF:
 			case FAX_B3_FORMAT_TIFF:
@@ -1212,7 +1475,7 @@ static int FaxConnectB3Req(struct fax *fax, struct mc_buf *mc)
 				break;
 			}
 		}
-		if (fax->lplci->Bprotocol.B3 == 5) {
+		if (fax->extended) {
 			val = CAPIMSG_U16(mc->cmsg.NCPI, 3);
 			fax->high_res = (val & 0x0001) ? 1 : 0;
 			fax->polling = (val & 0x0002) ? 1 : 0;
@@ -1221,31 +1484,36 @@ static int FaxConnectB3Req(struct fax *fax, struct mc_buf *mc)
 		}
 	}
 	mc->cmsg.Subcommand = CAPI_CONF;
-	mc->cmsg.adr.adrNCCI = ncci->ncci;
+	mc->cmsg.adr.adrNCCI = ncci->cobj.id;
 	mc->cmsg.Info = info;
 	pthread_mutex_lock(&ncci->lock);
 	if (info) {
 		fax->b3transfer_end = 1;
 		fax->b3transfer_error = info;
 		pthread_mutex_unlock(&ncci->lock);
-		ret = ncciB3Message(fax->ncci, mc);
+		ret = ncciB3Message(ncci, mc);
 	} else {
 		fax->b3transfer_active = 1;
 		pthread_mutex_unlock(&ncci->lock);
-		ret = ncciB3Message(fax->ncci, mc);
+		ret = activate_bchannel(ncci->BIlink);
 		if (!ret) {
-			if (fax->lplci->Bprotocol.B3 == 4)
-				FaxConnectActiveB3(fax, mc);
-			else {
-				ret = InitFax(fax);
-				if (ret) {
-					wprint("Fax NCCI %06x: cannot init Faxmodem return %d\n", ncci->ncci, ret);
-					fax->b3transfer_error = 1;
-					FaxB3Disconnect(fax);
+			ret = ncciB3Message(ncci, mc);
+			if (!ret) {
+				if (fax->extended) {
+					ret = InitFax(fax);
+					if (ret) {
+						wprint("%s: cannot init Faxmodem return %d\n", CAPIobjIDstr(&fax->cobj), ret);
+						fax->b3transfer_error = 1;
+						FaxB3Disconnect(fax, ncci);
+					}
+				} else {
+					FaxConnectActiveB3(fax, ncci, mc);
 				}
+			} else {
+				wprint("%s: CAPI_CONNECT_B3_CONF not handled by ncci statemachine\n", CAPIobjIDstr(&fax->cobj));
 			}
 		} else {
-			wprint("NCCI %06x: CAPI_CONNECT_B3_CONF not handled by ncci statemachine\n", ncci->ncci);
+			wprint("%s: cannot activate outgoing link %s\n", CAPIobjIDstr(&fax->cobj), strerror(-ret));
 		}
 	}
 	return ret;
@@ -1253,10 +1521,21 @@ static int FaxConnectB3Req(struct fax *fax, struct mc_buf *mc)
 
 int FaxB3Message(struct BInstance *bi, struct mc_buf *mc)
 {
-	struct fax *fax = bi->b3data;
+	struct mFAX *fax;
 	int retval = CapiNoError;
 	uint8_t cmd, subcmd;
+	struct mNCCI *ncci;
 
+	fax = get_mFAX(bi->b3data);
+	if (!mc) {
+		if (fax) {
+			dprint(MIDEBUG_NCCI, "%s: release b3data\n", CAPIobjIDstr(&fax->cobj));
+			put_mFAX(fax); /* bi->b3data ref set NULL on caller */
+			put_mFAX(fax); /*  get_mFAX() ref */
+		} else
+			dprint(MIDEBUG_NCCI, "release b3data - b3data already gone\n");
+		return CapiNoError;
+	}
 	cmd = CAPIMSG_COMMAND(mc->rb);
 	subcmd = CAPIMSG_SUBCOMMAND(mc->rb);
 	if (!fax) {
@@ -1268,76 +1547,97 @@ int FaxB3Message(struct BInstance *bi, struct mc_buf *mc)
 			return CapiMsgOSResourceErr;
 		}
 	}
+	ncci = get_faxncci(fax);
 	switch (CAPICMD(cmd, subcmd)) {
-
+	case CAPI_DISCONNECT_IND:
+		/* This does inform NCCI about a received DISCONNECT in the D-channel */
+		retval = DisconnectIndication(fax, ncci, mc);
+		if (retval)
+			goto unlock;
+		break;
 	case CAPI_DATA_B3_REQ:
-		retval = FaxDataB3Req(fax, mc);
+		retval = FaxDataB3Req(fax, ncci, mc);
 		break;
 	case CAPI_CONNECT_B3_REQ:
-		retval = FaxConnectB3Req(fax, mc);
+		retval = FaxConnectB3Req(fax, ncci, mc);
 		break;
 	case CAPI_DATA_B3_RESP:
-		FaxDataResp(fax, mc);
+		FaxDataResp(fax, ncci, mc);
 		retval = 0;
 		break;
 	case CAPI_CONNECT_B3_RESP:
-		retval = ncciB3Message(fax->ncci, mc);
+		retval = ncciB3Message(ncci, mc);
 		break;
 	case CAPI_CONNECT_B3_ACTIVE_RESP:
-		retval = ncciB3Message(fax->ncci, mc);
+		retval = ncciB3Message(ncci, mc);
 		break;
 	case CAPI_DISCONNECT_B3_REQ:
-		retval = FaxDisconnectB3Req(fax, mc);
+		retval = FaxDisconnectB3Req(fax, ncci, mc);
 		break;
 	case CAPI_DISCONNECT_B3_RESP:
-		retval = ncciB3Message(fax->ncci, mc);
-		if (!retval)
-			fax->ncci = NULL;
-		mFaxRelease(fax);
-		free_mc_buf(mc);
-		return 0;
+		if (ncci) {
+			retval = ncciB3Message(ncci, mc);
+		}
+		fax->B3DisconnectDone = 1;
+		mFaxRelease(fax, ncci);
+		break;
 #if 0
 	case CAPI_FACILITY_REQ:
-		retval = FsmEvent(&fax->ncci->ncci_m, EV_AP_FACILITY_REQ, mc);
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_FACILITY_REQ, mc);
 		break;
 	case CAPI_FACILITY_RESP:
 		/* no need to handle */
 		retval = 0;
 		break;
 	case CAPI_MANUFACTURER_REQ:
-		retval = FsmEvent(&fax->ncci->ncci_m, EV_AP_MANUFACTURER_REQ, mc);
+		retval = FsmEvent(&ncci->ncci_m, EV_AP_MANUFACTURER_REQ, mc);
 		break;
 #endif
 	default:
-		eprint("NCCI %06x: Error Unhandled command %02x/%02x\n", fax->ncci->ncci, cmd, subcmd);
+		eprint("%s: error unhandled command %02x/%02x\n",
+			CAPIobjIDstr(&fax->cobj), cmd, subcmd);
 		retval = CapiMessageNotSupportedInCurrentState;
 	}
 	if (retval) {
 		if (subcmd == CAPI_REQ)
 			retval = CapiMessageNotSupportedInCurrentState;
 		else {		/* RESP */
-			wprint("NCCI %06x: Error Message %02x/%02x not supported\n", fax->ncci->ncci, cmd, subcmd);
+			wprint("%s: Error Message %02x/%02x not supported\n",
+				CAPIobjIDstr(&fax->cobj), cmd, subcmd);
 			retval = CapiNoError;
 		}
 	} else if (!(cmd == CAPI_DATA_B3 && subcmd == CAPI_REQ)) {
 		free_mc_buf(mc);
 	}
+unlock:
+	put_ncci(ncci);
+	put_mFAX(fax);
 	return retval;
 }
 
 int FaxRecvBData(struct BInstance *bi, struct mc_buf *mc)
 {
 	struct mISDNhead *hh;
-	struct fax *fax = bi->b3data;
+	struct mFAX *fax;
+	struct mNCCI *ncci;
 	int ret = 0;
 
+	fax = get_mFAX(bi->b3data);
+	ncci = get_faxncci(fax);
 	if (!mc) {
 		/* timeout RELEASE */
 		if (fax) {
+			dprint(MIDEBUG_NCCI, "%s: got mc=NULL - RELEASE\n", CAPIobjIDstr(&fax->cobj));
+			if (ncci)
+				pthread_mutex_lock(&ncci->lock);
 			fax->modem_end = 1;
 			fax->modem_active = 0;
-			FaxB3Disconnect(fax);
+			if (ncci)
+				pthread_mutex_unlock(&ncci->lock);
+			FaxB3Disconnect(fax, ncci);
+			goto unref;
 		}
+		/* no refs so return direct */
 		return 0;
 	}
 	hh = (struct mISDNhead *)mc->rb;
@@ -1349,7 +1649,7 @@ int FaxRecvBData(struct BInstance *bi, struct mc_buf *mc)
 			ret = -EINVAL;
 			break;
 		} else
-			ret = FaxDataInd(fax, mc);
+			ret = FaxDataInd(fax, ncci, mc);
 		break;
 	case PH_DATA_CNF:
 		if (!fax) {
@@ -1357,7 +1657,7 @@ int FaxRecvBData(struct BInstance *bi, struct mc_buf *mc)
 				_mi_msg_type2str(hh->prim));
 			ret = -EINVAL;
 		} else {
-			FaxDataConf(fax, mc);
+			FaxDataConf(fax, ncci, mc);
 			ret = 0;
 		}
 		break;
@@ -1366,34 +1666,46 @@ int FaxRecvBData(struct BInstance *bi, struct mc_buf *mc)
 		if (!fax) {
 			fax = mFaxCreate(bi);
 			if (!fax) {
-				eprint("Cannot create Fax struct for PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
+				eprint("Cannot create Fax struct for PLCI %04x\n", bi->lp ? bi->lp->cobj.id : 0xffff);
 				return -ENOMEM;
 			}
-		}
+		} else
+			dprint(MIDEBUG_NCCI, "%s: got %s\n", CAPIobjIDstr(&fax->cobj), _mi_msg_type2str(hh->prim));
+		fax->phase = 'B';
 		ret = 1;
 		break;
 	case PH_DEACTIVATE_IND:
 		if (!fax) {
-			wprint("Controller%d ch%d: Got %s but but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr,
+			wprint("Controller%d ch%d: Got %s but but no b3data set\n", bi->pc->profile.ncontroller, bi->nr,
 				_mi_msg_type2str(hh->prim));
 			ret = -EINVAL;
 			break;
-		}
+		} else
+			dprint(MIDEBUG_NCCI, "%s: got %s\n", CAPIobjIDstr(&fax->cobj), _mi_msg_type2str(hh->prim));
+		if (ncci)
+			pthread_mutex_lock(&ncci->lock);
 		fax->modem_end = 1;
 		fax->modem_active = 0;
-		FaxB3Disconnect(fax);
+		if (ncci)
+			pthread_mutex_unlock(&ncci->lock);
+		FaxB3Disconnect(fax, ncci);
 		ret = 1;
 		break;
 	case PH_DEACTIVATE_CNF:
 		if (!fax) {
-			wprint("Controller%d ch%d: Got %s but but no NCCI set\n", bi->pc->profile.ncontroller, bi->nr,
+			wprint("Controller%d ch%d: Got %s but but no b3data set\n", bi->pc->profile.ncontroller, bi->nr,
 				_mi_msg_type2str(hh->prim));
 			ret = -EINVAL;
 			break;
-		}
+		} else
+			dprint(MIDEBUG_NCCI, "%s: got %s\n", CAPIobjIDstr(&fax->cobj), _mi_msg_type2str(hh->prim));
+		if (ncci)
+			pthread_mutex_lock(&ncci->lock);
 		fax->modem_end = 1;
 		fax->modem_active = 0;
-		FaxB3Disconnect(fax);
+		if (ncci)
+			pthread_mutex_unlock(&ncci->lock);
+		FaxB3Disconnect(fax, ncci);
 		ret = 1;
 		break;
 	case PH_CONTROL_CNF:
@@ -1402,7 +1714,8 @@ int FaxRecvBData(struct BInstance *bi, struct mc_buf *mc)
 				_mi_msg_type2str(hh->prim), hh->id);
 			ret = -EINVAL;
 		} else
-			dprint(MIDEBUG_NCCI, "NCCI %06x: got %s id %x\n", fax->ncci->ncci, _mi_msg_type2str(hh->prim), hh->id);
+			dprint(MIDEBUG_NCCI, "%s: got %s id %x\n", CAPIobjIDstr(&fax->cobj),
+				_mi_msg_type2str(hh->prim), hh->id);
 		break;
 	case PH_CONTROL_IND:
 		if (!fax) {
@@ -1410,13 +1723,17 @@ int FaxRecvBData(struct BInstance *bi, struct mc_buf *mc)
 				_mi_msg_type2str(hh->prim), hh->id);
 			ret = -EINVAL;
 		} else
-			dprint(MIDEBUG_NCCI, "NCCI %06x: got %s id %x\n", fax->ncci->ncci, _mi_msg_type2str(hh->prim), hh->id);
+			dprint(MIDEBUG_NCCI, "%s: got %s id %x\n", CAPIobjIDstr(&fax->cobj),
+				_mi_msg_type2str(hh->prim), hh->id);
 		break;
 	default:
 		wprint("Controller%d ch%d: Got %s (%x) id=%x len %d\n", bi->pc->profile.ncontroller, bi->nr,
 			_mi_msg_type2str(hh->prim), hh->prim, hh->id, mc->len);
 		ret = -EINVAL;
 	}
+unref:
+	put_ncci(ncci);
+	put_mFAX(fax);
 	return ret;
 }
 

@@ -11,6 +11,8 @@
  * this package for more details.
  */
 
+#define _GNU_SOURCE
+#include <unistd.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -23,6 +25,7 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <grp.h>
 #include "m_capi.h"
@@ -53,9 +56,11 @@ typedef enum {
 	PIT_None = 0,
 	PIT_Control,
 	PIT_mISDNmain,
+	PIT_mISDNtimer,
 	PIT_CAPImain,
 	PIT_NewConn,
 	PIT_Application,
+	PIT_ReleasedApp,
 	PIT_Bchannel,
 } pollInfo_t;
 
@@ -65,6 +70,8 @@ struct pollInfo {
 };
 
 #define MI_CONTROL_SHUTDOWN	0x01000000
+/* give 5 sec periode to allow releasing all applications */
+#define MI_SHUTDOWN_DELAY	5000
 
 static struct pollfd *mainpoll = NULL;
 static struct pollInfo *pollinfo = NULL;
@@ -74,18 +81,22 @@ static int mainpoll_size = 0;
 
 static char def_config[] = DEF_CONFIG_FILE;
 static char *config_file = NULL;
-static unsigned int debugmask = 0;
 static int do_daemon = 1;
 static int mIsock = 0;
 static int mCsock = 0;
 static int mIControl[2] = {-1, -1};
 static struct pController *mI_Controller = NULL;
-static int mI_count= 0;
+int mI_ControllerCount = 0;
 static FILE *DebugFile = NULL;
 static char *DebugFileName = NULL;
+static unsigned int debugmask = 0;
+static int DebugUniquePLCI = 0;
 int KeepTemporaryFiles = 0;
+int WriteWaveFiles = 0;
 static char _TempDirectory[80];
 char *TempDirectory = NULL;
+static struct timer_base _mICAPItimer_base;
+struct timer_base *mICAPItimer_base;
 
 #define MISDND_TEMP_DIR	"/tmp"
 
@@ -93,44 +104,29 @@ static char *__pinfonames[] = {
 	"None",
 	"Control",
 	"mISDNmain",
+	"mISDNtimer",
 	"CAPImain",
 	"NewConn",
 	"Application",
+	"ReleasedApp",
 	"Bchannel",
 	"unknown"
 };
 
 static char *pinfo2str(pollInfo_t pit)
 {
-	char *p;
+	unsigned int i = pit;
 
-	switch(pit) {
-	case PIT_None:
-		p = __pinfonames[0];
-		break;
-	case PIT_Control:
-		p = __pinfonames[1];
-		break;
-	case PIT_mISDNmain:
-		p = __pinfonames[2];
-		break;
-	case PIT_CAPImain:
-		p = __pinfonames[3];
-		break;
-	case PIT_NewConn:
-		p = __pinfonames[4];
-		break;
-	case PIT_Application:
-		p = __pinfonames[5];
-		break;
-	case PIT_Bchannel:
-		p = __pinfonames[6];
-		break;
-	default:
-		p = __pinfonames[7];
-		break;
-	}
-	return p;
+	if (pit > PIT_Bchannel)
+		i = PIT_Bchannel + 1;
+	return __pinfonames[i];
+}
+
+pid_t gettid(void)
+{
+	pid_t tid;
+	tid = syscall(SYS_gettid);
+	return tid;
 }
 
 static void usage(void)
@@ -139,10 +135,11 @@ static void usage(void)
 	fprintf(stderr, "  Options are\n");
 	fprintf(stderr, "   -?, --help                            this help\n");
 	fprintf(stderr, "   -c, --config <file>                   use this config file - default %s\n", def_config);
-	fprintf(stderr, "   -d, --debug <level>                   set debug level\n");
 	fprintf(stderr, "   -D, --debug-file <debug file>         use debug file (default stdout/stderr)\n");
 	fprintf(stderr, "   -f, --foreground                      run in forground, not as daemon\n");
 	fprintf(stderr, "   -k, --keeptemp                        do not delete temporary files (e.g. TIFF for fax)\n");
+	fprintf(stderr, "   -u, --uniquePLCI                      use unique PLCI numbers - easier to follow in the debug log\n");
+//	fprintf(stderr, "   -w, --writewavefiles                  write wave files for debug fax\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "mISDNcapid Version %s\n", MISDNCAPID_VERSION);
 	fprintf(stderr, "\n");
@@ -161,10 +158,12 @@ static int opt_parse(int ac, char *av[])
 			{"debug", 1, 0, 'd'},
 			{"foreground", 0, 0, 'f'},
 			{"keeptemp", 0, 0, 'k'},
+			{"uniquePLCI", 0, 0, 'u'},
+			{"writewavefiles", 0, 0, 'w'},
 			{0, 0, 0, 0}
 		};
 
-		c = getopt_long(ac, av, "?c:D:d:fk", long_options, &option_index);
+		c = getopt_long(ac, av, "?c:D:d:fkuw", long_options, &option_index);
 		if (c == -1)
 			break;
 		switch (c) {
@@ -193,7 +192,7 @@ static int opt_parse(int ac, char *av[])
 		case 'd':
 			if (optarg) {
 				errno = 0;
-				debugmask = (unsigned int)strtol(optarg, NULL, 0);
+				debugmask = (unsigned int)strtoul(optarg, NULL, 0);
 				if (errno) {
 					fprintf(stderr, "cannot read debuglevel from %s - %s\n", optarg, strerror(errno));
 					return -3;
@@ -208,6 +207,12 @@ static int opt_parse(int ac, char *av[])
 			break;
 		case 'k':
 			KeepTemporaryFiles = 1;
+			break;
+		case 'u':
+			DebugUniquePLCI = 1;
+			break;
+		case 'w':
+			WriteWaveFiles++;
 			break;
 		case '?':
 			usage();
@@ -260,7 +265,7 @@ static int read_config_file(char *name)
 				ena = 1;
 				break;
 			}
-			if (contr > mI_count - 1) {
+			if (contr > mI_ControllerCount - 1) {
 				fprintf(stderr, "Controller %d not detected - ignored\n", contr + 1);
 				continue;
 			}
@@ -279,6 +284,8 @@ static int read_config_file(char *name)
 			mI_Controller[contr].mNr = contr;
 			mI_Controller[contr].profile.ncontroller = capicontr;
 			mI_Controller[contr].enable = ena;
+			mI_Controller[contr].cobjLC.id = capicontr;
+			mI_Controller[contr].cobjPLCI.id = capicontr;
 			nr_controller++;
 		}
 		if (!strncasecmp("debugmask", s, 9)) {
@@ -299,9 +306,9 @@ Signal handler for clean shutdown
 static void
 termHandler(int sig)
 {
-	int ret, contr = MI_CONTROL_SHUTDOWN | sig;
+	int ret, contr = MI_CONTROL_SHUTDOWN;
 
-	iprint("Terminating on signal %d -- shutdown mISDNcapid\n", sig);
+	iprint("Terminating on signal %d -- request shutdown mISDNcapid\n", sig);
 
 	ret = write(mIControl[1], &contr, sizeof(contr));
 	if (ret != sizeof(contr))
@@ -326,14 +333,23 @@ static void dump_mainpoll(void)
 
 static void dump_controller(void)
 {
-	int i;
+	int i, j;
+	struct BInstance *bi;
 
-	for (i = 0; i < mI_count; i++) {
+	for (i = 0; i < mI_ControllerCount; i++) {
 		if (mI_Controller[i].enable) {
 			iprint("Controller%d mISDN No:%d Bchannels:%d capiNr:%d ApplCnt:%d\n", i, mI_Controller[i].mNr,
 				mI_Controller[i].devinfo.nrbchan, mI_Controller[i].profile.ncontroller, mI_Controller[i].appCnt);
 			iprint("Controller%d InfoMask:%08x CIPMask:%08x CIP2Mask:%08x\n", i, mI_Controller[i].InfoMask,
 				mI_Controller[i].CIPmask, mI_Controller[i].CIPmask2);
+			for (j = 0; j < mI_Controller[i].BImax; j++) {
+				bi = &mI_Controller[i].BInstances[j];
+				iprint("Controller%d Bi[%d] B%d type:%s usecnt:%d proto:%x fd:%d tty:%d%s%s%s%s%s\n", i, j, bi->nr,
+					BItype2str(bi->type),  bi->usecnt,  bi->proto,  bi->fd,  bi->tty,
+					bi->closed ? " closed" : "", bi->closing ? " closing" : "", bi->running ? " running" : "",
+					bi->detached ? " detached" : "", bi->joined ? " joined" : "");
+			}
+			dump_lControllers(&mI_Controller[i]);
 			dump_controller_plci(&mI_Controller[i]);
 		} else {
 			iprint("Controller%d disabled\n", i);
@@ -364,12 +380,19 @@ const char *BItype2str(enum BType bt)
 static void
 dumpHandler(int sig)
 {
-
-	iprint("Received  signal %d -- start dumping\n", sig);
-	dump_applications();
-	dump_controller();
-	mc_buffer_dump_status();
-	dump_mainpoll();
+	if (sig == SIGUSR1) {
+		iprint("Received  signal %d -- start dumping\n", sig);
+		dump_applications();
+		dump_controller();
+		dump_mainpoll();
+		mc_buffer_dump_status();
+		dump_cobjects();
+	} else {
+		dump_cobjects();
+#ifdef MISDN_CAPIOBJ_NO_FREE
+		dump_cobjects_free();
+#endif
+	}
 	iprint("dumping ends\n");
 }
 
@@ -393,7 +416,7 @@ static int add_mainpoll(int fd, pollInfo_t pit)
 			if (mainpoll_size)
 				n = mainpoll_size * 2;
 			else
-				n = 4;
+				n = 8;
 			newmp = calloc(n, sizeof(struct pollfd));
 			if (!newmp) {
 				eprint("no memory for %d mainpoll\n", n);
@@ -442,8 +465,10 @@ static int del_mainpoll(int fd)
 			default:
 				if (pollinfo[i].data)
 					free(pollinfo[i].data);
-			case PIT_Application:	/* already freed */
+			case PIT_ReleasedApp:	/* not freed here */
+			case PIT_Application:	/* not freed here */
 			case PIT_Bchannel:	/* Never freed */
+			case PIT_mISDNtimer:
 				pollinfo[i].data = NULL;
 				pollinfo[i].type = PIT_None;
 				break;
@@ -458,10 +483,36 @@ static int del_mainpoll(int fd)
 	return -1;
 }
 
+int mIcapi_mainpoll_releaseApp(int fd, int newfd)
+{
+	int i;
+
+	for (i = 0; i < mainpoll_max; i++) {
+		if (mainpoll[i].fd == fd) {
+			if (pollinfo[i].type == PIT_Application || pollinfo[i].type == PIT_ReleasedApp) {
+				mainpoll[i].fd = newfd;
+				pollinfo[i].type = PIT_ReleasedApp;
+				return i;
+			} else {
+				eprint("Mainpoll fd=%d found but type %s\n", fd, BItype2str(pollinfo[i].type));
+			}
+		}
+	}
+	return -1;
+}
+
 void clean_all(void)
 {
 	int i, j;
+	struct mApplication *ap;
+	struct mCAPIobj *co;
+	struct lController *lc;
 
+	dprint(MIDEBUG_CONTROLLER, "clean_all controller:%d mainpoll %d/%d\n", mI_ControllerCount, mainpoll_max, mainpoll_size);
+	if (!mainpoll_max && !mainpoll_size) {
+		wprint("clean_all called twice\n");
+		return;
+	}
 	for (i = 0; i < mainpoll_max; i++) {
 		switch (pollinfo[i].type) {
 		case PIT_Control:
@@ -475,8 +526,14 @@ void clean_all(void)
 			}
 			break;
 		case PIT_Application:
-			ReleaseApplication(pollinfo[i].data);
-			pollinfo[i].data = NULL;
+			ap = pollinfo[i].data;
+			if (ap) {
+				eprint("Application %d not released in clean_all freeing now\n", ap->cobj.id2);
+				pollinfo[i].data = NULL;
+				ReleaseApplication(ap, 0);
+				Free_Application(&ap->cobj);
+			} else
+				eprint("Unlinked Application not released in clean_all\n");
 			break;
 		case PIT_Bchannel:
 			ReleaseBchannel(pollinfo[i].data);
@@ -484,7 +541,16 @@ void clean_all(void)
 		case PIT_NewConn:
 			close(mainpoll[i].fd);
 			break;
+		case PIT_ReleasedApp:
+			ap = pollinfo[i].data;
+			if (ap) {
+				eprint("Released Application %d  in clean_all freeing now\n", ap->cobj.id2);
+				pollinfo[i].data = NULL;
+				Free_Application(&ap->cobj);
+			}
+			break;
 		case PIT_mISDNmain:
+		case PIT_mISDNtimer:
 		case PIT_CAPImain:
 		case PIT_None:
 			break;
@@ -495,33 +561,40 @@ void clean_all(void)
 	}
 	mainpoll_max = 0;
 	mainpoll_size = 0;
-	free(pollinfo);
+	if (pollinfo)
+		free(pollinfo);
 	pollinfo = NULL;
-	free(mainpoll);
+	if (mainpoll)
+		free(mainpoll);
 	mainpoll = NULL;
-	for (i = 0; i < mI_count; i++) {
+	for (i = 0; i < mI_ControllerCount; i++) {
+		dprint(MIDEBUG_CONTROLLER, "clean_all controller:%d BImax=%d\n", i, mI_Controller[i].BImax);
 		if (mI_Controller[i].l3) {
 			close_layer3(mI_Controller[i].l3);
 			mI_Controller[i].l3 = NULL;
 		}
-		for (j = 0; j < mI_Controller[i].BImax; j++) {
-			ReleaseBchannel(&mI_Controller[i].BInstances[j]);
+		if (mI_Controller[i].BInstances) {
+			for (j = 0; j < mI_Controller[i].BImax; j++) {
+				ReleaseBchannel(&mI_Controller[i].BInstances[j]);
+			}
+			free(mI_Controller[i].BInstances);
+			mI_Controller[i].BInstances = NULL;
 		}
-		free(mI_Controller[i].BInstances);
-		mI_Controller[i].BInstances = NULL;
-		pthread_rwlock_wrlock(&mI_Controller[i].llock);
-		while (mI_Controller[i].lClist)
-			free_lController(mI_Controller[i].lClist);
-		pthread_rwlock_unlock(&mI_Controller[i].llock);
+		co = get_next_cobj(&mI_Controller[i].cobjLC, NULL);
+		while (co) {
+			lc = container_of(co, struct lController, cobj);
+			Free_lController(&lc->cobj);
+			co = get_next_cobj(&mI_Controller[i].cobjLC, co);
+		}
 	}
-	mI_count = 0;
+	mI_ControllerCount = 0;
 }
 
 struct pController *get_cController(int cNr)
 {
 	int i;
 
-	for (i = 0; i < mI_count; i++) {
+	for (i = 0; i < mI_ControllerCount; i++) {
 		if (mI_Controller[i].enable && mI_Controller[i].profile.ncontroller == cNr)
 			return &mI_Controller[i];
 	}
@@ -532,17 +605,63 @@ struct pController *get_mController(int mNr)
 {
 	int i;
 
-	for (i = 0; i < mI_count; i++) {
+	for (i = 0; i < mI_ControllerCount; i++) {
 		if (mI_Controller[i].enable && mI_Controller[i].mNr == mNr)
 			return &mI_Controller[i];
 	}
 	return NULL;
 }
 
+/* Is called with pc->cobjPLCI.lock !!! */
+uint32_t NextFreePLCI(struct mCAPIobj *copc)
+{
+	uint32_t id = 0, last;
+	uint8_t	run;
+	struct pController *pc;
+	struct mCAPIobj *c;
+
+	pc = container_of(copc, struct pController, cobjPLCI);
+	if (DebugUniquePLCI) {
+		run = 2; /* one wrap after reaching 0xff00 allowed */
+		pc->lastPLCI += 0x0100;
+		if (pc->lastPLCI > 0xff00) {
+			pc->lastPLCI = 0x0100;
+			run--;
+		}
+		last = pc->lastPLCI;
+	} else {
+		last = 0x0100;
+		run = 1; /* stop after reaching 0xff00 */
+	}
+	/* check if not used */
+	while (run) {
+		c = copc->listhead;
+		while (c) {
+			if ((c->id & 0xff00) == last)
+				break;
+			c = c->next;
+		}
+		if (!c) {
+			id = last;
+			break;
+		} else {
+			if (last == 0xff00) {
+				run--;
+				last = 0x0100;
+			} else {
+				last += 0x0100;
+			}
+		}
+	}
+	if (id)
+		pc->lastPLCI = id;
+	return id;
+}
+
 struct BInstance *ControllerSelChannel(struct pController *pc, int nr, int proto)
 {
 	struct BInstance *bi;
-	int pmask;
+	int pmask, err;
 
 	if (nr >= pc->BImax) {
 		wprint("Request for channel number %d but controller %d only has %d channels\n",
@@ -565,15 +684,39 @@ struct BInstance *ControllerSelChannel(struct pController *pc, int nr, int proto
 		}
 	}
 	bi = pc->BInstances + nr;
-	if (bi->usecnt) {
-		/* for now only one user allowed - this is not sufficient for X25 */
-		wprint("Request for channel number %d on controller %d but channel already in use\n", nr, pc->profile.ncontroller);
-		return NULL;
+	err = pthread_mutex_lock(&bi->lock);
+	if (err == 0) {
+		if (bi->usecnt) {
+			/* for now only one user allowed - this is not sufficient for X25 */
+			wprint("Request for channel number %d on controller %d but channel already in use\n",
+				nr, pc->profile.ncontroller);
+			bi = NULL;
+		} else {
+			bi->usecnt++;
+			bi->proto = proto;
+		}
+		pthread_mutex_unlock(&bi->lock);
 	} else {
-		bi->usecnt++;
-		bi->proto = proto;
+		eprint("Controller%d lock for BI[%d] could not aquired - %s\n",
+			pc->profile.ncontroller, bi->nr, strerror(err));
+		bi = NULL;
 	}
 	return bi;
+}
+
+int check_free_bchannels(struct pController *pc)
+{
+	int i, cnt = 0;
+
+	if (pc) {
+		for (i = 0; i <= pc->BImax; i++) {
+			if (test_channelmap(i, pc->devinfo.channelmap)) {
+				if (pc->BInstances[i].usecnt == 0)
+					cnt++;
+			}
+		}
+	}
+	return cnt;
 }
 
 
@@ -669,11 +812,15 @@ static void *BCthread(void *arg)
 
 	bi->running = 1;
 	bi->got_timeout = 0;
+	bi->detached = 0;
+	bi->joined = 0;
 	bi->release_pending = 0;
+	bi->tid = gettid();
+	iprint("Started Bchannel thread=%05d\n", bi->tid);
 	while (bi->running) {
 		if (bi->pcnt == 0) {
-			wprint("Bchannel%d no filedescriptors to poll - abort thread=%x\n",
-				bi->nr, (unsigned int)pthread_self());
+			wprint("Bchannel%d no filedescriptors to poll - abort thread=%05d\n",
+				bi->nr, bi->tid);
 			break;
 		}
 		ret = poll(bi->pfd, bi->pcnt, bi->timeout);
@@ -686,12 +833,16 @@ static void *BCthread(void *arg)
 			continue;
 		}
 		if (ret == 0) { /* timeout */
-			wprint("Bchannel%d %stimeout (release %spending) thread=%x\n", bi->nr,
-				bi->got_timeout ? "2. " : "", bi->release_pending ? "" : "not ", (unsigned int)pthread_self());
+			wprint("Bchannel%d %stimeout (release %spending) thread=%05d\n", bi->nr,
+				bi->got_timeout ? "2. " : "", bi->release_pending ? "" : "not ", bi->tid);
 			if (bi->release_pending) {
-				if (bi->got_timeout) /* 2 times */
+				if (bi->got_timeout) { /* 2 times */
+					bi->detached = 1;
+					ret = pthread_detach(bi->thread);
+					if (ret)
+						wprint("Error on pthread_detach thread=%05d - %s\n", bi->tid, strerror(ret));
 					bi->running = 0;
-				else
+				} else
 					bi->got_timeout = 1;
 				ret = bi->from_down(bi, NULL);
 				if (ret < 0)
@@ -719,7 +870,7 @@ static void *BCthread(void *arg)
 		}
 		if (bi->pfd[0].revents & POLLIN) {
 			ret = read(bi->pfd[0].fd, &cmd, 1);
-			iprint("Got control %d thread=%x\n", cmd, (unsigned int)pthread_self());
+			iprint("Got control %d thread=%05d\n", cmd, bi->tid);
 			if (cmd == 42) {
 				bi->running = 0;
 				msg = _threadmsg4;
@@ -727,7 +878,7 @@ static void *BCthread(void *arg)
 		}
 		bi->got_timeout = 0;
 	}
-	iprint("thread=%x terminating with msg %s\n", (unsigned int)pthread_self(), msg);
+	iprint("thread=%05d terminating with msg %s\n", bi->tid, msg);
 	return msg;
 }
 
@@ -756,9 +907,10 @@ static int CreateBchannelThread(struct BInstance *bi, int pcnt)
 	bi->pfd[1].events = POLLIN | POLLPRI;
 	bi->pcnt = pcnt;
 	bi->timeout = 500; /* default poll timeout 500ms */
-	ret = pthread_create(&bi->tid, NULL, BCthread, bi);
+	ret = pthread_create(&bi->thread, NULL, BCthread, bi);
 	if (ret) {
 		eprint("Cannot create thread error - %s\n", strerror(errno));
+		bi->detached = 1;
 		close(bi->cpipe[0]);
 		close(bi->cpipe[1]);
 		bi->cpipe[0] = -1;
@@ -766,38 +918,44 @@ static int CreateBchannelThread(struct BInstance *bi, int pcnt)
 		bi->pfd[0].fd = -1;
 		for (i = 1; i < bi->pcnt; i++)
 			bi->pfd[i].fd = -1;
-	} else
-		iprint("Created Bchannel thread=%x\n", (unsigned int)bi->tid);
+	}
 	return ret;
 }
 
 static int StopBchannelThread(struct BInstance *bi)
 {
-	int ret, i;
+	int ret, i, result = 0;
 	unsigned char cmd;
 	char *msg = NULL;
 	pthread_t self = pthread_self();
 
 	if (bi->running) {
-		cmd = 42;
 		if (bi->waiting)
 			sem_post(&bi->wait);
-		if (self == bi->tid) {
+		if (pthread_equal(self, bi->thread)) {
 			/* we cannot join our self but we will terminate on return */
-			ret = pthread_detach(bi->tid);
-			if (ret)
-				wprint("Error on pthread_detach - %s\n", strerror(ret));
+			bi->detached = 1;
+			ret = pthread_detach(bi->thread);
+			if (ret) {
+				wprint("Error on pthread_detach thread=%05d - %s\n", bi->tid, strerror(ret));
+				result = -ret;
+			}
 			bi->running = 0;
-		} else {
+			dprint(MIDEBUG_CONTROLLER, "thread=%05d detached\n", bi->tid);
+		} else if (!bi->joined) {
+			cmd = 42;
 			ret = write(bi->cpipe[1], &cmd, 1);
 			if (ret != 1)
 				wprint("Error on write control ret=%d - %s\n", ret, strerror(errno));
-			/* not this do return the error code directely */
-			ret = pthread_join(bi->tid, (void **)&msg);
-			if (ret)
+			bi->joined = 1;
+			ret = pthread_join(bi->thread, (void **)&msg);
+			if (ret) {
 				wprint("Error on pthread_join - %s\n", strerror(ret));
-			else
-				iprint("thread=%x joined to %x %s\n", (unsigned int)bi->tid, (unsigned int)pthread_self(), msg);
+				result = -ret;
+			} else
+				dprint(MIDEBUG_CONTROLLER, "thread=%05d joined to %05d %s\n", bi->tid, gettid(), msg);
+		} else {
+			wprint("Running but already joined in thread=%05d ???\n", bi->tid);
 		}
 		close(bi->cpipe[0]);
 		close(bi->cpipe[1]);
@@ -807,8 +965,26 @@ static int StopBchannelThread(struct BInstance *bi)
 		bi->pcnt = 0;
 		bi->cpipe[0] = -1;
 		bi->cpipe[1] = -1;
+	} else {
+		if (!bi->detached) {
+			if (!bi->joined) {
+				if (pthread_equal(self, bi->thread)) {
+					/* we cannot join our self but we will terminate on return */
+					wprint("Not running but still in thread=%05d - possible memleak\n", bi->tid);
+					result = -EDEADLOCK;
+				} else {
+					bi->joined = 1;
+					ret = pthread_join(bi->thread, (void **)&msg);
+					if (ret) {
+						wprint("Error on pthread_join thread=%05d - %s\n", bi->tid, strerror(ret));
+						result = -ret;
+					} else
+						dprint(MIDEBUG_CONTROLLER, "thread=%05d joined to %05d %s\n", bi->tid, gettid(), msg);
+				}
+			}
+		}
 	}
-	return 0;
+	return result;
 }
 
 static int dummy_btrans(struct BInstance *bi, struct mc_buf *mc)
@@ -827,11 +1003,12 @@ static int dummy_btrans(struct BInstance *bi, struct mc_buf *mc)
 	}
 }
 
-int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, enum BType btype)
+int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 {
 	int sk;
 	int ret;
 	struct sockaddr_mISDN addr;
+	struct mISDN_ctrl_req creq;
 
 	sk = socket(PF_ISDN, SOCK_DGRAM, bi->proto);
 	if (sk < 0) {
@@ -848,7 +1025,7 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, enum BType btype)
 		return ret;
 	}
 
-	switch (btype) {
+	switch (lp->btype) {
 	case BType_Direct:
 		bi->from_down = recvBdirect;
 		bi->from_up = ncciB3Data;
@@ -864,11 +1041,11 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, enum BType btype)
 		bi->from_up = ncciB3Data;
 		break;
 	default:
-		eprint("Error unnkown BType %d\n",  btype);
+		eprint("Error unnkown BType %d\n",  lp->btype);
 		close(sk);
 		return -EINVAL;
 	}
-	bi->type = btype;
+	bi->type = lp->btype;
 
 	addr.family = AF_ISDN;
 	addr.dev = bi->pc->mNr;
@@ -885,15 +1062,69 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, enum BType btype)
 		close(sk);
 		bi->from_down = dummy_btrans;
 		bi->from_up = dummy_btrans;
+		bi->type = BType_None;
 	} else {
+		bi->closed = 0;
 		bi->fd = sk;
 		bi->lp = lp;
-		if (btype == BType_Direct) {
+		get_cobj(&lp->cobj);
+		bi->org_rx_min = MISDN_CTRL_RX_SIZE_IGNORE;
+		bi->rx_min = MISDN_CTRL_RX_SIZE_IGNORE;
+		bi->org_rx_max = MISDN_CTRL_RX_SIZE_IGNORE;
+		bi->rx_max = MISDN_CTRL_RX_SIZE_IGNORE;
+		if ((bi->proto == ISDN_P_B_L2DSP) || (bi->proto == ISDN_P_B_RAW)) {
+			/* Get buffersize */
+			creq.op = MISDN_CTRL_RX_BUFFER;
+			creq.channel = bi->nr;
+			creq.p1 = MISDN_CTRL_RX_SIZE_IGNORE; // do not change min yet
+			creq.p2 = MISDN_CTRL_RX_SIZE_IGNORE; // do not change max yet
+			creq.unused = 0;
+			ret = ioctl(bi->fd, IMCTRLREQ, &creq);
+			/* MISDN_CTRL_RX_BUFFER is not mandatory warn if not supported */
+			if (ret < 0) {
+				wprint("%s: Error on MISDN_CTRL_RX_BUFFER  ioctl maybe kernel do not support it  - %s\n",
+					CAPIobjIDstr(&lp->cobj), strerror(errno));
+			} else {
+				bi->org_rx_min = creq.p1;
+				bi->org_rx_max = creq.p2;
+				dprint(MIDEBUG_NCCI, "%s: MISDN_CTRL_RX_BUFFER  original values: min=%d max=%d\n",
+					CAPIobjIDstr(&lp->cobj), creq.p1, creq.p2);
+				if (bi->org_rx_max > lp->Appl->MaxB3Size)
+					bi->rx_max = lp->Appl->MaxB3Size;
+				else
+					bi->rx_max = bi->org_rx_max;
+				if (bi->type == BType_Fax) {
+					bi->rx_min = DEFAULT_FAX_PKT_SIZE;
+				} else {
+					bi->rx_min = bi->rx_max  - (bi->org_rx_min - 1);
+					if (bi->rx_min < bi->org_rx_min)
+						bi->rx_min = bi->org_rx_min;
+				}
+				if (bi->rx_min > bi->rx_max)
+					bi->rx_min = bi->rx_max;
+				/* Set buffersize */
+				creq.op = MISDN_CTRL_RX_BUFFER;
+				creq.channel = bi->nr;
+				creq.p1 = bi->rx_min;
+				creq.p2 = bi->rx_max;
+				creq.unused = 0;
+				ret = ioctl(bi->fd, IMCTRLREQ, &creq);
+				if (ret < 0) {
+					wprint("%s: Error setting  MISDN_CTRL_RX_BUFFER min=%d max=%d ioctl - %s\n",
+						CAPIobjIDstr(&lp->cobj), bi->rx_min, bi->rx_max, strerror(errno));
+				} else {
+					dprint(MIDEBUG_NCCI, "%s: set rxbuffer to min=%d max=%d\n",
+						CAPIobjIDstr(&lp->cobj), bi->rx_min, bi->rx_max);
+				}
+			}
+		}
+		if (bi->type == BType_Direct) {
 			ret = add_mainpoll(sk, PIT_Bchannel);
 			if (ret < 0) {
 				eprint("Error while adding mIsock to mainpoll (mainpoll_max %d)\n", mainpoll_max);
 				close(sk);
 				bi->fd = -1;
+				put_cobj(&lp->cobj);
 				bi->lp = NULL;
 			} else {
 				dprint(MIDEBUG_CONTROLLER, "Controller%d: Bchannel %d socket %d added to poll idx %d\n",
@@ -903,24 +1134,26 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, enum BType btype)
 				bi->UpId = 0;
 				bi->DownId = 0;
 			}
-		} else if (btype == BType_Fax) {
+		} else if (bi->type == BType_Fax) {
 			ret = CreateBchannelThread(bi, 2);
 			if (ret < 0) {
 				eprint("Error while creating B%d-channel thread\n", bi->nr);
 				close(sk);
 				bi->fd = -1;
+				put_cobj(&lp->cobj);
 				bi->lp = NULL;
 			} else {
 				ret = 0;
 				bi->UpId = 0;
 				bi->DownId = 0;
 			}
-		} else if (btype == BType_tty) {
+		} else if (bi->type == BType_tty) {
 			ret = Create_tty(bi);
 			if (ret < 0) {
 				eprint("Error while creating B%d-channel tty\n", bi->nr);
 				close(sk);
 				bi->fd = -1;
+				put_cobj(&lp->cobj);
 				bi->lp = NULL;
 				return ret;
 			} else {
@@ -932,6 +1165,7 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, enum BType btype)
 				eprint("Error while creating B%d-channel thread\n", bi->nr);
 				close(sk);
 				bi->fd = -1;
+				put_cobj(&lp->cobj);
 				bi->lp = NULL;
 			} else {
 				ret = 0;
@@ -939,51 +1173,124 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp, enum BType btype)
 				bi->DownId = 0;
 			}
 		}
+		if (ret)
+			 bi->type = BType_None;
 	}
 	return ret;
 }
 
 int CloseBInstance(struct BInstance *bi)
 {
-	int ret = 0;
+	int err, ret = 0;
 
-	if (bi->usecnt) {
-		switch (bi->type) {
-		case BType_Direct:
-			if (bi->fd >= 0)
-				del_mainpoll(bi->fd);
-			break;
+	dprint(MIDEBUG_CONTROLLER, "Closing bchannel type:%d tid=%05d usecnt:%d%s%s%s%s%s\n",
+		bi->type, bi->tid, bi->usecnt, bi->closed ? " closed" : "",
+		bi->closing ? " closing" : "", bi->running ? " running" : "",
+		bi->detached ? " detached" : "", bi->joined ? " joined" : "");
+	err = pthread_mutex_lock(&bi->lock);
+	if (err == 0) {
+		if (!bi->closed) {
+			if (!bi->closing) {
+				bi->closing = 1;
+				if (bi->usecnt) {
+					bi->closed = 1;
+					pthread_mutex_unlock(&bi->lock);
+					switch (bi->type) {
+					case BType_Direct:
+						if (bi->fd >= 0)
+							del_mainpoll(bi->fd);
+						break;
 #ifdef USE_SOFTFAX
-		case  BType_Fax:
-			StopBchannelThread(bi);
-			break;
+					case  BType_Fax:
+						StopBchannelThread(bi);
+						break;
 #endif
-		case BType_tty:
-			StopBchannelThread(bi);
-			if (bi->tty > -1)
-				close(bi->tty);
-			bi->tty = -1;
-		default:
-			break;
+					case BType_tty:
+						StopBchannelThread(bi);
+						if (bi->tty > -1)
+							close(bi->tty);
+						bi->tty = -1;
+					default:
+						break;
+					}
+					if (bi->fd >= 0)
+						close(bi->fd);
+					bi->fd = -1;
+					bi->proto = ISDN_P_NONE;
+					if (bi->b3data && bi->lp)
+						B3ReleaseLink(bi->lp, bi);
+					if (bi->lp) {
+						put_cobj(&bi->lp->cobj);
+						bi->lp = NULL;
+					}
+					bi->from_up(bi, NULL);
+					bi->b3data = NULL;
+					bi->lp = NULL;
+					bi->type = BType_None;
+					bi->from_down = dummy_btrans;
+					bi->from_up = dummy_btrans;
+					err = pthread_mutex_lock(&bi->lock);
+					if (err == 0) {
+						bi->usecnt--;
+						bi->closing = 0;
+						if (bi->usecnt)
+							wprint("BI[%d] still in use (%d)\n", bi->nr, bi->usecnt);
+						pthread_mutex_unlock(&bi->lock);
+						ret = 0;
+					} else {
+						eprint("Lock for BI[%d] could not aquired - %s\n",
+							bi->nr, strerror(err));
+						ret = -err;
+					}
+				} else {
+					bi->closing = 0;
+					pthread_mutex_unlock(&bi->lock);
+					wprint("BI[%d] not active\n", bi->nr);
+					ret = -1;
+				}
+			} else {
+				pthread_mutex_unlock(&bi->lock);
+				wprint("Closing  BI[%d] already in progress\n", bi->nr);
+				ret = -1;
+			}
+		} else {
+			pthread_mutex_unlock(&bi->lock);
+			wprint("Closing  BI[%d] already closed\n", bi->nr);
+			ret = -1;
 		}
-		if (bi->fd >= 0)
-			close(bi->fd);
-		bi->fd = -1;
-		bi->proto = ISDN_P_NONE;
-		bi->usecnt--;
-		if (bi->b3data && bi->lp)
-			B3ReleaseLink(bi->lp, bi);
-		bi->b3data = NULL;
-		bi->lp = NULL;
-		bi->type = BType_None;
-		bi->from_down = dummy_btrans;
-		bi->from_up = dummy_btrans;
 	} else {
-		wprint("BInstance %d not active\n", bi->nr);
-		ret = -1;
+		eprint("Lock for BI[%d] could not aquired - %s\n",
+			bi->nr, strerror(err));
+		ret = -err;
 	}
 	return ret;
 };
+
+int activate_bchannel(struct BInstance *bi)
+{
+	int ret, err;
+	struct mISDNhead mh;
+
+	mh.id = 1;
+	if (bi->proto == ISDN_P_B_RAW)
+		mh.prim = PH_ACTIVATE_REQ;
+	else if (bi->proto == ISDN_P_NONE)
+		return -EINVAL;
+	else
+		mh.prim = DL_ESTABLISH_REQ;
+
+	ret = send(bi->fd, &mh, sizeof(mh), 0);
+	if (ret != sizeof(mh)) {
+		err = errno;
+		wprint("BI[%d] cannot send activation ret %d - %s\n", bi->nr, ret, strerror(err));
+		if (ret == -1)
+			ret = -err;
+		else
+			ret = -EMSGSIZE;
+	} else
+		ret = 0;
+	return ret;
+}
 
 static int recvBchannel(struct BInstance *bi)
 {
@@ -1059,7 +1366,7 @@ static int l3_callback(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, s
 			       pc->profile.ncontroller, _mi_msg_type2str(cmd), pid);
 			break;
 		}
-		plci = new_mPLCI(pc, pid, NULL);
+		plci = new_mPLCI(pc, pid);
 		if (!plci) {
 			wprint("Controller %d - got %s but could not allocate new PLCI\n",
 			       pc->profile.ncontroller, _mi_msg_type2str(cmd));
@@ -1090,35 +1397,40 @@ static int l3_callback(struct mlayer3 *l3, unsigned int cmd, unsigned int pid, s
 			wprint("Controller %d - got %s but no PLCI found\n", pc->profile.ncontroller, _mi_msg_type2str(cmd));
 		break;
 	case MT_FREE:
-		if (!plci)
-			wprint("Controller %d - got %s but no PLCI found\n", pc->profile.ncontroller, _mi_msg_type2str(cmd));
+		if (!plci) /* Normal on release */
+			dprint(MIDEBUG_CONTROLLER, "Controller %d - got %s but no PLCI found\n",
+				pc->profile.ncontroller, _mi_msg_type2str(cmd));
 		else
-			plci->pid = MISDN_PID_NONE;
+			plci->cobj.id2 = MISDN_PID_NONE;
 		break;
 	case MPH_ACTIVATE_IND:
+	case MPH_DEACTIVATE_IND:
+	case MPH_INFORMATION_IND:
 	case MT_L2ESTABLISH:
 	case MT_L2RELEASE:
 	case MT_L2IDLE:
 		break;
 	case MT_TIMEOUT:
 		iprint("Controller %d - got %s from layer3 pid(%x) msg(%p) plci(%04x)\n",
-		       pc->profile.ncontroller, _mi_msg_type2str(cmd), pid, l3m, plci ? plci->plci : 0xffff);
+		       pc->profile.ncontroller, _mi_msg_type2str(cmd), pid, l3m, plci ? plci->cobj.id : 0xffff);
 		break;
 	case MT_ERROR:
 		wprint("Controller %d - got %s from layer3 pid(%x) msg(%p) plci(%04x)\n",
-		       pc->profile.ncontroller, _mi_msg_type2str(cmd), pid, l3m, plci ? plci->plci : 0xffff);
+		       pc->profile.ncontroller, _mi_msg_type2str(cmd), pid, l3m, plci ? plci->cobj.id : 0xffff);
 		break;
 	default:
 		wprint("Controller %d - got %s (%x) from layer3 pid(%x) msg(%p) plci(%04x) - not handled\n",
-		       pc->profile.ncontroller, _mi_msg_type2str(cmd), cmd, pid, l3m, plci ? plci->plci : 0xffff);
+		       pc->profile.ncontroller, _mi_msg_type2str(cmd), cmd, pid, l3m, plci ? plci->cobj.id : 0xffff);
 		ret = -EINVAL;
 	}
 	if (!ret) {
 		if (plci)
 			ret = plci_l3l4(plci, cmd, l3m);
-		else
+		else if (l3m)
 			ret = 1; /* message need to be freed */
 	}
+	if (plci)
+		put_cobj(&plci->cobj);
 	return ret;
 }
 
@@ -1141,20 +1453,22 @@ int OpenLayer3(struct pController *pc)
 
 int ListenController(struct pController *pc)
 {
+	struct mCAPIobj *co;
 	struct lController *lc;
 	uint32_t InfoMask = 0, CIPMask = 0, CIPMask2 = 0;
 	int ret = 0;
 
-	pthread_rwlock_rdlock(&pc->llock);
-	lc = pc->lClist;
-	while (lc) {
-		dprint(MIDEBUG_CONTROLLER, "pc->lClist %p %08x/%08x/%08x\n", lc, lc->InfoMask, lc->CIPmask, lc->CIPmask2);
+	pthread_rwlock_rdlock(&pc->cobjLC.lock);
+	co = pc->cobjLC.listhead;
+	while (co) {
+		lc = container_of(co, struct lController, cobj);
+		dprint(MIDEBUG_CONTROLLER, "Lc %p %08x/%08x/%08x\n", lc, lc->InfoMask, lc->CIPmask, lc->CIPmask2);
 		InfoMask |= lc->InfoMask;
 		CIPMask |= lc->CIPmask;
 		CIPMask2 |= lc->CIPmask2;
-		lc = lc->nextC;
+		co = co->next;
 	}
-	pthread_rwlock_unlock(&pc->llock);
+	pthread_rwlock_unlock(&pc->cobjLC.lock);
 	dprint(MIDEBUG_CONTROLLER, "Controller %d change InfoMask %08x -> %08x\n", pc->profile.ncontroller, pc->InfoMask, InfoMask);
 	dprint(MIDEBUG_CONTROLLER, "Controller %d change CIPMask  %08x -> %08x\n", pc->profile.ncontroller, pc->CIPmask, CIPMask);
 	dprint(MIDEBUG_CONTROLLER, "Controller %d change CIPMask2 %08x -> %08x\n", pc->profile.ncontroller, pc->CIPmask2, CIPMask2);
@@ -1165,6 +1479,26 @@ int ListenController(struct pController *pc)
 		ret = OpenLayer3(pc);
 	}
 	return ret;
+}
+
+static void ShutdownAppl(int idx, int unregister)
+{
+	struct mApplication *appl = pollinfo[idx].data;
+	int ret;
+
+	if (!appl) {
+		eprint("Application not assigned\n");
+		return;
+	}
+	ret = pipe2(appl->cpipe, O_NONBLOCK);
+	if (ret) {
+		eprint("Cannot open application %d control pipe - %s\n", appl->cobj.id2, strerror(errno));
+		mainpoll[idx].fd = -1;
+	} else {
+	}
+	ReleaseApplication(appl, unregister);
+	pollinfo[idx].type = PIT_ReleasedApp;
+	mainpoll[idx].fd = appl->cpipe[0];
 }
 
 void capi_dump_shared(void);
@@ -1182,7 +1516,7 @@ static void get_profile(int fd, struct mc_buf *mc)
 		capimsg_setu16(mc->rb, 8, MIC_INFO_CODING_ERROR);
 	} else if (contr == 0) {
 		cnt = 0;
-		for (i = 0; i < mI_count; i++) {
+		for (i = 0; i < mI_ControllerCount; i++) {
 			if (mI_Controller[i].enable)
 				cnt++;
 		}
@@ -1240,25 +1574,24 @@ static void mIcapi_register(int fd, int idx, struct mc_buf *mc)
 		eprint("error send %d/%d  - %s\n", ret, 10, strerror(errno));
 }
 
-static void mIcapi_release(int fd, struct mApplication *appl, struct mc_buf *mc)
+static void mIcapi_release(int fd, int idx, struct mc_buf *mc)
 {
-	int ret, idx;
+	int ret;
 	uint16_t aid, info = CapiIllAppNr;
+	struct mApplication *appl = pollinfo[idx].data;
 
 	aid = CAPIMSG_APPID(mc->rb);
 	CAPIMSG_SETSUBCOMMAND(mc->rb, CAPI_CONF);
-	iprint("Unregister application %d (%d)\n", aid, appl ? appl->AppId : -1);
+	iprint("Unregister application %d (%d)\n", aid, appl ? appl->cobj.id2 : -1);
 	if (appl) {
-		if (aid == appl->AppId) {
-			idx = del_mainpoll(appl->fd);
-			if (idx < 0)
-				wprint("Application %d not found in poll array\n", aid);
-			else
-				pollinfo[idx].data = NULL;
-			ReleaseApplication(appl);
+		if (aid == appl->cobj.id2) {
+			ShutdownAppl(idx, 1);
 			info = CapiNoError;
+		} else {
+			eprint("Application Id mismatch Got %d have %d\n", aid, appl->cobj.id2);
 		}
-	}
+	} else
+		eprint("Application not assigined\n");
 	capimsg_setu16(mc->rb, 8, info);
 	ret = send(fd, mc->rb, 10, 0);
 	if (ret != 10)
@@ -1361,7 +1694,7 @@ static void mIcapi_ttyname(int fd, int idx, struct mc_buf *mc)
 		ml = CAPIMSG_U32(mc->rb, 12);
 		if (appl->UserFlags & CAPIFLAG_HIGHJACKING) {
 			lp = get_lPLCI4plci(appl, ncci);
-			if (lp->BIlink && lp->BIlink->tty > -1) {
+			if (lp && lp->BIlink && lp->BIlink->tty > -1) {
 				ret = ptsname_r(lp->BIlink->tty, name, 80);
 				if (ret)
 					eprint("NCCI %06x: error to get ptsname for %d - %s\n",
@@ -1437,7 +1770,7 @@ static int main_recv(int fd, int idx)
 		mIcapi_register(fd, idx, mc);
 		break;
 	case MIC_RELEASE_REQ:
-		mIcapi_release(fd, pollinfo[idx].data, mc);
+		mIcapi_release(fd, idx, mc);
 		break;
 	case MIC_SERIAL_NUMBER_REQ:
 		get_serial_number(fd, mc);
@@ -1473,13 +1806,14 @@ end:
 
 int main_loop(void)
 {
-	int res, ret, i, idx, error = -1;
-	int running = 1;
+	int res, ret, i, idx, error = -1, timerId;
+	int running = 1, ShutDown = 0, polldelay;
 	int fd;
 	int nconn = -1;
 	struct sockaddr_un caddr;
 	char buf[4096];
 	socklen_t alen;
+	struct mApplication *appl;
 
 	ret = pipe(mIControl);
 	if (ret) {
@@ -1492,12 +1826,22 @@ int main_loop(void)
 		return -1;
 	} else
 		iprint("mIControl added to idx %d\n", ret);
+
 	ret = add_mainpoll(mIsock, PIT_mISDNmain);
 	if (ret < 0) {
 		eprint("Error while adding mIsock to mainpoll (mainpoll_max %d)\n", mainpoll_max);
 		return -1;
 	} else
 		iprint("mIsock added to idx %d\n", ret);
+
+	ret = add_mainpoll(mICAPItimer_base->tdev, PIT_mISDNtimer);
+	if (ret < 0) {
+		eprint("Error while adding mICAPItimer to mainpoll (mainpoll_max %d)\n", mainpoll_max);
+		return -1;
+	} else
+		iprint("mICAPItimer added to idx %d\n", ret);
+	pollinfo[ret].data = mICAPItimer_base;
+
 	ret = add_mainpoll(mCsock, PIT_CAPImain);
 	if (ret < 0) {
 		eprint("Error while adding mCsock to mainpoll (mainpoll_max %d)\n", mainpoll_max);
@@ -1505,8 +1849,9 @@ int main_loop(void)
 	} else
 		iprint("mCsock added to idx %d\n", ret);
 
+	polldelay = -1;
 	while (running) {
-		ret = poll(mainpoll, mainpoll_max, -1);
+		ret = poll(mainpoll, mainpoll_max, polldelay);
 		if (ret < 0) {
 			if (errno == EINTR)
 				iprint("Received signal - continue\n");
@@ -1515,6 +1860,14 @@ int main_loop(void)
 				error = -errno;
 			}
 			continue;
+		}
+		if (ret == 0) {	/* timeout */
+			if (ShutDown) {
+				eprint("Shutdown mainpoll timeout reached - force shutdown\n");
+				running = 0;
+				error = -EBUSY;
+				continue;
+			}
 		}
 		for (i = 0; i < mainpoll_max; i++) {
 			if (ret && mainpoll[i].revents) {
@@ -1554,8 +1907,7 @@ int main_loop(void)
 				case PIT_Application:
 					if (mainpoll[i].revents == POLLHUP) {
 						dprint(MIDEBUG_POLL, "socket %d closed\n", mainpoll[i].fd);
-						ReleaseApplication(pollinfo[i].data);
-						res = del_mainpoll(mainpoll[i].fd);
+						ShutdownAppl(i, 0);
 						break;
 					}
 					/* no break to handle POLLIN */
@@ -1571,8 +1923,10 @@ int main_loop(void)
 					}
 					res = main_recv(mainpoll[i].fd, i);
 					if (res == -ECONNABORTED || res == -ECONNRESET) {
-						if (pollinfo[i].type == PIT_Application)
-							ReleaseApplication(pollinfo[i].data);
+						if (pollinfo[i].type == PIT_Application) {
+							ShutdownAppl(i, 0);
+							break;
+						}
 						fd = mainpoll[i].fd;
 						dprint(MIDEBUG_POLL, "read 0 socket %d type %d closed\n", fd, pollinfo[i].type);
 						close(mainpoll[i].fd);
@@ -1585,12 +1939,48 @@ int main_loop(void)
 					break;
 				case PIT_Control:
 					res = read(mainpoll[i].fd, &error, sizeof(error));
-					if (res == sizeof(error))
-						iprint("Pollevent for MasterControl read %x (%d bytes)\n", error, res);
-					else
+					if (res == sizeof(error)) {
+						if (error == MI_CONTROL_SHUTDOWN) {
+							iprint("Pollevent ShutdownRequest\n");
+							polldelay = MI_SHUTDOWN_DELAY;
+							ShutDown = 1;
+							res = ReleaseAllApplications();
+							if (res <= 0) { /* No Apllication or error shutdown now */
+								running = 0;
+								error = res;
+							}
+						} else
+							eprint("Pollevent for MasterControl read %x\n", error);
+					} else
 						eprint("Pollevent for MasterControl read error - %s\n", strerror(errno));
-					running = 0;
-					error = 0;
+					break;
+				case PIT_ReleasedApp:
+					res = read(mainpoll[i].fd, &error, sizeof(error));
+					if (res == sizeof(error)) {
+						if (error == MI_PUT_APPLICATION) {
+							appl = pollinfo[i].data;
+							iprint("AppId %d Pollevent MI_PUT_APPLICATION refcnt:%d\n",
+								appl->cobj.id2, appl->cobj.refcnt);
+							if (appl->cobj.refcnt < 3) {
+								res = del_mainpoll(mainpoll[i].fd);
+								if (res < 0) {
+									eprint("Cannot delete fd=%d from mainpoll result %d\n",
+										mainpoll[i].fd, res);
+								}
+								Free_Application(&appl->cobj);
+							}
+						}
+					}
+					break;
+				case PIT_mISDNtimer:
+					ret = read(mainpoll[i].fd, &timerId, sizeof(timerId));
+					if (ret < 0) {
+						eprint("mISDN read timer error %s\n", strerror(errno));
+					} else {
+						if (ret == sizeof(timerId) && timerId) {
+							expire_timer(pollinfo[i].data, timerId);
+						}
+					}
 					break;
 				default:
 					wprint("Unexpected poll event %x on fd %d type %d\n", mainpoll[i].revents,
@@ -1610,11 +2000,13 @@ int main_loop(void)
 static int my_lib_debug(const char *file, int line, const char *func, int level, const char *fmt, va_list va)
 {
 	int ret, l;
-	char date[64], log[1024];
+	char date[64], log[2048];
 	struct tm tm;
 	struct timeval tv;
+	pid_t tid = gettid();
+	char *LC = "UEWID";
 
-	ret = vsnprintf(log, 256, fmt, va);
+	ret = vsnprintf(log, 2000, fmt, va);
 	l = gettimeofday(&tv, NULL);
 	if (tv.tv_usec > 999999) {
 		tv.tv_sec++;
@@ -1625,12 +2017,12 @@ static int my_lib_debug(const char *file, int line, const char *func, int level,
 	snprintf(&date[l], sizeof(date) - l, ".%06d", (int)tv.tv_usec);
 
 	if (DebugFile) {
-		fprintf(DebugFile, "%s %20s:%4d %22s():%s", date, file, line, func, log);
+		fprintf(DebugFile, "%s %c %16s:%4d %22s(%05d):%s", date, LC[level], file, line, func, tid, log);
 		fflush(DebugFile);
 	} else if (level > MISDN_LIBDEBUG_WARN)
-		fprintf(stdout, "%s %20s:%4d %22s():%s", date, file, line, func, log);
+		fprintf(stdout, "%s %c %20s:%4d %22s(%05d):%s", date, LC[level], file, line, func, tid, log);
 	else
-		fprintf(stderr, "%s %20s:%4d %22s():%s", date, file, line, func, log);
+		fprintf(stderr, "%s %c %20s:%4d %22s(%05d):%s", date, LC[level], file, line, func, tid, log);
 	return ret;
 }
 
@@ -1652,6 +2044,9 @@ int main(int argc, char *argv[])
 	struct pController *pc;
 	struct group *grp;
 
+	mICAPItimer_base = &_mICAPItimer_base;
+	mICAPItimer_base->tdev = -1;
+	INIT_LIST_HEAD(&_mICAPItimer_base.pending_timer);
 	KeepTemporaryFiles = 0;
 	config_file = def_config;
 	ret = opt_parse(argc, argv);
@@ -1692,6 +2087,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Cannot init mApplication -%s\n", strerror(ret));
 		return 1;
 	}
+	CAPIobj_init();
 
 	mc_buffer_init();
 
@@ -1708,7 +2104,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Cannot access /dev/mISDNtimer - %s\n", strerror(errno));
 		return 1;
 	}
-	close(ret);
+	mICAPItimer_base->tdev = ret;
 	
 	mIsock = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
 	if (mIsock < 0) {
@@ -1717,31 +2113,37 @@ int main(int argc, char *argv[])
 	}
 
 	/* get number of stacks */
-	ret = ioctl(mIsock, IMGETCOUNT, &mI_count);
+	ret = ioctl(mIsock, IMGETCOUNT, &mI_ControllerCount);
 	if (ret < 0) {
 		fprintf(stderr, "mISDNv2 IMGETCOUNT error - %s\n", strerror(errno));
 		goto errout;
 	}
-	if (mI_count < 1) {
+	if (mI_ControllerCount < 1) {
 		fprintf(stderr, "mISDNv2 no controllers found\n");
 		goto errout;
 	}
-	mI_Controller = calloc(mI_count, sizeof(*mI_Controller));
+	mI_Controller = calloc(mI_ControllerCount, sizeof(*mI_Controller));
 	if (!mI_Controller) {
-		fprintf(stderr, "no memory to allocate %d controller struct (a %zd)\n", mI_count, sizeof(*mI_Controller));
+		fprintf(stderr, "no memory to allocate %d controller struct (a %zd)\n",
+			mI_ControllerCount, sizeof(*mI_Controller));
 		goto errout;
 	}
-	for (i = 0; i < mI_count; i++) {
+	for (i = 0; i < mI_ControllerCount; i++) {
 		pc = &mI_Controller[i];
 		pc->mNr = i;
 		pc->devinfo.id = i;
 		pc->enable = 1;	/* default all controllers are enabled */
 		pc->L3Proto = L3_PROTOCOL_DSS1_USER;
 		pc->L3Flags = 0;
-	        ret = pthread_rwlock_init(&pc->llock, NULL);
-	        if (ret) {
-	                fprintf(stderr, "Cannot init lock for controller %d ret:%d - %s\n", i + 1, ret, strerror(ret));
-	                goto errout;
+		ret = init_cobj(&pc->cobjLC, NULL, Cot_Root, i, 0);
+		if (ret) {
+			fprintf(stderr, "Cannot init LC lock for controller %d ret:%d - %s\n", i + 1, ret, strerror(ret));
+			goto errout;
+		}
+		ret = init_cobj(&pc->cobjPLCI, NULL, Cot_Root, i, 0);
+		if (ret) {
+			fprintf(stderr, "Cannot init PLCI lock for controller %d ret:%d - %s\n", i + 1, ret, strerror(ret));
+			goto errout;
 		}
 		ret = ioctl(mIsock, IMGETDEVINFO, &pc->devinfo);
 		if (ret < 0) {
@@ -1768,6 +2170,7 @@ int main(int argc, char *argv[])
 			pc->BInstances[j].pc = pc;
 			pc->BInstances[j].fd = -1;
 			pc->BInstances[j].tty = -1;
+			pthread_mutex_init(&pc->BInstances[j].lock, NULL);
 			sem_init(&pc->BInstances[j].wait, 0, 0);
 		}
 		pc->profile.ncontroller = i + 1;
@@ -1887,6 +2290,10 @@ retry_Csock:
 	if (ret) {
 		wprint("Error to setup signal handler for SIGUSR1 - %s\n", strerror(errno));
 	}
+	ret = sigaction(SIGUSR2, &mysig_dump, NULL);
+	if (ret) {
+		wprint("Error to setup signal handler for SIGUSR2 - %s\n", strerror(errno));
+	}
 	exitcode = main_loop();
 	free_ncci_fsm();
 	free_lPLCI_fsm();
@@ -1897,12 +2304,15 @@ retry_Csock:
 errout:
 	mc_buffer_cleanup();
 	cleanup_layer3();
+	CAPIobj_exit();
 	if (mCsock > -1)
 		close(mCsock);
 	close(mIsock);
 	if (mI_Controller)
 		free(mI_Controller);
-
+	if (mICAPItimer_base->tdev > 0)
+		close(mICAPItimer_base->tdev);
+	mICAPItimer_base->tdev = -1;
 	unlink(MISDN_CAPI_SOCKET_PATH);
 	if (TempDirectory && !KeepTemporaryFiles) {
 		ret = rmdir(TempDirectory);

@@ -25,6 +25,9 @@
 static int lPLCILinkUp(struct lPLCI *);
 static int lPLCILinkDown(struct lPLCI *);
 
+/* T301 is usually 180 - give it a chance, if not clear down 2 sec later */
+#define ALERT_TIMEOUT	182000
+
 // --------------------------------------------------------------------
 // PLCI state machine
 //
@@ -163,56 +166,98 @@ static struct Fsm plci_fsm = { 0, 0, 0, 0, 0 };
 static void lPLCI_debug(struct FsmInst *fi, char *fmt, ...)
 {
 	char tmp[160];
-	char *p = tmp;
 	va_list args;
 	struct lPLCI *lp = fi->userdata;
 
 	if (!(MIDEBUG_STATES & mI_debug_mask))
 		return;
 	va_start(args, fmt);
-	p += sprintf(p, "lPLCI %04x: ", lp->plci);
-	p += vsprintf(p, fmt, args);
-	*p = 0;
-	dprint(MIDEBUG_STATES, "%s\n", tmp);
+	vsnprintf(tmp, 160, fmt, args);
+	dprint(MIDEBUG_STATES, "%s: %s\n", CAPIobjIDstr(&lp->cobj), tmp);
 	va_end(args);
 }
 
 static inline void Send2Application(struct lPLCI *lp, struct mc_buf *mc)
 {
-	SendCmsg2Application(lp->lc->Appl, mc);
+	SendCmsg2Application(lp->Appl, mc);
 }
 
 static inline void lPLCICmsgHeader(struct lPLCI *lp, _cmsg * cmsg, __u8 cmd, __u8 subcmd)
 {
-	capi_cmsg_header(cmsg, lp->lc->Appl->AppId, cmd, subcmd, lp->lc->Appl->MsgId++, lp->plci);
+	capi_cmsg_header(cmsg, lp->cobj.id2, cmd, subcmd, lp->Appl->MsgId++, lp->cobj.id);
+}
+
+static void atimer_timeout(void *arg)
+{
+	struct lPLCI *lp = arg;
+	struct l3_msg *l3m;
+
+	dprint(MIDEBUG_PLCI, "%s: state %s atimer timeout\n",
+		CAPIobjIDstr(&lp->cobj), str_st_plci[lp->plci_m.state]);
+	if (lp->plci_m.state == ST_PLCI_P_1) {
+		l3m = alloc_l3_msg();
+		if (!l3m) {
+			wprint("disconnect not send no l3m\n");
+		} else {
+			mi_encode_cause(l3m, CAUSE_NORMALUNSPECIFIED, CAUSE_LOC_USER, 0, NULL);
+			plciL4L3(p4lPLCI(lp), MT_DISCONNECT, l3m);
+			lp->cause = CAUSE_ALERTED_NO_ANSWER;
+		}
+	}
 }
 
 static void lPLCIClearOtherApps(struct lPLCI *lp)
 {
 	struct lPLCI *o_lp;
+	struct mCAPIobj *co;
 	struct mc_buf *mc = NULL;
 
-	if (!lp->PLCI)
-		return;
-	o_lp = lp->PLCI->lPLCIs;
-	while (o_lp) {
-		if (o_lp != lp) {
+
+	co = get_next_cobj(lp->cobj.parent, NULL);
+	while (co) {
+		o_lp = container_of(co, struct lPLCI, cobj);
+		if (o_lp  != lp) {
+			o_lp->rel_req = 0; /* since some other App did take the call we want not send a RELEASE COMPLETE */
 			MC_BUF_ALLOC(mc);
 			lPLCICmsgHeader(o_lp, &mc->cmsg, CAPI_DISCONNECT, CAPI_IND);
 			mc->cmsg.Reason = 0x3304;	// other application got the call
 			FsmEvent(&o_lp->plci_m, EV_PI_DISCONNECT_IND, mc);
+			free_mc_buf(mc);
 		}
-		o_lp = o_lp->next;
+		co = get_next_cobj(lp->cobj.parent, co);
 	}
-	if (mc)
-		free_mc_buf(mc);
+}
+
+/* inform B-channel handler (NCCI) about disconnect */
+static int lPLCIDisconnectInd(struct lPLCI *lp, struct mc_buf *mc)
+{
+	struct BInstance *bi = lp->BIlink;
+	int ret = -ENODEV;
+
+	if (mc && bi) {
+		lPLCICmsgHeader(lp, &mc->cmsg, CAPI_DISCONNECT, CAPI_IND);
+		if (lp->cause > 0)
+			mc->cmsg.Reason = 0x3400 | (lp->cause & 0x7f);
+		else
+			mc->cmsg.Reason = 0;
+		capi_cmsg2message(&mc->cmsg, mc->rb);
+		mc->len = CAPIMSG_LEN(mc->rb);
+		mc->refcnt++;
+		ret = bi->from_up(bi, mc);
+		dprint(MIDEBUG_PLCI, "%s: Sending Disconnect to B-channel handler returned %d - %s\n",
+			CAPIobjIDstr(&lp->cobj), ret, strerror(-ret));
+		if (ret)
+			free_mc_buf(mc);
+	} else
+		dprint(MIDEBUG_PLCI, "%s: B-channel handler already gone\n", CAPIobjIDstr(&lp->cobj));
+	return ret;
 }
 
 static void lPLCIInfoIndMsg(struct lPLCI *lp, uint32_t mask, unsigned char mt, struct mc_buf *arg)
 {
 	struct mc_buf *mc = arg;
 
-	if ((!(lp->lc->InfoMask & mask)))
+	if (!lp->lc || (!(lp->lc->InfoMask & mask)))
 		return;
 
 	if (!mc) {
@@ -236,7 +281,7 @@ static void lPLCIInfoIndIE(struct lPLCI *lp, unsigned char ie, uint32_t mask, st
 	if (!mc || mc->l3m)
 		return;
 
-	if (!(lp->lc->InfoMask & mask))	/* not requested by application */
+	if (!lp->lc || !(lp->lc->InfoMask & mask))	/* not requested by application */
 		return;
 
 	if (ie & 0x80) {	/* Single octet */
@@ -260,7 +305,10 @@ static void lPLCIInfoIndIE(struct lPLCI *lp, unsigned char ie, uint32_t mask, st
 #ifdef HANDLE_EARLYB3
 	if (ie == IE_PROGRESS && lp->lc->InfoMask & CAPI_INFOMASK_EARLYB3) {
 		if (iep[0] == 0x02 && iep[2] == 0x88) {	// in-band information available
-			lPLCILinkUp(lp);
+			ret = lPLCILinkUp(lp);
+			if (ret != 0) {
+				....
+			}
 			if (!test_bit(PLCI_STATE_STACKREADY, &lp->plci->state)) {
 				Send2ApplicationDelayed(lp, cmsg);
 				return;
@@ -411,7 +459,7 @@ uint16_t q931CIPValue(struct mc_buf * mc, uint32_t *m)
 	return CIPValue;
 }
 
-uint16_t CIPValue2setup(uint16_t CIPValue, struct l3_msg * l3m)
+static uint16_t CIPValue2setup(uint16_t CIPValue, struct l3_msg * l3m)
 {
 	switch (CIPValue) {
 	case 16:
@@ -440,7 +488,7 @@ uint16_t CIPValue2setup(uint16_t CIPValue, struct l3_msg * l3m)
 	return 0;
 }
 
-uint16_t cmsg2setup_req(_cmsg * cmsg, struct l3_msg * l3m)
+static uint16_t cmsg2setup_req(_cmsg * cmsg, struct l3_msg * l3m)
 {
 	if (CIPValue2setup(cmsg->CIPValue, l3m))
 		goto err;
@@ -463,7 +511,7 @@ err:
 	return CapiIllMessageParmCoding;
 }
 
-uint16_t cmsg2info_req(_cmsg * cmsg, struct l3_msg * l3m)
+static uint16_t cmsg2info_req(_cmsg * cmsg, struct l3_msg * l3m)
 {
 	if (cmsg->Keypadfacility && cmsg->Keypadfacility[0])
 		add_layer3_ie(l3m, IE_KEYPAD, cmsg->Keypadfacility[0], &cmsg->Keypadfacility[1]);
@@ -472,16 +520,16 @@ uint16_t cmsg2info_req(_cmsg * cmsg, struct l3_msg * l3m)
 	return 0;
 }
 
-uint16_t cmsg2alerting_req(_cmsg * cmsg, struct l3_msg * l3m)
+static uint16_t cmsg2alerting_req(_cmsg * cmsg, struct l3_msg * l3m)
 {
 	if (cmsg->Useruserdata && cmsg->Useruserdata[0])
 		add_layer3_ie(l3m, IE_USER_USER, cmsg->Useruserdata[0], &cmsg->Useruserdata[1]);
 	return 0;
 }
 
-uint16_t lPLCICheckBprotocol(struct lPLCI * lp, _cmsg * cmsg)
+static uint16_t lPLCICheckBprotocol(struct lPLCI * lp, _cmsg * cmsg)
 {
-	struct pController *pc = lp->PLCI->pc;
+	struct pController *pc = pc4lPLCI(lp);
 	unsigned long sprot;
 	int val;
 
@@ -571,9 +619,9 @@ static int plci_parse_channel_id(struct lPLCI *lp, struct mc_buf *mc)
 	if (mc) {
 		ret = mi_decode_channel_id(mc->l3m, &lp->chid);
 		if (ret < 0) {
-			wprint("Channel ID IE decoding error - %s\n", strerror(-ret));
+			wprint("%s: Channel ID IE decoding error - %s\n", CAPIobjIDstr(&lp->cobj), strerror(-ret));
+			return -2;
 		}
-		return -2;
 	}
 	if (lp->chid.ctrl & MI_CHAN_CTRL_UPDATED) {
 		ret = 1;
@@ -581,16 +629,18 @@ static int plci_parse_channel_id(struct lPLCI *lp, struct mc_buf *mc)
 	} else
 		ret = 0;
 
-	if (lp->chid.nr == MI_CHAN_NONE || lp->chid.nr == MI_CHAN_ANY)
+	if (lp->chid.nr == MI_CHAN_NONE || lp->chid.nr == MI_CHAN_ANY) {
+		wprint("%s: Channel ID:%s\n", CAPIobjIDstr(&lp->cobj), lp->chid.nr == MI_CHAN_NONE ? "none" : "any");
 		ret = -1;
-
+	}
 	return ret;
 }
 
 static void plci_connect_req(struct FsmInst *fi, int event, void *arg)
 {
 	struct lPLCI *lp = fi->userdata;
-	struct mPLCI *plci = lp->PLCI;
+	struct mPLCI *plci = p4lPLCI(lp);
+	container_of(lp->cobj.parent, struct mPLCI, cobj);
 	struct mc_buf *mc = arg;
 	struct l3_msg *l3m;
 	uint16_t Info = 0;
@@ -600,7 +650,7 @@ static void plci_connect_req(struct FsmInst *fi, int event, void *arg)
 
 	l3m = alloc_l3_msg();
 	if (!l3m) {
-		Info = CapiNoPlciAvailable;
+		Info = CapiNoPLCIAvailable;
 		goto answer;
 	}
 	if ((Info = cmsg2setup_req(&mc->cmsg, l3m))) {
@@ -610,13 +660,13 @@ static void plci_connect_req(struct FsmInst *fi, int event, void *arg)
 		goto answer;
 	}
 
-	plci->pid = request_new_pid(plci->pc->l3);
+	plci->cobj.id2 = plci_new_pid(plci);
 	plciL4L3(plci, MT_SETUP, l3m);
 answer:
 	capi_cmsg_answer(&mc->cmsg);
 	mc->cmsg.Info = Info;
 	if (mc->cmsg.Info == 0)
-		mc->cmsg.adr.adrPLCI = lp->plci;
+		mc->cmsg.adr.adrPLCI = lp->cobj.id;
 	FsmEvent(fi, EV_PI_CONNECT_CONF, mc);
 }
 
@@ -631,7 +681,7 @@ static void plci_connect_conf(struct FsmInst *fi, int event, void *arg)
 	} else {
 		Send2Application(lp, mc);
 		FsmChangeState(fi, ST_PLCI_P_0);
-		lPLCI_free(lp);
+		cleanup_lPLCI(lp);
 	}
 }
 
@@ -643,43 +693,39 @@ static void plci_connect_ind(struct FsmInst *fi, int event, void *arg)
 
 static void plci_hold_req(struct FsmInst *fi, int event, void *arg)
 {
-	struct lPLCI *lp = fi->userdata;
-	struct mPLCI *plci = lp->PLCI;
+	struct mPLCI *p = p4lPLCI(fi->userdata);
 
-	plciL4L3(plci, MT_HOLD, arg);
+	plciL4L3(p, MT_HOLD, arg);
 }
 
 static void plci_retrieve_req(struct FsmInst *fi, int event, void *arg)
 {
-	struct lPLCI *lp = fi->userdata;
-	struct mPLCI *plci = lp->PLCI;
+	struct mPLCI *p = p4lPLCI(fi->userdata);
 
-	plciL4L3(plci, MT_RETRIEVE, arg);
+	plciL4L3(p, MT_RETRIEVE, arg);
 }
 
 static void plci_suspend_req(struct FsmInst *fi, int event, void *arg)
 {
-	struct lPLCI *lp = fi->userdata;
-	struct mPLCI *plci = lp->PLCI;
+	struct mPLCI *p = p4lPLCI(fi->userdata);
 
-	plciL4L3(plci, MT_SUSPEND, arg);
+	plciL4L3(p, MT_SUSPEND, arg);
 }
 
 static void plci_resume_req(struct FsmInst *fi, int event, void *arg)
 {
-	struct lPLCI *lp = fi->userdata;
-	struct mPLCI *plci = lp->PLCI;
+	struct mPLCI *p = p4lPLCI(fi->userdata);
 
 	// we already sent CONF with Info = SuppInfo = 0
 	FsmChangeState(fi, ST_PLCI_P_RES);
-	plci->pid = request_new_pid(plci->pc->l3);
-	plciL4L3(plci, MT_RESUME, arg);
+	p->cobj.id2 = plci_new_pid(p);
+	plciL4L3(p, MT_RESUME, arg);
 }
 
 static void plci_alert_req(struct FsmInst *fi, int event, void *arg)
 {
 	struct lPLCI *lp = fi->userdata;
-	struct mPLCI *plci = lp->PLCI;
+	struct mPLCI *plci = p4lPLCI(lp);
 	struct mc_buf *mc = arg;
 	uint16_t Info = 0;
 
@@ -708,24 +754,26 @@ answer:
 static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 {
 	struct lPLCI *lp = fi->userdata;
-	struct mPLCI *plci = lp->PLCI;
+	struct mPLCI *plci = p4lPLCI(lp);
 	struct mc_buf *mc = arg;
 	struct l3_msg *l3m;
 	int cause = 0;
 
-	if (mc->cmsg.Reject == 0) {	// accept
-		if (lPLCICheckBprotocol(lp, &mc->cmsg)) {
-			wprint("Bprotocol mismatch\n");
-		}
-		lPLCIClearOtherApps(lp);
-		l3m = alloc_l3_msg();
-		/* TODO connect number, sub,llc, addie... */
-		plciL4L3(plci, MT_CONNECT, l3m);
-		FsmChangeState(fi, ST_PLCI_P_4);
-		return;
-	}
-	// ignore, reject 
 	switch (mc->cmsg.Reject) {
+	case 0: // accept
+		if (lPLCICheckBprotocol(lp, &mc->cmsg)) {
+			/* Maybe we need to check alerting */
+			wprint("%s: Bprotocol mismatch - use CAUSE_INCOMPATIBLE_DEST\n", CAPIobjIDstr(&lp->cobj));
+			cause = CAUSE_INCOMPATIBLE_DEST;
+		} else {
+			lPLCIClearOtherApps(lp);
+			l3m = alloc_l3_msg();
+			/* TODO connect number, sub,llc, addie... */
+			plciL4L3(plci, MT_CONNECT, l3m);
+			FsmChangeState(fi, ST_PLCI_P_4);
+			return;
+		}
+		break;
 	case 1:
 		cause = CAUSE_NOUSER_RESPONDING;
 		break;		// Ignore
@@ -754,36 +802,32 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 		if ((mc->cmsg.Reject & 0xff00) == 0x3400) {
 			cause = mc->cmsg.Reject & 0x7f;
 		} else {
-			cause = CAUSE_NORMAL_CLEARING;	// normal call clearing
+			wprint("%s: Reject %d not handled assume 7 CAUSE_INCOMPATIBLE_DEST\n",
+				CAPIobjIDstr(&lp->cobj), mc->cmsg.Reject);
+			cause = CAUSE_INCOMPATIBLE_DEST;
 		}
 	}
-	// FIXME
-	// WHY ???
-	// if (cmsg->Reject != 1) {
-	// ignore
-	//      lPLCIClearOtherApps(lp);
-	// }
-	// plciDetachlPLCI(plci, lp);
-	if (mc->cmsg.Reject != 0) {
-		if (plci->nAppl == 1) {
-			int mt;
 
-			l3m = alloc_l3_msg();
-			if (!l3m) {
-				wprint("disconnect not send no l3m\n");
-			} else {
-				if (plci->alerting)
-					mt = MT_DISCONNECT;
-				else
-					mt = MT_RELEASE_COMPLETE;
-				mi_encode_cause(l3m, cause, CAUSE_LOC_USER, 0, NULL);
-				plciL4L3(plci, mt, l3m);
-			}
-		}
+	if (plci->alerting) {
+		/* last cause wins here */
+		dprint(MIDEBUG_PLCI, "%s: store cause #%d for DISCONNECT when all lPLCIs are gone\n",
+			CAPIobjIDstr(&lp->cobj), cause);
+		plci->cause = cause;
+		plci->cause_loc = CAUSE_LOC_USER;
+		lp->cause = cause;
+		lp->cause_loc = CAUSE_LOC_USER;
+		lp->rel_req = 1;
+	} else {
+		dprint(MIDEBUG_PLCI, "%s: store cause #%d for RELEASE COMPLETE when all lPLCIs are gone\n",
+			CAPIobjIDstr(&lp->cobj), cause);
+		lp->cause = cause;
+		lp->cause_loc = CAUSE_LOC_USER;
+		lp->rel_req = 1;
+		dprint(MIDEBUG_PLCI, "%s: Sombody is alerting - do not store cause\n", CAPIobjIDstr(&lp->cobj));
 	}
 	mc->cmsg.Command = CAPI_DISCONNECT;
 	mc->cmsg.Subcommand = CAPI_IND;
-	mc->cmsg.Messagenumber = lp->lc->Appl->MsgId++;
+	mc->cmsg.Messagenumber = lp->Appl->MsgId++;
 	mc->cmsg.Reason = 0;
 	FsmEvent(&lp->plci_m, EV_PI_DISCONNECT_IND, mc);
 }
@@ -791,10 +835,26 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 static void plci_connect_active_ind(struct FsmInst *fi, int event, void *arg)
 {
 	struct lPLCI *lp = fi->userdata;
+	struct mc_buf *mc = arg;
+	struct l3_msg *l3m;
+	int ret;
 
-	FsmChangeState(fi, ST_PLCI_P_ACT);
-	lPLCILinkUp(lp);
-	Send2Application(lp, arg);
+	ret = lPLCILinkUp(lp);
+	if (ret) {
+		wprint("%s: lPLCILinkUp was not successful ret:%x\n",
+			CAPIobjIDstr(&lp->cobj), ret);
+		l3m = alloc_l3_msg();
+		if (!l3m) {
+			wprint("disconnect not send no l3m\n");
+		} else {
+			lp->cause = CAUSE_RESOURCES_UNAVAIL;
+			mi_encode_cause(l3m, lp->cause, CAUSE_LOC_USER, 0, NULL);
+			plciL4L3(p4lPLCI(lp), MT_DISCONNECT, l3m);
+		}
+	} else {
+		FsmChangeState(fi, ST_PLCI_P_ACT);
+		Send2Application(lp, mc);
+	}
 }
 
 static void plci_connect_active_resp(struct FsmInst *fi, int event, void *arg)
@@ -804,7 +864,7 @@ static void plci_connect_active_resp(struct FsmInst *fi, int event, void *arg)
 static void plci_disconnect_req(struct FsmInst *fi, int event, void *arg)
 {
 	struct lPLCI *lp = fi->userdata;
-	struct mPLCI *plci = lp->PLCI;
+	struct mPLCI *plci = p4lPLCI(lp);
 	struct mc_buf *mc = arg;
 	struct l3_msg *l3m;
 	int cause;
@@ -846,10 +906,25 @@ static void plci_resume_conf(struct FsmInst *fi, int event, void *arg)
 {
 	// facility_ind Resume: Reason = 0
 	struct lPLCI *lp = fi->userdata;
+	struct l3_msg *l3m;
+	int ret;
 
-	FsmChangeState(fi, ST_PLCI_P_ACT);
-	lPLCILinkUp(lp);
-	Send2Application(lp, arg);
+	ret = lPLCILinkUp(lp);
+	if (ret) {
+		wprint("%s: lPLCILinkUp was not successful ret:%x\n",
+			CAPIobjIDstr(&lp->cobj), ret);
+		l3m = alloc_l3_msg();
+		if (!l3m) {
+			wprint("disconnect not send no l3m\n");
+		} else {
+			lp->cause = CAUSE_RESOURCES_UNAVAIL;
+			mi_encode_cause(l3m, lp->cause, CAUSE_LOC_USER, 0, NULL);
+			plciL4L3(p4lPLCI(lp), MT_DISCONNECT, l3m);
+		}
+	} else {
+		FsmChangeState(fi, ST_PLCI_P_ACT);
+		Send2Application(lp, arg);
+	}
 }
 
 static void plci_disconnect_ind(struct FsmInst *fi, int event, void *arg)
@@ -861,18 +936,18 @@ static void plci_disconnect_ind(struct FsmInst *fi, int event, void *arg)
 static void plci_disconnect_resp(struct FsmInst *fi, int event, void *arg)
 {
 	FsmChangeState(fi, ST_PLCI_P_0);
-	lPLCI_free(fi->userdata);
+	cleanup_lPLCI(fi->userdata);
 }
 
 static void plci_appl_release(struct FsmInst *fi, int event, void *arg)
 {
-	lPLCI_free(fi->userdata);
+	cleanup_lPLCI(fi->userdata);
 }
 
 static void plci_appl_release_disc(struct FsmInst *fi, int event, void *arg)
 {
 	struct lPLCI *lp = fi->userdata;
-	struct mPLCI *plci = lp->PLCI;
+	struct mPLCI *plci = p4lPLCI(lp);
 	int cause;
 	struct l3_msg *l3m;
 
@@ -948,7 +1023,7 @@ static void plci_channel_err(struct FsmInst *fi, int event, void *arg)
 	if (l3m) {
 		cause = CAUSE_CHANNEL_UNACCEPT;
 		mi_encode_cause(l3m, cause, CAUSE_LOC_USER, 0, NULL);
-		plciL4L3(lp->PLCI, MT_RELEASE_COMPLETE, l3m);
+		plciL4L3(p4lPLCI(lp), MT_RELEASE_COMPLETE, l3m);
 	} else
 		eprint("no l3_msg\n");
 	if (!mc) {
@@ -969,46 +1044,73 @@ static void plci_cc_setup_ind(struct FsmInst *fi, int event, void *arg)
 {
 	struct lPLCI *lp = fi->userdata;
 	struct mc_buf *mc = arg;
+	_cbyte BChannelInfo[36], l;
+	int ret;
+
+	if (lp->chid.nr == MI_CHAN_NONE || lp->chid.nr == MI_CHAN_ANY) {
+		if (lp->lc && !(lp->lc->InfoMask & CAPI_INFOMASK_CHANNELID)) {
+			wprint("%s: Channel ID:%s SETUP ignored - no channelid is set and channel ID INFO was not requested\n",
+				CAPIobjIDstr(&lp->cobj), lp->chid.nr == MI_CHAN_NONE ? "none" : "any");
+			lp->ignored = 1;
+			ret = check_free_bchannels(p4lController(lp->lc));
+			if (ret == 0)
+				lp->cause = CAUSE_USER_BUSY;
+			return;
+		} else {
+			wprint("%s: Channel ID:%s SETUP without channelid is indicated as waiting call\n",
+				CAPIobjIDstr(&lp->cobj), lp->chid.nr == MI_CHAN_NONE ? "none" : "any");
+		}
+	}
+	if (mc->l3m->channel_id) {
+		capimsg_setu16(BChannelInfo, 1, 4);
+		l = *mc->l3m->channel_id;
+		capimsg_setu8(BChannelInfo, 3, l);
+		if (l && l < 32)
+			memcpy(&BChannelInfo[4], mc->l3m->channel_id + 1, l);
+		l += 3;
+		*BChannelInfo = l;
+	} else {
+		capimsg_setu16(BChannelInfo, 1, 2); /* not B, not D -> no channel */
+		*BChannelInfo = 2;
+	}
+
 
 	lPLCICmsgHeader(lp, &mc->cmsg, CAPI_CONNECT, CAPI_IND);
 
-	// FIXME: CW
-	if (mc->l3m) {
-		mc->cmsg.CIPValue = q931CIPValue(mc, NULL);
-		if (mc->l3m->called_nr && *mc->l3m->called_nr)
-			mc->cmsg.CalledPartyNumber = mc->l3m->called_nr;
-		if (mc->l3m->called_sub && *mc->l3m->called_sub)
-			mc->cmsg.CalledPartySubaddress = mc->l3m->called_sub;
-		if (mc->l3m->calling_nr && *mc->l3m->calling_nr)
-			mc->cmsg.CallingPartyNumber = mc->l3m->calling_nr;
-		if (mc->l3m->calling_sub && *mc->l3m->calling_sub)
-			mc->cmsg.CallingPartySubaddress = mc->l3m->calling_sub;
-		if (mc->l3m->bearer_capability && *mc->l3m->bearer_capability)
-			mc->cmsg.BC = mc->l3m->bearer_capability;
-		if (mc->l3m->llc && *mc->l3m->llc)
-			mc->cmsg.LLC = mc->l3m->llc;
-		if (mc->l3m->hlc && *mc->l3m->hlc)
-			mc->cmsg.HLC = mc->l3m->hlc;
+	mc->cmsg.BChannelinformation = BChannelInfo;
+	mc->cmsg.CIPValue = q931CIPValue(mc, NULL);
+	if (mc->l3m->called_nr && *mc->l3m->called_nr)
+		mc->cmsg.CalledPartyNumber = mc->l3m->called_nr;
+	if (mc->l3m->called_sub && *mc->l3m->called_sub)
+		mc->cmsg.CalledPartySubaddress = mc->l3m->called_sub;
+	if (mc->l3m->calling_nr && *mc->l3m->calling_nr)
+		mc->cmsg.CallingPartyNumber = mc->l3m->calling_nr;
+	if (mc->l3m->calling_sub && *mc->l3m->calling_sub)
+		mc->cmsg.CallingPartySubaddress = mc->l3m->calling_sub;
+	if (mc->l3m->bearer_capability && *mc->l3m->bearer_capability)
+		mc->cmsg.BC = mc->l3m->bearer_capability;
+	if (mc->l3m->llc && *mc->l3m->llc)
+		mc->cmsg.LLC = mc->l3m->llc;
+	if (mc->l3m->hlc && *mc->l3m->hlc)
+		mc->cmsg.HLC = mc->l3m->hlc;
 #if CAPIUTIL_VERSION > 1
-		{
-			struct m_extie *eie;
-			int i;
-			/* ETS 300 092 Annex B */
-			eie = mc->l3m->extra;
-			for (i = 0; i < 8; i++) {
-				if (!eie->ie)	/* stop if no additional ie */
-					break;
-				if (eie->ie == IE_CALLING_PN && eie->codeset == 0) {
-					if (eie->val && *eie->val)
-						mc->cmsg.CallingPartyNumber2 = eie->val;
-					break;
-				}
-				eie++;
+	{
+		struct m_extie *eie;
+		int i;
+		/* ETS 300 092 Annex B */
+		eie = mc->l3m->extra;
+		for (i = 0; i < 8; i++) {
+			if (!eie->ie)	/* stop if no additional ie */
+				break;
+			if (eie->ie == IE_CALLING_PN && eie->codeset == 0) {
+				if (eie->val && *eie->val)
+					mc->cmsg.CallingPartyNumber2 = eie->val;
+				break;
 			}
+			eie++;
 		}
-#endif
-		// all else set to default
 	}
+#endif
 	FsmEvent(&lp->plci_m, EV_PI_CONNECT_IND, mc);
 }
 
@@ -1035,24 +1137,33 @@ static void plci_cc_disconnect_ind(struct FsmInst *fi, int event, void *arg)
 	struct lPLCI *lp = fi->userdata;
 	struct mc_buf *mc = arg;
 	int ret;
+	const char *ids;
 
 	lp->cause = -1;
+	ids = CAPIobjIDstr(&lp->cobj);
 	if (mc->l3m) {
 		ret = mi_decode_cause(mc->l3m, NULL, &lp->cause_loc, NULL, &lp->cause, NULL, NULL);
 		if (ret) {
-			wprint("Error decoding cause %d - %s\n", ret, strerror(-ret));
+			wprint("%s: Error decoding cause %d - %s\n", ids, ret, strerror(-ret));
 		} else
-			iprint("PLCI %04x: Got Disconnect with cause %02d (0x%02x) loc %02x\n",
-			       lp->plci, lp->cause, lp->cause, lp->cause_loc);
+			iprint("%s: Got Disconnect with cause %02d (0x%02x) loc %02x\n",
+				ids, lp->cause, lp->cause, lp->cause_loc);
 	} else
-		iprint("PLCI %04x: Got Disconnect without cause info\n", lp->plci);
+		iprint("%s: Got Disconnect without cause info\n", ids);
+
+
+	if (lp->autohangup && (!lp->lc || lp->lc->InfoMask & CAPI_INFOMASK_EARLYB3))
+		lp->autohangup = 0;
+
+	ret = lPLCIDisconnectInd(lp, mc);
+	if (ret == 0) {
+		/* NCCI is in state 0 */
+		lp->autohangup = 1;
+	}
 
 	if (lp->autohangup) {
-		if (lp->lc->InfoMask & CAPI_INFOMASK_EARLYB3)
-			return;
-
 		lPLCILinkDown(lp);
-		plciL4L3(lp->PLCI, MT_RELEASE, NULL);
+		plciL4L3(p4lPLCI(lp), MT_RELEASE, NULL);
 	}
 }
 
@@ -1197,16 +1308,31 @@ static void plci_cc_hold_ind(struct FsmInst *fi, int event, void *arg)
 
 	lPLCI_hold_reply(lp, CapiNoError, arg);
 	lPLCILinkDown(lp);
-	plciL4L3(lp->PLCI, MT_HOLD_ACKNOWLEDGE, NULL);
+	plciL4L3(p4lPLCI(lp), MT_HOLD_ACKNOWLEDGE, NULL);
 }
 
 static void plci_retrieve_conf(struct FsmInst *fi, int event, void *arg)
 {
 	struct lPLCI *lp = fi->userdata;
+	struct l3_msg *l3m;
+	int ret;
 
-	FsmChangeState(fi, ST_PLCI_P_ACT);
-	lPLCILinkUp(lp);
-	Send2Application(lp, arg);
+	ret = lPLCILinkUp(lp);
+	if (ret) {
+		wprint("%s: lPLCILinkUp was not successful ret:%x\n",
+			CAPIobjIDstr(&lp->cobj), ret);
+		l3m = alloc_l3_msg();
+		if (!l3m) {
+			wprint("disconnect not send no l3m\n");
+		} else {
+			lp->cause = CAUSE_RESOURCES_UNAVAIL;
+			mi_encode_cause(l3m, lp->cause, CAUSE_LOC_USER, 0, NULL);
+			plciL4L3(p4lPLCI(lp), MT_DISCONNECT, l3m);
+		}
+	} else {
+		FsmChangeState(fi, ST_PLCI_P_ACT);
+		Send2Application(lp, arg);
+	}
 }
 
 static void lPLCI_retrieve_reply(struct lPLCI *lp, uint16_t SuppServiceReason, void *arg)
@@ -1290,7 +1416,7 @@ static void plci_cc_retrieve_ind(struct FsmInst *fi, int event, void *arg)
 		lPLCI_retrieve_reply(lp, 0x3711, arg);	/* resource Error */
 		mt = MT_RETRIEVE_REJECT;
 	}
-	plciL4L3(lp->PLCI, mt, NULL);
+	plciL4L3(p4lPLCI(lp), mt, NULL);
 }
 
 static void lPLCI_suspend_reply(struct lPLCI *lp, uint16_t SuppServiceReason, void *arg)
@@ -1434,10 +1560,14 @@ static void plci_select_b_protocol_req(struct FsmInst *fi, int event, void *arg)
 		goto answer;
 	}
 	ret = lPLCILinkUp(lp);
-	if (ret < 0)
+	if (ret < 0) {
 		Info = CapiMessageNotSupportedInCurrentState;
-	else
-		Info = ret;
+	} else {
+		if (ret == CapiBchannelNotAvailable) /* internal use only */
+			Info = CapiMsgBusy;
+		else
+			Info = ret;
+	}
 answer:
 	capi_cmsg_answer(&mc->cmsg);
 	mc->cmsg.Info = Info;
@@ -1455,7 +1585,7 @@ static void plci_info_req_overlap(struct FsmInst *fi, int event, void *arg)
 	if (l3m) {
 		Info = cmsg2info_req(&mc->cmsg, l3m);
 		if (Info == CapiNoError)
-			plciL4L3(lp->PLCI, MT_INFORMATION, l3m);
+			plciL4L3(p4lPLCI(lp), MT_INFORMATION, l3m);
 		else
 			free_l3_msg(l3m);
 	}
@@ -1470,11 +1600,13 @@ static void plci_cc_ph_control_ind(struct FsmInst *fi, int event, void *arg)
 	struct mc_buf *mc = arg;
 	unsigned int *tt;
 	__u8 tmp[2];
+	const char *ids;
 
 	tt = (unsigned int *)(mc->rb + sizeof(struct mISDNhead));
-	dprint(MIDEBUG_PLCI, "PLCI:%04x tt(%x)\n", lp->plci, *tt);
+	ids = CAPIobjIDstr(&lp->cobj);
+	dprint(MIDEBUG_PLCI, "%s: tt(%x)\n", ids, *tt);
 	if ((*tt & ~DTMF_TONE_MASK) != DTMF_TONE_VAL) {
-		wprint("PLCI:%04x PH_CONTROL but not a touchtone (%x) ?\n", lp->plci, *tt);
+		wprint("%s: PH_CONTROL but not a touchtone (%x) ?\n", ids, *tt);
 	} else {
 		lPLCICmsgHeader(lp, &mc->cmsg, CAPI_FACILITY, CAPI_IND);
 		tmp[0] = 1;
@@ -1587,139 +1719,191 @@ const int FN_PLCI_COUNT = sizeof(fn_plci_list) / sizeof(struct FsmNode);
 int lPLCICreate(struct lPLCI **lpp, struct lController *lc, struct mPLCI *plci)
 {
 	struct lPLCI *lp;
+	int ret;
 
 	lp = calloc(1, sizeof(*lp));
 	if (!lp)
 		return -ENOMEM;
-	lp->plci = plci->plci;
+	lp->cobj.id2 = lc->Appl->cobj.id2;
+	ret = init_cobj_registered(&lp->cobj, &plci->cobj, Cot_lPLCI, 0x00ffff);
+	if (ret) {
+		free(lp);
+		return ret;
+	}
 	lp->lc = lc;
-	lp->PLCI = plci;
-	if (lc->Contr->profile.goptions & 0x0008) {
+	get_cobj(&lc->cobj);
+	lp->Appl = lc->Appl;
+	get_cobj(&lc->Appl->cobj);
+	if (plci->pc->profile.goptions & 0x0008) {
 		/* DTMF */
 		lp->l1dtmf = 1;
 	}
 	lp->plci_m.fsm = &plci_fsm;
 	lp->plci_m.state = ST_PLCI_P_0;
-//      lp->plci_m.debug      = plci->contr->debug & CAPI_DBG_PLCI_STATE;
 	lp->plci_m.debug = MIDEBUG_PLCI & mI_debug_mask;
 	lp->plci_m.userdata = lp;
 	lp->plci_m.printdebug = lPLCI_debug;
 	lp->chid.nr = MI_CHAN_NONE;
 	lp->autohangup = 1;
-	pthread_rwlock_init(&lp->lock, NULL);
+	init_timer(&lp->atimer, mICAPItimer_base, lp, atimer_timeout);
+	get_cobj(&lp->cobj); /* timer ref */
 	*lpp = lp;
 	return 0;
 }
 
-void lPLCI_free(struct lPLCI *lp)
+void cleanup_lPLCI(struct lPLCI *lp)
 {
-	struct mNCCI *nc, *nn;
+	struct mNCCI *nc;
+	struct mCAPIobj *co;
+	struct mPLCI *plci = p4lPLCI(lp);
 
-	dprint(MIDEBUG_PLCI, "PLCI:%04x free now\n", lp->plci);
-	if (lp->BIlink)
+	if (lp->cobj.cleaned) {
+		wprint("%s: refcnt %d was already cleaned\n", CAPIobjIDstr(&lp->cobj), lp->cobj.refcnt);
+		put_cobj(&lp->cobj);
+		return;
+	}
+	dprint(MIDEBUG_PLCI, "%s: refcnt %d cleaning now\n", CAPIobjIDstr(&lp->cobj), lp->cobj.refcnt);
+	lp->cobj.cleaned = 1;
+
+	del_timer(&lp->atimer);
+	put_cobj(&lp->cobj); /* timer ref */
+
+	if (lp->BIlink) {
 		CloseBInstance(lp->BIlink);
-	if (lp->PLCI) {
-		dprint(MIDEBUG_PLCI, "PLCI:%04x plci state:%s\n", lp->plci, str_st_plci[lp->plci_m.state]);
+		lp->BIlink = NULL;
+	}
+	dprint(MIDEBUG_PLCI, "%s: plci state:%s\n", CAPIobjIDstr(&lp->cobj), str_st_plci[lp->plci_m.state]);
+	if (plci) {
 		if (lp->plci_m.state != ST_PLCI_P_0) {
 			struct l3_msg *l3m = alloc_l3_msg();
 
 			if (l3m) {
 				mi_encode_cause(l3m, CAUSE_RESOURCES_UNAVAIL, CAUSE_LOC_USER, 0, NULL);
-				plciL4L3(lp->PLCI, MT_RELEASE_COMPLETE, l3m);
+				plciL4L3(plci, MT_RELEASE_COMPLETE, l3m);
 			} else
-				eprint("No l3m for RELEASE_COMPLETE for PLCI:%04x\n", lp->plci);
+				eprint("%s: No l3m for RELEASE_COMPLETE\n", CAPIobjIDstr(&lp->cobj));
 		}
 		plciDetachlPLCI(lp);
+	} else
+		wprint("%s: refcnt %d no PLCI attached\n", CAPIobjIDstr(&lp->cobj), lp->cobj.refcnt);
+
+	co = get_next_cobj(&lp->cobj, NULL);
+	while (co) {
+		nc = container_of(co, struct mNCCI, cobj);
+		cleanup_ncci(nc);
+		co = get_next_cobj(&lp->cobj, co);
 	}
-	nc = lp->Nccis;
-	lp->Nccis = NULL;
-	while (nc) {
-		nn = nc->next;
-		nc->next = NULL;
-		ncciDel_lPlci(nc);
-		nc = nn;
+	if (lp->lc) {
+		put_cobj(&lp->lc->cobj);
+		lp->lc = NULL;
 	}
-	free(lp);
+	if (lp->Appl) {
+		put_cobj(&lp->Appl->cobj);
+		lp->Appl = NULL;
+	}
+}
+
+void Free_lPLCI(struct mCAPIobj *lco)
+{
+	struct lPLCI *lp = container_of(lco, struct lPLCI, cobj);
+	struct mCAPIobj *co;
+
+	dprint(MIDEBUG_PLCI, "%s: freeing now\n", CAPIobjIDstr(lco));
+	if (!lco->cleaned) {
+		wprint("%s: not cleaned delist\n", CAPIobjIDstr(lco));
+		delist_cobj(lco);
+	}
+	if (lco->listhead || lco->itemcnt) {
+		wprint("%s: still %d NCCIs pending\n", CAPIobjIDstr(lco), lco->itemcnt);
+		co = get_next_cobj(lco, NULL);
+		while (co) {
+			delist_cobj(co);
+			co = get_next_cobj(lco, co);
+		}
+	}
+	if (lp->lc) {
+		put_cobj(&lp->lc->cobj);
+		lp->lc = NULL;
+	}
+	if (lp->Appl) {
+		put_cobj(&lp->Appl->cobj);
+		lp->Appl = NULL;
+	}
+        if (lco->parent) {
+                put_cobj(lco->parent);
+                lco->parent = NULL;
+        }
+	dprint(MIDEBUG_PLCI, "%s: freeing done\n", CAPIobjIDstr(lco));
+	free_capiobject(lco, lp);
 }
 
 void dump_Lplcis(struct lPLCI *lp) {
 	struct BInstance *bi;
-	while (lp) {
-		iprint("LPLCI %04x state:%s chid.nr:0x%x NCCIs:%d autohangup:%s disc_req:%s\n", lp->plci,
-			str_st_plci[lp->plci_m.state], lp->chid.nr, lp->NcciCnt, lp->autohangup ? "yes" : "no",
-			lp->disc_req ? "yes" : "no");
-		iprint("LPLCI %04x l1dtmf:%s cause:0x%02x loc:%x\n", lp->plci, lp->l1dtmf ? "yes" : "no",
-			lp->cause, lp->cause_loc);
+	struct mCAPIobj *co;
+	const char *ids;
+
+	if (!lp)
+		return;
+	co = &lp->cobj;
+	while (co) {
+		ids = CAPIobjIDstr(co);
+		lp = container_of(co, struct lPLCI, cobj);
+		iprint("%s: refcnt:%d state:%s chid.nr:0x%x NCCIs:%d autohangup:%s%s\n", ids, co->refcnt,
+			str_st_plci[lp->plci_m.state], lp->chid.nr, co->itemcnt, lp->autohangup ? "yes" : "no",
+			lp->ignored ? " ignored" : "");
+		iprint("%s: l1dtmf:%s cause:0x%02x loc:%x rel_req:%s disc_req:%s\n", ids, lp->l1dtmf ? "yes" : "no",
+			lp->cause, lp->cause_loc, lp->rel_req ? "yes" : "no", lp->disc_req ? "yes" : "no");
 		bi = lp->BIlink;
 		if (bi) {
-			iprint("LPLCI %04x BI[%d] used:%d proto:%x fd:%d tty:%d type:%s DownId:%d UpId:%d\n",
-				lp->plci, bi->nr,  bi->usecnt, bi->proto, bi->fd, bi->tty, BItype2str(bi->type), bi->DownId,
-				bi->UpId);
-			iprint("LPLCI %04x BI[%d] tid:%x pcnt:%d running:%s waiting:%s\n", lp->plci, bi->nr,
-				(unsigned int)bi->tid, bi->pcnt, bi->running ? "yes" : "no", bi->waiting ? "yes" : "no");
-			iprint("LPLCI %04x no binstance\n", lp->plci);
+			iprint("%s: BI[%d] used:%d proto:%x fd:%d tty:%d type:%s DownId:%d UpId:%d\n", ids, bi->nr,  bi->usecnt,
+				bi->proto, bi->fd, bi->tty, BItype2str(bi->type), bi->DownId, bi->UpId);
+			iprint("%s: BI[%d] tid:%05d pcnt:%d running:%s waiting:%s\n", ids, bi->nr, bi->tid,
+				bi->pcnt, bi->running ? "yes" : "no", bi->waiting ? "yes" : "no");
+		} else {
+			iprint("%s: no binstance\n", ids);
 		}
 		dump_ncci(lp);
-		lp = lp->next;
+		co = co->next;
 	}
 }
 
 void lPLCIRelease(struct lPLCI *lp)
 {
 	/* TODO clean NCCIs */
-	dprint(MIDEBUG_PLCI, "PLCI:%04x plci state %s - %s NCCIs\n", lp->plci, str_st_plci[lp->plci_m.state], lp->Nccis ? "have" : "no");
+	dprint(MIDEBUG_PLCI, "%s: plci state %s - %s NCCIs\n", CAPIobjIDstr(&lp->cobj),
+		str_st_plci[lp->plci_m.state], lp->cobj.itemcnt ? "have" : "no");
 	FsmEvent(&lp->plci_m, EV_AP_RELEASE, NULL);
 }
 
-static int lPLCILinkUp(struct lPLCI *lp)
+int lPLCISelectProtocol(struct lPLCI *lp)
 {
-	int proto = -1, ret = 0, act_l1;
-	struct mISDNhead mh;
-	enum BType btype = BType_None;
-	struct mApplication *ap = lp->lc->Appl;
-
-	mh.id = 1;
-	mh.prim = 0;
-	act_l1 = !lp->PLCI->outgoing;
-
-	if (lp->chid.nr == MI_CHAN_NONE || lp->chid.nr == MI_CHAN_ANY) {
-		/* no valid channel set */
-		wprint("PLCI:%04x no channel selected (0x%x)\n", lp->plci, lp->chid.nr);
-		return -EINVAL;
-	}
+	int proto = 0;
+	enum BType btype;
 
 	switch (lp->Bprotocol.B1) {
 	case 0:		/* HDLC */
 		proto = ISDN_P_B_HDLC;
-		mh.prim = PH_ACTIVATE_REQ;
 		break;
 	case 1:		/* trans */
-		if (lp->l1dtmf) {
+		if (lp->l1dtmf)
 			proto = ISDN_P_B_L2DSP;
-			mh.prim = DL_ESTABLISH_REQ;
-		} else {
+		else
 			proto = ISDN_P_B_RAW;
-			mh.prim = PH_ACTIVATE_REQ;
-		}
 		break;
 #ifdef USE_SOFTFAX
 	case 4:
 		proto = ISDN_P_B_RAW;
-		mh.prim = PH_ACTIVATE_REQ;
-		act_l1 = 1;
 		lp->autohangup = 0;
 		break;
 #endif
 	default:
-		wprint("Unsupported B1 prot %x\n", lp->Bprotocol.B1);
-		ret = 0x3001;
-		break;
+		wprint("%s: Unsupported B1 prot %x\n", CAPIobjIDstr(&lp->cobj), lp->Bprotocol.B1);
+		return CapiB1ProtocolNotSupported;
 	}
 
 	switch (lp->Bprotocol.B2) {
 	case 0:		/* HDLC */
 		proto = ISDN_P_B_X75SLP;
-		mh.prim = DL_ESTABLISH_REQ;
 		break;
 	case 1:		/* trans */
 #ifdef USE_SOFTFAX
@@ -1727,9 +1911,8 @@ static int lPLCILinkUp(struct lPLCI *lp)
 #endif
 		break;
 	default:
-		wprint("Unsupported B2 prot %x\n", lp->Bprotocol.B2);
-		ret = 0x3002;
-		break;
+		wprint("%s: Unsupported B2 prot %x\n", CAPIobjIDstr(&lp->cobj), lp->Bprotocol.B2);
+		return CapiB2ProtocolNotSupported;
 	}
 
 	switch (lp->Bprotocol.B3) {
@@ -1743,106 +1926,86 @@ static int lPLCILinkUp(struct lPLCI *lp)
 		break;
 #endif
 	default:
-		wprint("Unsupported B3 prot %x\n", lp->Bprotocol.B3);
-		ret = 0x3003;
-		break;
+		wprint("%s: Unsupported B3 prot %x\n", CAPIobjIDstr(&lp->cobj), lp->Bprotocol.B3);
+		return CapiB3ProtocolNotSupported;
 	}
 
-	if (ret)
-		return ret;
-
-	if (ap->UserFlags & CAPIFLAG_HIGHJACKING) {
+	if (lp->Appl->UserFlags & CAPIFLAG_HIGHJACKING) {
 		btype = BType_tty;
 	}
-	dprint(MIDEBUG_PLCI, "lPLCILinkUp B1(%x) B2(%x) B3(%x) ch(%d) proto(%x)\n",
-	       lp->Bprotocol.B1, lp->Bprotocol.B2, lp->Bprotocol.B3, lp->chid.nr, proto);
 
-	lp->BIlink = ControllerSelChannel(lp->lc->Contr, lp->chid.nr, proto);
-	if (!lp->BIlink) {
-		wprint("PLCI:%04x channel %d busy\n", lp->plci, lp->chid.nr);
-		return CapiMsgOSResourceErr;
+	lp->proto = proto;
+	lp->btype = btype;
+	return 0;
+}
+
+static int lPLCILinkUp(struct lPLCI *lp)
+{
+	int ret = 0;
+	struct mPLCI *plci = p4lPLCI(lp);
+
+	if (lp->chid.nr == MI_CHAN_NONE || lp->chid.nr == MI_CHAN_ANY) {
+		/* no valid channel set */
+		wprint("%s: no channel selected (0x%x)\n", CAPIobjIDstr(&lp->cobj), lp->chid.nr);
+		return -EINVAL;
 	}
-	dprint(MIDEBUG_PLCI, "lPLCILinkUp lp->link(%p)\n", lp->BIlink);
-	if (!OpenBInstance(lp->BIlink, lp, btype)) {
-		if (act_l1) {
-			ret = send(lp->BIlink->fd, &mh, 8, 0);
-			if (ret < 0) {
-				wprint("Cannot send to Bchannel socket\n");
+
+	ret = lPLCISelectProtocol(lp);
+	if (ret) {
+		wprint("%s: cannot set protocol value ret=%x\n", CAPIobjIDstr(&lp->cobj), ret);
+		return ret;
+	}
+
+	dprint(MIDEBUG_PLCI, "%s: lPLCILinkUp B1(%x) B2(%x) B3(%x) ch(%d) proto(%x)\n", CAPIobjIDstr(&lp->cobj),
+	       lp->Bprotocol.B1, lp->Bprotocol.B2, lp->Bprotocol.B3, lp->chid.nr, lp->proto);
+
+	lp->BIlink = ControllerSelChannel(pc4lPLCI(lp), lp->chid.nr, lp->proto);
+	if (!lp->BIlink) {
+		wprint("%s: channel %d busy\n", CAPIobjIDstr(&lp->cobj), lp->chid.nr);
+		return CapiBchannelNotAvailable;
+	}
+	dprint(MIDEBUG_PLCI, "%s: lPLCILinkUp lp->link(%p)\n", CAPIobjIDstr(&lp->cobj), lp->BIlink);
+	if (!OpenBInstance(lp->BIlink, lp)) {
+		if (!plci->outgoing) { /* incoming call */
+			ret = activate_bchannel(lp->BIlink);
+			if (ret)
 				ret = CapiMsgOSResourceErr;
-			} else {
-				dprint(MIDEBUG_NCCI, "Sent %d bytes to controller\n", ret);
-			}
 		}
 	} else {
-		wprint("OpenBInstance PLCI:%04x failed\n", lp->plci);
+		wprint("%s: OpenBInstance failed\n", CAPIobjIDstr(&lp->cobj));
 		ret = CapiMsgOSResourceErr;
 	}
 	return ret;
 }
 
-struct mNCCI *getNCCI4addr(struct lPLCI *lp, uint32_t addr, int mode)
-{
-	struct mNCCI *ncci = NULL;
-	int cnt = 0;
-
-	if (!lp)
-		return NULL;
-	ncci = lp->Nccis;
-	while (ncci) {
-		cnt++;
-		if (ncci->ncci == addr)
-			return ncci;
-		if (mode == GET_NCCI_ONLY_PLCI) {
-			if (ncci->ncci == (addr & 0xffff))
-				return ncci;
-		}
-		ncci = ncci->next;
-	}
-	if (!cnt)
-		return NULL;
-	if (mode != GET_NCCI_PLCI)
-		return NULL;
-	if (1 == cnt) {
-		if (!(addr & 0xffff0000))
-			return lp->Nccis;
-	}
-	return NULL;
-}
-
 void lPLCIDelNCCI(struct mNCCI *ncci)
 {
-	struct lPLCI *lp = ncci->lp;
-	struct mNCCI *nc, *onc;
+	struct lPLCI *lp;
 
-	pthread_rwlock_wrlock(&lp->lock);
-	nc = lp->Nccis;
-	onc = NULL;
-	while (nc) {
-		if (nc == ncci) {
-			lp->NcciCnt--;
-			if (onc)
-				onc->next = nc->next;
-			break;
-		}
-		onc = nc;
-		nc = nc->next;
+	if (!ncci)
+		return;
+	lp = lPLCI4NCCI(ncci);
+	if (!ncci->cobj.cleaned) {
+		delist_cobj(&ncci->cobj);
+		ncci->cobj.cleaned = 1;
 	}
-	if (lp->Nccis ==  ncci)
-		lp->Nccis = ncci->next;
 
-	if (lp->Nccis || lp->NcciCnt) {
-		iprint("PLCI:%04x still %d NCCIs do not shutdown link\n", lp->plci, lp->NcciCnt);
+	if (lp->cobj.listhead || lp->cobj.itemcnt) {
+		iprint("%s: still %d NCCIs do not shutdown link\n", CAPIobjIDstr(&lp->cobj), lp->cobj.itemcnt);
 	} else {
-		dprint(MIDEBUG_PLCI, "PLCI:%04x all NCCIs gone %s BIlink\n", lp->plci, ncci->BIlink ? "shutdown" : "no");
+		dprint(MIDEBUG_PLCI, "%s: all NCCIs gone %s BIlink\n", CAPIobjIDstr(&lp->cobj),
+			ncci->BIlink ? "shutdown" : "no");
 		if (ncci->BIlink) {
-			ncci->BIlink->b3data = NULL;
+			dprint(MIDEBUG_PLCI, "%s: all NCCIs gone BIlink fd:%d %sb3data\n", CAPIobjIDstr(&lp->cobj),
+				ncci->BIlink->fd, ncci->BIlink->b3data ? "" : "no ");
 			if (ncci->BIlink->fd > 0)
 				CloseBInstance(ncci->BIlink);
+			ncci->BIlink->b3data = NULL;
 			ncci->BIlink = NULL;
 			lp->BIlink = NULL;
-		}
+		} else
+			dprint(MIDEBUG_PLCI, "%s: all NCCIs gone no BIlink\n", CAPIobjIDstr(&lp->cobj));
 	}
-	pthread_rwlock_unlock(&lp->lock);
 }
 
 void B3ReleaseLink(struct lPLCI *lp, struct BInstance *bi)
@@ -1865,11 +2028,9 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 {
 	int ret;
 
-	dprint(MIDEBUG_PLCI, "lp(%x) %s %s arg\n", lp->plci, _mi_msg_type2str(pr), mc ? "with" : "no");
+	dprint(MIDEBUG_PLCI, "%s: %s %s arg\n", CAPIobjIDstr(&lp->cobj), _mi_msg_type2str(pr), mc ? "with" : "no");
 	switch (pr) {
 	case MT_SETUP:
-		if (!mc || !mc->l3m)
-			return;
 		plci_parse_channel_id(lp, mc);
 		FsmEvent(&lp->plci_m, EV_L3_SETUP_IND, mc);
 		if (mc->l3m) {
@@ -1895,9 +2056,11 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 			lPLCIInfoIndIE(lp, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, mc);
 			ret = plci_parse_channel_id(lp, mc);
 			if (ret < 0) {
-				dprint(MIDEBUG_PLCI, "Got no valid channel on %s (%d)\n", _mi_msg_type2str(pr), ret);
+				dprint(MIDEBUG_PLCI, "%s: Got no valid channel on %s (%d)\n", CAPIobjIDstr(&lp->cobj),
+					_mi_msg_type2str(pr), ret);
 			}
 		}
+		del_timer(&lp->atimer);
 		FsmEvent(&lp->plci_m, EV_L3_SETUP_CONF, mc);
 		break;
 	case MT_CONNECT_ACKNOWLEDGE:
@@ -1906,7 +2069,8 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 			lPLCIInfoIndIE(lp, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, mc);
 			ret = plci_parse_channel_id(lp, mc);
 			if (ret < 0) {
-				dprint(MIDEBUG_PLCI, "Got no valid channel on %s (%d)\n", _mi_msg_type2str(pr), ret);
+				dprint(MIDEBUG_PLCI, "%s: Got no valid channel on %s (%d)\n", CAPIobjIDstr(&lp->cobj),
+					_mi_msg_type2str(pr), ret);
 			}
 		}
 		FsmEvent(&lp->plci_m, EV_L3_SETUP_COMPL_IND, mc);
@@ -1920,6 +2084,7 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 			lPLCIInfoIndIE(lp, IE_PROGRESS, CAPI_INFOMASK_PROGRESS, mc);
 			lPLCIInfoIndIE(lp, IE_FACILITY, CAPI_INFOMASK_FACILITY, mc);
 		}
+		del_timer(&lp->atimer);
 		FsmEvent(&lp->plci_m, EV_L3_DISCONNECT_IND, mc);
 		break;
 	case MT_RELEASE:
@@ -1929,6 +2094,7 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 			lPLCIInfoIndIE(lp, IE_USER_USER, CAPI_INFOMASK_USERUSER, mc);
 			lPLCIInfoIndIE(lp, IE_FACILITY, CAPI_INFOMASK_FACILITY, mc);
 		}
+		del_timer(&lp->atimer);
 		FsmEvent(&lp->plci_m, EV_L3_RELEASE_IND, mc);
 		break;
 	case MT_RELEASE_COMPLETE:
@@ -1938,6 +2104,7 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 			lPLCIInfoIndIE(lp, IE_USER_USER, CAPI_INFOMASK_USERUSER, mc);
 			lPLCIInfoIndIE(lp, IE_FACILITY, CAPI_INFOMASK_FACILITY, mc);
 		}
+		del_timer(&lp->atimer);
 		FsmEvent(&lp->plci_m, EV_L3_RELEASE_IND, mc);
 		break;
 	case MT_FREE:
@@ -1951,7 +2118,8 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 			lPLCIInfoIndIE(lp, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, mc);
 			ret = plci_parse_channel_id(lp, mc);
 			if (ret < -1) {
-				wprint("Got channel coding error in %s (%d)\n", _mi_msg_type2str(pr), ret);
+				wprint("%s: Got channel coding error in %s (%d)\n", CAPIobjIDstr(&lp->cobj),
+					_mi_msg_type2str(pr), ret);
 			}
 		}
 		break;
@@ -1973,8 +2141,10 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 			lPLCIInfoIndIE(lp, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, mc);
 			ret = plci_parse_channel_id(lp, mc);
 			if (ret < -1) {
-				wprint("Got channel coding error in %s (%d)\n", _mi_msg_type2str(pr), ret);
+				wprint("%s: Got channel coding error in %s (%d)\n", CAPIobjIDstr(&lp->cobj),
+					_mi_msg_type2str(pr), ret);
 			}
+			add_timer(&lp->atimer, ALERT_TIMEOUT);
 		}
 		break;
 	case MT_PROGRESS:
@@ -1991,7 +2161,7 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 			lPLCIInfoIndIE(lp, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, mc);
 		if (FsmEvent(&lp->plci_m, EV_L3_HOLD_IND, mc)) {
 			/* no routine reject L3 */
-			plciL4L3(lp->PLCI, MT_HOLD_REJECT, NULL);
+			plciL4L3(p4lPLCI(lp), MT_HOLD_REJECT, NULL);
 		}
 		break;
 	case MT_HOLD_ACKNOWLEDGE:
@@ -2013,7 +2183,7 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 		}
 		if (FsmEvent(&lp->plci_m, EV_L3_RETRIEVE_IND, mc)) {
 			/* no routine reject L3 */
-			plciL4L3(lp->PLCI, MT_RETRIEVE_REJECT, NULL);
+			plciL4L3(p4lPLCI(lp), MT_RETRIEVE_REJECT, NULL);
 		}
 		break;
 	case MT_RETRIEVE_ACKNOWLEDGE:
@@ -2050,18 +2220,21 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 		FsmEvent(&lp->plci_m, EV_PH_CONTROL_IND, mc);
 		break;
 	default:
-		wprint("PLCI %x pr 0x%x not handled\n", lp->plci, pr);
+		wprint("%s: pr %s (%x) not handled\n", CAPIobjIDstr(&lp->cobj), _mi_msg_type2str(pr), pr);
 		break;
 	}
 }
 
-void lPLCIGetCmsg(struct lPLCI *lp, struct mc_buf *mc)
+static void lPLCIGetCmsg(struct lPLCI *lp, struct mc_buf *mc)
 {
 	int retval = 0;
 
 	switch (CMSGCMD(&mc->cmsg)) {
 	case CAPI_INFO_REQ:
 		retval = FsmEvent(&lp->plci_m, EV_AP_INFO_REQ, mc);
+		break;
+	case CAPI_INFO_RESP:
+		/* no special handler */
 		break;
 	case CAPI_ALERT_REQ:
 		retval = FsmEvent(&lp->plci_m, EV_AP_ALERT_REQ, mc);
@@ -2085,7 +2258,8 @@ void lPLCIGetCmsg(struct lPLCI *lp, struct mc_buf *mc)
 		retval = FsmEvent(&lp->plci_m, EV_AP_SELECT_B_PROTOCOL_REQ, mc);
 		break;
 	default:
-		wprint("PLCI:%x command %02x/%02x not handled\n", lp->plci, mc->cmsg.Command, mc->cmsg.Subcommand);
+		wprint("%s: command %02x/%02x not handled\n", CAPIobjIDstr(&lp->cobj),
+			mc->cmsg.Command, mc->cmsg.Subcommand);
 		retval = -1;
 	}
 	if (retval) {
@@ -2112,27 +2286,30 @@ struct mNCCI *ConnectB3Request(struct lPLCI *lp, struct mc_buf *mc)
 	struct mNCCI *ncci = ncciCreate(lp);
 
 	if (!ncci) {
-		wprint("Could not create NCCI for PCLI %04x\n", lp->plci);
+		wprint("%s: Could not create NCCI\n", CAPIobjIDstr(&lp->cobj));
 	} else if (!ncci->BIlink) {
-		wprint("No channel instance assigned for PCLI %04x\n", lp->plci);
+		wprint("%s: No channel instance assigned\n", CAPIobjIDstr(&lp->cobj));
 	}
 	return ncci;
 }
 
 static int lPLCILinkDown(struct lPLCI *lp)
 {
-	struct mNCCI *nc, *nn;
+	struct mNCCI *nc;
+	struct mCAPIobj *co;
 	struct BInstance *bi;
 
-	nc = lp->Nccis;
-	dprint(MIDEBUG_PLCI, "PLCI:%04x LinkDown %s Nccis %d\n", lp->plci, lp->Nccis ? "" : "no", lp->NcciCnt);
-	if (nc) {
-		while (nc) {
-			nn = nc->next;
+	dprint(MIDEBUG_PLCI, "%s: LinkDown %s Nccis %d\n", CAPIobjIDstr(&lp->cobj),
+		lp->cobj.itemcnt ? "" : "no", lp->cobj.itemcnt);
+	co = get_next_cobj(&lp->cobj, NULL);
+	if (co) {
+		while (co) {
+			nc = container_of(co, struct mNCCI, cobj);
 			ncciReleaseLink(nc);
-			nc = nn;
+			co = get_next_cobj(&lp->cobj, co);
 		}
-	} else if (lp->BIlink) {
+	}
+	if (lp->BIlink && lp->cobj.itemcnt < 2) {
 		bi = lp->BIlink;
 		lp->BIlink = NULL;
 		CloseBInstance(bi);
@@ -2176,7 +2353,7 @@ int lPLCIFacSuspendReq(struct lPLCI *lp, struct FacReqParm *facReqParm, struct F
 		return CapiIllMessageParmCoding;
 	l3m = alloc_l3_msg();
 	if (!l3m) {
-		wprint("Could not allocate l3 message for PLCI %04x\n", lp->plci);
+		wprint("%s: Could not allocate l3 message\n", CAPIobjIDstr(&lp->cobj));
 		return CapiMsgOSResourceErr;
 	}
 	if (CallId && CallId[0])
@@ -2198,15 +2375,16 @@ int lPLCIFacResumeReq(struct lPLCI *lp, struct FacReqParm *facReqParm, struct Fa
 	__u8 *CallId;
 	struct l3_msg *l3m;
 
+
 	CallId = facReqParm->u.Resume.CallIdentity;
 	if (CallId && CallId[0] > 8) {
-		lPLCI_free(lp);
+		cleanup_lPLCI(lp);
 		return CapiIllMessageParmCoding;
 	}
 	l3m = alloc_l3_msg();
 	if (!l3m) {
-		wprint("Could not allocate l3 message for PLCI %04x\n", lp->plci);
-		lPLCI_free(lp);
+		wprint("%s: Could not allocate l3 message\n", CAPIobjIDstr(&lp->cobj));
+		cleanup_lPLCI(lp);
 		return CapiIllMessageParmCoding;
 	}
 	if (CallId && CallId[0])
@@ -2216,7 +2394,7 @@ int lPLCIFacResumeReq(struct lPLCI *lp, struct FacReqParm *facReqParm, struct Fa
 		// no routine
 		facConfParm->u.Info.SupplementaryServiceInfo = CapiRequestNotAllowedInThisState;
 		free_l3_msg(l3m);
-		lPLCI_free(lp);
+		cleanup_lPLCI(lp);
 		return CapiMessageNotSupportedInCurrentState;
 	}
 	facConfParm->u.Info.SupplementaryServiceInfo = CapiNoError;

@@ -34,11 +34,23 @@
 #include "mc_buffer.h"
 #include "../lib/include/fsm.h"
 #include "../lib/include/debug.h"
+//#include "../lib/include/mlist.h"
+#include "../lib/include/helper.h"
+
+/* Some DEBUG features defines */
+/* Refcounting functions will log, if debug mask bit 31 is set */
+#define MISDN_CAPI_REFCOUNT_DEBUG	1
+
+/* this define is only for developing if double frees are detected, it never free any object !!! - big memory leak */
+/* #define MISDN_CAPIOBJ_NO_FREE 1 */
 
 /* Some globals */
 extern int	KeepTemporaryFiles;
+extern int	WriteWaveFiles;
 extern char	*TempDirectory;
+extern pid_t	gettid(void);
 
+struct mCAPIobj;
 struct mApplication;
 struct mPLCI;
 struct lPLCI;
@@ -46,6 +58,9 @@ struct mNCCI;
 struct pController;
 struct lController;
 struct BInstance;
+
+extern int mI_ControllerCount;
+extern struct timer_base *mICAPItimer_base;
 
 struct Bprotocol {
 	uint16_t	B1;
@@ -67,6 +82,75 @@ enum BType {
 
 const char *BItype2str(enum BType);
 
+enum eCAPIobjtype {
+	Cot_None = 0,
+	Cot_Root,
+	Cot_Application,
+	Cot_lController,
+	Cot_PLCI,
+	Cot_lPLCI,
+	Cot_NCCI,
+	Cot_FAX
+};
+#define Cot_Last	Cot_FAX
+
+#ifdef MISDN_CAPI_REFCOUNT_DEBUG
+#define CAPIobj_IDSIZE		48
+#else
+#define CAPIobj_IDSIZE		32
+#endif
+
+struct mCAPIobj	{
+	struct mCAPIobj		*next;
+	struct mCAPIobj		*nextD;
+	enum eCAPIobjtype	type;
+	int			refcnt;
+	struct mCAPIobj		*parent;
+	pthread_rwlock_t	lock;
+	struct mCAPIobj		*listhead;
+	int			itemcnt;
+	unsigned int		id;
+	unsigned int		id2;
+	unsigned int		uid;
+	unsigned int		cleaned:1;
+	unsigned int		unlisted:1;
+	unsigned int		freeing:1;
+	unsigned int		freed:1;
+	char			idstr[CAPIobj_IDSIZE];
+#ifdef MISDN_CAPIOBJ_NO_FREE
+	void			*freep;
+#endif
+};
+
+#ifdef MISDN_CAPI_REFCOUNT_DEBUG
+struct mCAPIobj *__get_cobj(struct mCAPIobj *, const char *, int);
+int __put_cobj(struct mCAPIobj *, const char *, int);
+struct mCAPIobj *__get_next_cobj(struct mCAPIobj *, struct mCAPIobj *, const char *, int);
+int __delist_cobj(struct mCAPIobj *, const char *, int);
+#define get_cobj(co)		__get_cobj(co, __FILE__, __LINE__)
+#define put_cobj(co)		__put_cobj(co, __FILE__, __LINE__)
+#define get_next_cobj(pa, co)	__get_next_cobj(pa, co, __FILE__, __LINE__)
+#define delist_cobj(co)		__delist_cobj(co, __FILE__, __LINE__)
+#else
+struct mCAPIobj *get_cobj(struct mCAPIobj *);
+int put_cobj(struct mCAPIobj *);
+struct mCAPIobj *get_next_cobj(struct mCAPIobj *, struct mCAPIobj *);
+int delist_cobj(struct mCAPIobj *);
+#endif
+
+void dump_cobjects(void);
+void CAPIobj_init(void);
+void CAPIobj_exit(void);
+
+void free_capiobject(struct mCAPIobj *, void *);
+#ifdef MISDN_CAPIOBJ_NO_FREE
+void dump_cobjects_free(void);
+#endif
+
+int init_cobj(struct mCAPIobj *, struct mCAPIobj *, enum eCAPIobjtype, unsigned int, unsigned int);
+int init_cobj_registered(struct mCAPIobj *, struct mCAPIobj *, enum eCAPIobjtype cot, unsigned int);
+const char *CAPIobjt2str(struct mCAPIobj *);
+const char *CAPIobjIDstr(struct mCAPIobj *);
 
 struct BInstance {
 	int 			nr;
@@ -74,15 +158,21 @@ struct BInstance {
 	int			proto;
 	int			fd;
 	int			tty;
+	int			rx_min;
+	int			rx_max;
+	int			org_rx_min;
+	int			org_rx_max;
 	enum BType		type;
 	uint16_t		DownId;	/* Ids for send down messages */
 	uint16_t		UpId;	/* Ids for send up messages */
 	struct pController	*pc;
 	struct lPLCI		*lp;
 	void			*b3data;
+	pthread_mutex_t		lock;
 	BDataTrans_t		*from_down;
 	BDataTrans_t		*from_up;
-	pthread_t		tid;
+	pthread_t		thread;
+	pid_t			tid;
 	struct pollfd		pfd[4];
 	int			pcnt;
 	int			timeout;
@@ -92,11 +182,20 @@ struct BInstance {
 	unsigned int		waiting:1;
 	unsigned int		release_pending:1;
 	unsigned int		got_timeout:1;
+	unsigned int		closing:1;
+	unsigned int		detached:1;
+	unsigned int		joined:1;
+	unsigned int		closed:1;
 };
 
-int OpenBInstance(struct BInstance *, struct lPLCI *, enum BType);
+
+#define DEFAULT_FAX_PKT_SIZE	512
+
+
+int OpenBInstance(struct BInstance *, struct lPLCI *);
 int CloseBInstance(struct BInstance *);
 int ReleaseBchannel(struct BInstance *);
+int activate_bchannel(struct BInstance *);
 
 struct capi_profile {
 	uint16_t ncontroller;	/* number of installed controller */
@@ -111,6 +210,8 @@ struct capi_profile {
 
 /* physical controller access */
 struct pController {
+	struct mCAPIobj         cobjLC;
+	struct mCAPIobj		cobjPLCI;
 	int			mNr;
 	int			enable;
 	struct mISDN_devinfo	devinfo;
@@ -118,12 +219,11 @@ struct pController {
 	uint32_t		L3Proto;
 	uint32_t		L3Flags;
 	struct mlayer3		*l3;
-	struct lController	*lClist;
-	struct mPLCI		*plciL;		/* List of PLCIs */
-	pthread_rwlock_t	llock;
+	uint32_t		lastPLCI;	/* used only in unique PLCI debugmode */
 	int			appCnt;
 	int			BImax;		/* Nr of BInstances */
 	struct BInstance 	*BInstances;	/* Array of BInstances [0 ... BImax - 1] */
+	pthread_rwlock_t	Block;
 	uint32_t		InfoMask;	/* Listen info mask all active applications */
 	uint32_t		CIPmask;	/* Listen CIP mask all active applications */
 	uint32_t		CIPmask2;	/* Listen CIP mask 2 all active applications */
@@ -132,91 +232,96 @@ struct pController {
 struct pController *get_mController(int);
 struct pController *get_cController(int);
 struct BInstance *ControllerSelChannel(struct pController *, int, int);
+uint32_t NextFreePLCI(struct mCAPIobj *);
 int OpenLayer3(struct pController *);
+int check_free_bchannels(struct pController *);
 void dump_controller_plci(struct pController *);
 
 /* This is a struct for the logical controller per application, also has the listen statemachine */
 struct lController {
-	struct lController	*nextC;		/* List of Logical controllers on the physical  controller */
-	struct lController	*nextA;		/* List of Logical controllers on the application */
-	int			refc;		/* refcount */
-	struct pController	*Contr;		/* pointer to the physical controler */
+	struct mCAPIobj		cobj;
 	struct mApplication	*Appl;		/* pointer to the CAPI application */
 	struct FsmInst		listen_m;	/* Listen state machine */
 	uint32_t		InfoMask;	/* Listen info mask */
 	uint32_t		CIPmask;	/* Listen CIP mask */
 	uint32_t		CIPmask2;	/* Listen CIP mask 2 */
+	unsigned int		listed;
 };
 
+#define p4lController(l)	((l) ? container_of((l)->cobj.parent, struct pController, cobjLC) : NULL)
+
 /* listen.c */
-struct lController *get_lController(struct mApplication *, int);
+struct lController *get_lController(struct mApplication *, unsigned int);
 void init_listen(void);
 void free_listen(void);
 struct lController *addlController(struct mApplication *, struct pController *, int);
-void rm_lController(struct lController *lc);
-void free_lController(struct lController *lc);
+void cleanup_lController(struct lController *);
+void Free_lController(struct mCAPIobj *);
 int listenRequest(struct lController *, struct mc_buf *);
+void dump_lControllers(struct pController *);
 void dump_lcontroller(struct lController *);
 
 struct mApplication {
-	struct mApplication	*next;
-	int			refc;	/* refcount */
+	struct mCAPIobj		cobj;
 	int			fd;	/* Filedescriptor for CAPI messages */
-	struct lController	*contL;	/* list of controllers */
-	pthread_rwlock_t	llock;
-	uint16_t		AppId;
 	uint16_t		MsgId;	/* next message number */
 	int			MaxB3Con;
 	int			MaxB3Blk;
 	int			MaxB3Size;
+	struct lController	**lcl;
 	uint32_t		UserFlags;
+	int			cpipe[2];
+	unsigned int		unregistered:1;
 };
 
 int mApplication_init(void);
 struct mApplication *RegisterApplication(uint16_t, uint32_t, uint32_t, uint32_t);
-void ReleaseApplication(struct mApplication *);
+void ReleaseApplication(struct mApplication *, int);
+void Free_Application(struct mCAPIobj *);
+int ReleaseAllApplications(void);
+int register_lController(struct mApplication *, struct lController *);
+void delisten_application(struct lController *);
 int PutMessageApplication(struct mApplication *, struct mc_buf *);
 void SendMessage2Application(struct mApplication *, struct mc_buf *);
 void SendCmsg2Application(struct mApplication *, struct mc_buf *);
 void SendCmsgAnswer2Application(struct mApplication *, struct mc_buf *, uint16_t);
 int ListenController(struct pController *);
+void Put_Application_cleaned(struct mCAPIobj *);
 void dump_applications(void);
 
 struct mPLCI {
-	struct mPLCI		*next;
-	uint32_t		plci;	/* PLCI ID */
-	int			pid;	/* L3 pid */
+	struct mCAPIobj		cobj;
 	struct pController	*pc;
-	int nAppl;
-	struct lPLCI		*lPLCIs;
-	pthread_rwlock_t	llock;
 	unsigned int		alerting:1;
 	unsigned int		outgoing:1;
+	int			cause;
+	int			cause_loc;
 };
 
 /* PLCI state flags */
 
-struct mPLCI *new_mPLCI(struct pController *, int, struct lPLCI *);
-int free_mPLCI(struct mPLCI *);
+struct mPLCI *new_mPLCI(struct pController *, unsigned int);
 void plciDetachlPLCI(struct lPLCI *);
+void Free_PLCI(struct mCAPIobj *);
+unsigned int plci_new_pid(struct mPLCI *);
 struct mPLCI *getPLCI4Id(struct pController *, uint32_t);
-struct lPLCI *get_lPLCI4Id(struct mPLCI *, uint16_t, int);
+struct lPLCI *get_lPLCI4Id(struct mPLCI *, uint16_t);
 struct mPLCI *getPLCI4pid(struct pController *, int);
 int mPLCISendMessage(struct lController *, struct mc_buf *);
 int plciL4L3(struct mPLCI *, int, struct l3_msg *);
 int plci_l3l4(struct mPLCI *, int, struct l3_msg *);
+void release_lController(struct lController *);
 
 struct lPLCI {
-	struct lPLCI			*next;
-	uint32_t			plci;		/* PLCI ID */
+	struct mCAPIobj			cobj;
 	int				pid;		/* L3 pid */
 	struct lController		*lc;
-	struct mPLCI			*PLCI;
+	struct mApplication		*Appl;
 	struct FsmInst			plci_m;
+	int				proto;
+	enum BType			btype;
 	struct BInstance		*BIlink;
-	pthread_rwlock_t		lock;
-	int NcciCnt;
-	struct mNCCI			*Nccis;
+	struct mtimer			atimer;
 	int				cause;
 	int				cause_loc;
 	struct misdn_channel_info	chid;
@@ -224,26 +329,28 @@ struct lPLCI {
 	unsigned int			l1dtmf:1;
 	unsigned int			autohangup:1;
 	unsigned int			disc_req:1;
+	unsigned int			rel_req:1;
+	unsigned int			ignored:1;
+	unsigned int			req_relcomplete:1;
 };
+
+#define p4lPLCI(l)	((l) ? container_of(((struct lPLCI *)(l))->cobj.parent, struct mPLCI, cobj) : NULL)
+#define pc4lPLCI(l)	((struct mPLCI *)p4lPLCI(l))->pc
 
 void init_lPLCI_fsm(void);
 void free_lPLCI_fsm(void);
 int lPLCICreate(struct lPLCI **, struct lController *, struct mPLCI *);
-void lPLCI_free(struct lPLCI *);
+void cleanup_lPLCI(struct lPLCI *);
+void Free_lPLCI(struct mCAPIobj *);
+void lPLCIRelease(struct lPLCI *);
 void lPLCI_l3l4(struct lPLCI *, int, struct mc_buf *);
 uint16_t lPLCISendMessage(struct lPLCI *, struct mc_buf *);
 uint16_t q931CIPValue(struct mc_buf *, uint32_t *);
-struct mNCCI *getNCCI4addr(struct lPLCI *, uint32_t, int);
 void lPLCIDelNCCI(struct mNCCI *);
 struct mNCCI *ConnectB3Request(struct lPLCI *, struct mc_buf *);
 void B3ReleaseLink(struct lPLCI *, struct BInstance *);
 struct lPLCI *get_lPLCI4plci(struct mApplication *, uint32_t);
 void dump_Lplcis(struct lPLCI *);
-
-
-#define GET_NCCI_EXACT		1
-#define GET_NCCI_ONLY_PLCI	2
-#define GET_NCCI_PLCI		3
 
 struct _ConfQueue {
 	uint32_t	PktId;
@@ -264,9 +371,7 @@ enum _flowmode {
 };
 
 struct mNCCI {
-	struct mNCCI		*next;
-	uint32_t		ncci;
-	struct lPLCI		*lp;
+	struct mCAPIobj		cobj;
 	struct mApplication	*appl;
 	struct BInstance	*BIlink;
 	int			window;
@@ -275,6 +380,8 @@ struct mNCCI {
 	struct _ConfQueue	xmit_handles[CAPI_MAXDATAWINDOW];
 	uint32_t		recv_handles[CAPI_MAXDATAWINDOW];
 	enum _flowmode		flowmode;
+	_cbyte			*ncpi;
+	uint16_t		Reason_B3;
 	uint16_t		isize;
 	uint16_t		osize;
 	uint16_t		iidx;
@@ -294,26 +401,27 @@ struct mNCCI {
 	unsigned int		dlbusy:1;
 };
 
+#define lPLCI4NCCI(n)	((n) ? container_of(((struct mNCCI *)(n))->cobj.parent, struct lPLCI, cobj) : NULL)
 void init_ncci_fsm(void);
 void free_ncci_fsm(void);
 struct mNCCI *ncciCreate(struct lPLCI *);
-void ncciFree(struct mNCCI *);
-void ncciCmsgHeader(struct mNCCI *ncci, struct mc_buf *mc, uint8_t, uint8_t);
+void Free_NCCI(struct mCAPIobj *);
 int recvBdirect(struct BInstance *, struct mc_buf *);
 int ncciB3Data(struct BInstance *, struct mc_buf *);
-int ncciB3Message(struct mNCCI *, struct mc_buf *);
 void ncciReleaseLink(struct mNCCI *);
-void ncciDel_lPlci(struct mNCCI *);
+void cleanup_ncci(struct mNCCI *);
 int ncciL4L3(struct mNCCI *, uint32_t, int, int, void *, struct mc_buf *);
-void AnswerDataB3Req(struct mNCCI *, struct mc_buf *, uint16_t);
 void dump_ncci(struct lPLCI *);
 
 #ifdef USE_SOFTFAX
 int FaxRecvBData(struct BInstance *, struct mc_buf *);
 int FaxB3Message(struct BInstance *, struct mc_buf *);
 void FaxReleaseLink(struct BInstance *);
+void Free_Faxobject(struct mCAPIobj *);
+
 void dump_fax_status(struct BInstance *);
 #else
+static inline void Free_Faxobject(struct mCAPIobj *co) {};
 static inline void dump_fax_status(struct BInstance *bi) {};
 #endif
 
@@ -329,6 +437,7 @@ static inline void dump_fax_status(struct BInstance *bi) {};
 #define MC_DEBUG_PLCI		0x10
 #define MC_DEBUG_NCCI		0x20
 #define MC_DEBUG_NCCI_DATA	0x40
+#define MC_DEBUG_CAPIOBJ	0x80
 
 #define MIDEBUG_POLL		(MC_DEBUG_POLL << 24)
 #define MIDEBUG_CONTROLLER	(MC_DEBUG_CONTROLLER << 24)
@@ -337,6 +446,11 @@ static inline void dump_fax_status(struct BInstance *bi) {};
 #define MIDEBUG_PLCI		(MC_DEBUG_PLCI << 24)
 #define MIDEBUG_NCCI		(MC_DEBUG_NCCI << 24)
 #define MIDEBUG_NCCI_DATA	(MC_DEBUG_NCCI_DATA << 24)
+#define MIDEBUG_CAPIOBJ		(MC_DEBUG_CAPIOBJ << 24)
+
+#define MI_PUT_APPLICATION	0x42000001
+
+int mIcapi_mainpoll_releaseApp(int, int);
 
 void mCapi_cmsg2str(struct mc_buf *);
 void mCapi_message2str(struct mc_buf *);
@@ -344,7 +458,8 @@ void mCapi_message2str(struct mc_buf *);
 /* missing capi errors */
 #define CapiMessageNotSupportedInCurrentState	0x2001
 #define CapiIllController			0x2002
-#define CapiNoPlciAvailable			0x2003
+#define CapiNoPLCIAvailable			0x2003
+#define CapiNoNCCIAvailable			0x2004
 #define CapiIllMessageParmCoding		0x2007
 
 #define CapiB1ProtocolNotSupported		0x3001
@@ -359,6 +474,19 @@ void mCapi_message2str(struct mc_buf *);
 #define CapiProtocolErrorLayer1			0x3301
 #define CapiProtocolErrorLayer2			0x3302
 #define CapiProtocolErrorLayer3			0x3303
+#define CapiConnectionNoSuccess_noG3		0x3311
+#define CapiConnectionNoSuccess_TrainingErr	0x3312
+#define CapiDisconnectBeforeTrans_Unsuppoted	0x3313
+#define CapiDisconnectDuringTrans_RemoteAbort	0x3314
+#define CapiDisconnectDuringTrans_ProcedureErr	0x3315
+#define CapiDisconnectDuringTrans_TXunderflow	0x3316
+#define CapiDisconnectDuringTrans_RXoverflow	0x3317
+#define CapiDisconnectDuringTrans_LocalAbort	0x3318
+#define CapiIllegalParameterCoding		0x3319
+
+/* internal used errors */
+#define CapiBchannelNotAvailable		0x3f01
+
 
 #define FAX_B3_FORMAT_SFF	0
 #define FAX_B3_FORMAT_PLAIN	1

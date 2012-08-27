@@ -18,6 +18,7 @@
 
 #include "m_capi.h"
 #include "mc_buffer.h"
+#include "ncci.h"
 #include "SupplementaryService.h"
 #include <mISDN/q931.h>
 
@@ -31,16 +32,9 @@
 //   *  messages are send in the routine that handle the event
 //
 // --------------------------------------------------------------------
-enum {
-	ST_NCCI_N_0,
-	ST_NCCI_N_0_1,
-	ST_NCCI_N_1,
-	ST_NCCI_N_2,
-	ST_NCCI_N_ACT,
-	ST_NCCI_N_3,
-	ST_NCCI_N_4,
-	ST_NCCI_N_5,
-} const ST_NCCI_COUNT = ST_NCCI_N_5 + 1;
+
+const int ST_NCCI_COUNT = ST_NCCI_N_5 + 1;
+const int EV_NCCI_COUNT = EV_AP_RELEASE + 1;
 
 static char *str_st_ncci[] = {
 	"ST_NCCI_N_0",
@@ -52,33 +46,6 @@ static char *str_st_ncci[] = {
 	"ST_NCCI_N_4",
 	"ST_NCCI_N_5",
 };
-
-enum {
-	EV_AP_CONNECT_B3_REQ,
-	EV_NC_CONNECT_B3_CONF,
-	EV_NC_CONNECT_B3_IND,
-	EV_AP_CONNECT_B3_RESP,
-	EV_NC_CONNECT_B3_ACTIVE_IND,
-	EV_AP_CONNECT_B3_ACTIVE_RESP,
-	EV_AP_RESET_B3_REQ,
-	EV_NC_RESET_B3_IND,
-	EV_NC_RESET_B3_CONF,
-	EV_AP_RESET_B3_RESP,
-	EV_NC_CONNECT_B3_T90_ACTIVE_IND,
-	EV_AP_DISCONNECT_B3_REQ,
-	EV_NC_DISCONNECT_B3_IND,
-	EV_NC_DISCONNECT_B3_CONF,
-	EV_AP_DISCONNECT_B3_RESP,
-	EV_AP_FACILITY_REQ,
-	EV_AP_MANUFACTURER_REQ,
-	EV_DL_ESTABLISH_IND,
-	EV_DL_ESTABLISH_CONF,
-	EV_DL_RELEASE_IND,
-	EV_DL_RELEASE_CONF,
-	EV_DL_DOWN_IND,
-	EV_NC_LINKDOWN,
-	EV_AP_RELEASE,
-} const EV_NCCI_COUNT = EV_AP_RELEASE + 1;
 
 static char *str_ev_ncci[] = {
 	"EV_AP_CONNECT_B3_REQ",
@@ -96,6 +63,7 @@ static char *str_ev_ncci[] = {
 	"EV_NC_DISCONNECT_B3_IND",
 	"EV_NC_DISCONNECT_B3_CONF",
 	"EV_AP_DISCONNECT_B3_RESP",
+	"EV_L3_DISCONNECT_IND",
 	"EV_AP_FACILITY_REQ",
 	"EV_AP_MANUFACTURER_REQ",
 	"EV_DL_ESTABLISH_IND",
@@ -109,20 +77,33 @@ static char *str_ev_ncci[] = {
 
 static struct Fsm ncci_fsm = { 0, 0, 0, 0, 0 };
 
+static const char *nullNCCI = "Null NCCI";
+
+const char *_mi_ncci_st2str(struct mNCCI *ncci)
+{
+	if (ncci)
+		return str_st_ncci[ncci->ncci_m.state];
+	else
+		return nullNCCI;
+}
+
+const char *_mi_ncci_ev2str(enum ev_ncci_e ev)
+{
+	return str_ev_ncci[ev];
+}
+
+
 static void ncci_debug(struct FsmInst *fi, char *fmt, ...)
 {
 	char tmp[128];
-	char *p = tmp;
 	va_list args;
 	struct mNCCI *ncci = fi->userdata;
 
 	if (!ncci->ncci_m.debug)
 		return;
 	va_start(args, fmt);
-	p += sprintf(p, "NCCI %06x: ", ncci->ncci);
-	p += vsprintf(p, fmt, args);
-	*p = 0;
-	dprint(MIDEBUG_STATES, "%s\n", tmp);
+	vsnprintf(tmp, 128, fmt, args);
+	dprint(MIDEBUG_STATES, "%s: %s\n", CAPIobjIDstr(&ncci->cobj), tmp);
 	va_end(args);
 }
 
@@ -133,20 +114,28 @@ static inline void Send2Application(struct mNCCI *ncci, struct mc_buf *mc)
 
 void ncciCmsgHeader(struct mNCCI *ncci, struct mc_buf *mc, uint8_t cmd, uint8_t subcmd)
 {
-	capi_cmsg_header(&mc->cmsg, ncci->appl->AppId, cmd, subcmd, ncci->appl->MsgId++, ncci->ncci);
+	capi_cmsg_header(&mc->cmsg, ncci->cobj.id2, cmd, subcmd, ncci->appl->MsgId++, ncci->cobj.id);
 }
 
 static void ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 {
 	struct mNCCI *ncci = fi->userdata;
 	struct mc_buf *mc = arg;
+	struct lPLCI *lp = lPLCI4NCCI(ncci);
+	struct mPLCI *plci = p4lPLCI(lp);
+	int ret;
 
 	FsmChangeState(fi, ST_NCCI_N_0_1);
 	capi_cmsg_answer(&mc->cmsg);
 
 	// TODO: NCPI handling
 	mc->cmsg.Info = 0;
-	mc->cmsg.adr.adrNCCI = ncci->ncci;
+	mc->cmsg.adr.adrNCCI = ncci->cobj.id;
+	if (ncci->BIlink  && plci && plci->outgoing) {
+		ret = activate_bchannel(ncci->BIlink);
+		if (ret)
+			wprint("%s: cannot activate outgoing link %s\n", CAPIobjIDstr(&ncci->cobj), strerror(-ret));
+	}
 	FsmEvent(fi, EV_NC_CONNECT_B3_CONF, mc);
 }
 
@@ -165,11 +154,15 @@ static void ncci_connect_b3_resp(struct FsmInst *fi, int event, void *arg)
 	if (mc->cmsg.Info == 0) {
 		FsmChangeState(fi, ST_NCCI_N_2);
 		ncciCmsgHeader(ncci, mc, CAPI_CONNECT_B3_ACTIVE, CAPI_IND);
+		if (ncci->ncpi)
+			mc->cmsg.NCPI = ncci->ncpi;
 		event = EV_NC_CONNECT_B3_ACTIVE_IND;
 	} else {
 		FsmChangeState(fi, ST_NCCI_N_4);
 		mc->cmsg.Info = 0;
 		ncciCmsgHeader(ncci, mc, CAPI_DISCONNECT_B3, CAPI_IND);
+		if (ncci->ncpi)
+			mc->cmsg.NCPI = ncci->ncpi;
 		event = EV_NC_DISCONNECT_B3_IND;
 	}
 	FsmEvent(&ncci->ncci_m, event, mc);
@@ -191,7 +184,7 @@ static void ncci_connect_b3_conf(struct FsmInst *fi, int event, void *arg)
 	} else {
 		FsmChangeState(fi, ST_NCCI_N_0);
 		Send2Application(ncci, mc);
-		ncciFree(ncci);
+		cleanup_ncci(ncci);
 	}
 }
 
@@ -232,15 +225,18 @@ static void ncci_disconnect_b3_conf(struct FsmInst *fi, int event, void *arg)
 static void ncci_disconnect_b3_ind(struct FsmInst *fi, int event, void *arg)
 {
 	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = arg;
 
+	mc->cmsg.Reason_B3 = ncci->Reason_B3;
+	mc->cmsg.NCPI = ncci->ncpi;
 	FsmChangeState(fi, ST_NCCI_N_5);
-	Send2Application(ncci, arg);
+	Send2Application(ncci, mc);
 }
 
 static void ncci_disconnect_b3_resp(struct FsmInst *fi, int event, void *arg)
 {
 	FsmChangeState(fi, ST_NCCI_N_0);
-	ncciFree(fi->userdata);
+	cleanup_ncci(fi->userdata);
 }
 
 static void ncci_facility_req(struct FsmInst *fi, int event, void *arg)
@@ -280,7 +276,7 @@ static void ncci_facility_req(struct FsmInst *fi, int event, void *arg)
 	} else
 		mc->cmsg.Info = CapiIllMessageParmCoding;
 
-	dprint(MIDEBUG_NCCI, "NCCI %06x: fac\n", ncci->ncci);
+	dprint(MIDEBUG_NCCI, "%s: facility\n", CAPIobjIDstr(&ncci->cobj));
 	Send2Application(ncci, mc);
 }
 
@@ -376,8 +372,11 @@ static void ncci_connect_b3_active_resp(struct FsmInst *fi, int event, void *arg
 static void ncci_n0_dl_establish_ind_conf(struct FsmInst *fi, int event, void *arg)
 {
 	struct mNCCI *ncci = fi->userdata;
+	struct mc_buf *mc = arg;
 
-	ncciCmsgHeader(ncci, arg, CAPI_CONNECT_B3, CAPI_IND);
+	ncciCmsgHeader(ncci, mc, CAPI_CONNECT_B3, CAPI_IND);
+	if (ncci->ncpi)
+		mc->cmsg.NCPI = ncci->ncpi;
 	FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_IND, arg);
 }
 
@@ -387,6 +386,8 @@ static void ncci_dl_establish_ind_conf(struct FsmInst *fi, int event, void *arg)
 	struct mc_buf *mc = arg;
 
 	ncciCmsgHeader(ncci, mc, CAPI_CONNECT_B3_ACTIVE, CAPI_IND);
+	if (ncci->ncpi)
+		mc->cmsg.NCPI = ncci->ncpi;
 	FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_ACTIVE_IND, mc);
 }
 
@@ -396,6 +397,8 @@ static void ncci_dl_release_ind_conf(struct FsmInst *fi, int event, void *arg)
 	struct mc_buf *mc = arg;
 
 	ncciCmsgHeader(ncci, mc, CAPI_DISCONNECT_B3, CAPI_IND);
+	if (ncci->ncpi)
+		mc->cmsg.NCPI = ncci->ncpi;
 	FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, mc);
 }
 
@@ -405,6 +408,8 @@ static void ncci_linkdown(struct FsmInst *fi, int event, void *arg)
 	struct mc_buf *mc = arg;
 
 	ncciCmsgHeader(ncci, mc, CAPI_DISCONNECT_B3, CAPI_IND);
+	if (ncci->ncpi)
+		mc->cmsg.NCPI = ncci->ncpi;
 	FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, mc);
 }
 
@@ -414,14 +419,17 @@ static void ncci_dl_down_ind(struct FsmInst *fi, int event, void *arg)
 	struct mc_buf *mc = arg;
 
 	ncciCmsgHeader(ncci, mc, CAPI_DISCONNECT_B3, CAPI_IND);
-	mc->cmsg.Reason_B3 = CapiProtocolErrorLayer1;
+	if (!ncci->Reason_B3)
+		ncci->Reason_B3 = CapiProtocolErrorLayer1;
+	if (ncci->ncpi)
+		mc->cmsg.NCPI = ncci->ncpi;
 	FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, mc);
 }
 
 static void ncci_appl_release(struct FsmInst *fi, int event, void *arg)
 {
 	FsmChangeState(fi, ST_NCCI_N_0);
-	ncciFree(fi->userdata);
+	cleanup_ncci(fi->userdata);
 }
 
 static void ncci_clearing_stateN_0(struct FsmInst *fi, int event, void *arg)
@@ -431,8 +439,9 @@ static void ncci_clearing_stateN_0(struct FsmInst *fi, int event, void *arg)
 	int ret;
 
 	FsmChangeState(fi, ST_NCCI_N_5);
+	dprint(MIDEBUG_NCCI, "%s: clearing state N_0 itemcnt:%d\n", CAPIobjIDstr(&ncci->cobj), ncci->cobj.itemcnt);
 	if (mc) {
-		if (ncci->BIlink) {
+		if (ncci->cobj.itemcnt && ncci->BIlink && !ncci->cobj.cleaned) {
 			ncciCmsgHeader(ncci, mc, CAPI_DISCONNECT_B3, CAPI_RESP);
 			capi_cmsg2message(&mc->cmsg, mc->rb);
 			mc->len = CAPIMSG_LEN(mc->rb);
@@ -440,12 +449,12 @@ static void ncci_clearing_stateN_0(struct FsmInst *fi, int event, void *arg)
 		} else
 			ret = -EINVAL;
 		if (ret) { /* no handler - free anyway */
-			ncciFree(ncci);
+			cleanup_ncci(ncci);
 			free_mc_buf(mc);
 		}
 	} else {
 		eprint("Cannot allocate buffer\n");
-		ncciFree(ncci);
+		cleanup_ncci(ncci);
 	}
 }
 
@@ -461,6 +470,24 @@ static void ncci_appl_release_disc(struct FsmInst *fi, int event, void *arg)
 	}
 }
 
+static void ncci_disconnect_unconnected(struct FsmInst *fi, int event, void *arg)
+{
+	struct mNCCI *ncci = fi->userdata;
+
+	dprint(MIDEBUG_NCCI, "%s: disconnect from L3 itemcnt:%d\n", CAPIobjIDstr(&ncci->cobj), ncci->cobj.itemcnt);
+	FsmChangeState(fi, ST_NCCI_N_0);
+	cleanup_ncci(fi->userdata);
+}
+
+static void ncci_disconnect_active(struct FsmInst *fi, int event, void *arg)
+{
+	struct mNCCI *ncci = fi->userdata;
+
+	dprint(MIDEBUG_NCCI, "%s: disconnect from L3 itemcnt:%d\n", CAPIobjIDstr(&ncci->cobj), ncci->cobj.itemcnt);
+}
+
+
+
 static struct FsmNode fn_ncci_list[] = {
 	{ST_NCCI_N_0, EV_AP_CONNECT_B3_REQ, ncci_connect_b3_req},
 	{ST_NCCI_N_0, EV_NC_CONNECT_B3_IND, ncci_connect_b3_ind},
@@ -470,6 +497,7 @@ static struct FsmNode fn_ncci_list[] = {
 	{ST_NCCI_N_0, EV_NC_DISCONNECT_B3_IND, ncci_clearing_stateN_0},
 	{ST_NCCI_N_0, EV_DL_RELEASE_IND, ncci_clearing_stateN_0},
 	{ST_NCCI_N_0, EV_NC_LINKDOWN, ncci_clearing_stateN_0},
+	{ST_NCCI_N_0, EV_L3_DISCONNECT_IND, ncci_disconnect_unconnected},
 
 	{ST_NCCI_N_0_1, EV_NC_CONNECT_B3_CONF, ncci_connect_b3_conf},
 	{ST_NCCI_N_0_1, EV_AP_MANUFACTURER_REQ, ncci_manufacturer_req},
@@ -493,6 +521,7 @@ static struct FsmNode fn_ncci_list[] = {
 	{ST_NCCI_N_2, EV_AP_MANUFACTURER_REQ, ncci_manufacturer_req},
 	{ST_NCCI_N_2, EV_AP_RELEASE, ncci_appl_release_disc},
 	{ST_NCCI_N_2, EV_NC_LINKDOWN, ncci_linkdown},
+	{ST_NCCI_N_2, EV_L3_DISCONNECT_IND, ncci_disconnect_unconnected},
 
 #if 0
 	{ST_NCCI_N_3, EV_NC_RESET_B3_IND, ncci_reset_b3_ind},
@@ -515,6 +544,7 @@ static struct FsmNode fn_ncci_list[] = {
 	{ST_NCCI_N_ACT, EV_AP_MANUFACTURER_REQ, ncci_manufacturer_req},
 	{ST_NCCI_N_ACT, EV_AP_RELEASE, ncci_appl_release_disc},
 	{ST_NCCI_N_ACT, EV_NC_LINKDOWN, ncci_linkdown},
+	{ST_NCCI_N_ACT, EV_L3_DISCONNECT_IND, ncci_disconnect_active},
 #if 0
 	{ST_NCCI_N_ACT, EV_AP_RESET_B3_REQ, ncci_reset_b3_req},
 	{ST_NCCI_N_ACT, EV_NC_RESET_B3_IND, ncci_reset_b3_ind},
@@ -533,13 +563,59 @@ static struct FsmNode fn_ncci_list[] = {
 
 const int FN_NCCI_COUNT = sizeof(fn_ncci_list) / sizeof(struct FsmNode);
 
+#ifdef MISDN_CAPI_REFCOUNT_DEBUG
+#define get_ncci(n)	__get_ncci(n, __FILE__, __LINE__)
+#define put_ncci(n)	__put_ncci(n, __FILE__, __LINE__)
+
+#define _Xget_cobj(c)	__get_cobj(c, file, lineno)
+#define _Xput_cobj(c)   __put_cobj(c, file, lineno)
+#else
+#define _Xget_cobj(c)	get_cobj(c)
+#define _Xput_cobj(c)   put_cobj(c)
+#endif
+
+
+#ifdef MISDN_CAPI_REFCOUNT_DEBUG
+static struct mNCCI *__get_ncci(struct mNCCI *ncci, const char *file, int lineno)
+#else
+static struct mNCCI *get_ncci(struct mNCCI *ncci)
+#endif
+{
+	struct mCAPIobj *co;
+
+	if (ncci) {
+		co = _Xget_cobj(&ncci->cobj);
+		if (!co)
+			ncci = NULL;
+	}
+	return ncci;
+}
+
+#ifdef MISDN_CAPI_REFCOUNT_DEBUG
+static int __put_ncci(struct mNCCI *ncci, const char *file, int lineno)
+#else
+static int put_ncci(struct mNCCI *ncci)
+#endif
+{
+	int ret;
+
+	if (ncci)
+		ret = _Xput_cobj(&ncci->cobj);
+	else
+		ret = -EINVAL;
+	return ret;
+}
+
+
+
+
 static void initNCCIHeaders(struct mNCCI *nc)
 {
 	CAPIMSG_SETLEN(nc->up_header, CAPI_B3_DATA_IND_HEADER_SIZE);
-	CAPIMSG_SETAPPID(nc->up_header, nc->appl->AppId);
+	CAPIMSG_SETAPPID(nc->up_header, nc->cobj.id2);
 	CAPIMSG_SETCOMMAND(nc->up_header, CAPI_DATA_B3);
 	CAPIMSG_SETSUBCOMMAND(nc->up_header, CAPI_IND);
-	CAPIMSG_SETCONTROL(nc->up_header, nc->ncci);
+	CAPIMSG_SETCONTROL(nc->up_header, nc->cobj.id);
 	memset(&nc->up_msg, 0, sizeof(nc->up_msg));
 	nc->up_msg.msg_iov = nc->up_iv;
 	nc->up_msg.msg_iovlen = 2;
@@ -556,120 +632,146 @@ static void initNCCIHeaders(struct mNCCI *nc)
 
 struct mNCCI *ncciCreate(struct lPLCI *lp)
 {
-	struct mNCCI *nc, *old;
+	struct mNCCI *nc;
+	int err;
 
 	nc = calloc(1, sizeof(*nc));
 	if (!nc) {
-		eprint("No memory for NCCI on PLCI:%04x\n", lp->plci);
+		eprint("No memory for NCCI on PLCI:%04x\n", lp->cobj.id);
 		return NULL;
 	}
-	nc->ncci_m.state = ST_NCCI_N_0;
-//      nc->ncci_m.debug      = aplci->plci->contr->debug & CAPI_DBG_NCCI_STATE;
-	nc->ncci_m.debug = MIDEBUG_NCCI & mI_debug_mask;
-	nc->ncci_m.userdata = nc;
-	nc->ncci_m.printdebug = ncci_debug;
-	/* unused NCCI */
-	lp->NcciCnt++;
-	nc->ncci = lp->plci;
-	nc->ncci |= (lp->NcciCnt << 16) & 0xFFFF0000;
-	dprint(MIDEBUG_NCCI, "NCCI %06x: will be created now\n", nc->ncci);
-	nc->lp = lp;
-	nc->appl = lp->lc->Appl;
-	nc->BIlink = lp->BIlink;
-	nc->window = lp->lc->Appl->MaxB3Blk;
-	pthread_mutex_init(&nc->lock, NULL);
-	switch (lp->Bprotocol.B1) {
-	case 0:
-		nc->l1trans = 0;
-		break;
-	case 1:
-		nc->l1trans = 1;
-		if (!lp->l1dtmf) {
+	nc->cobj.id2 = lp->cobj.id2;
+	err = init_cobj_registered(&nc->cobj, &lp->cobj, Cot_NCCI, 0x01ffff);
+	if (!err) {
+		dprint(MIDEBUG_NCCI, "NCCI%06x: will be created now\n", nc->cobj.id);
+		nc->ncci_m.state = ST_NCCI_N_0;
+		nc->ncci_m.debug = MIDEBUG_NCCI & mI_debug_mask;
+		nc->ncci_m.userdata = nc;
+		nc->ncci_m.printdebug = ncci_debug;
+		nc->appl = lp->Appl;
+		if (nc->appl)
+			get_cobj(&nc->appl->cobj);
+		nc->BIlink = lp->BIlink;
+		nc->window = lp->Appl->MaxB3Blk;
+		pthread_mutex_init(&nc->lock, NULL);
+		switch (lp->Bprotocol.B1) {
+		case 0:
+			nc->l1trans = 0;
+			break;
+		case 1:
+			nc->l1trans = 1;
+			if (!lp->l1dtmf) {
+				nc->flowmode = flmPHDATA;
+				nc->l1direct = 1;
+			} else {
+				nc->flowmode = flmIndication;
+			}
+			break;
+		case 4:
 			nc->flowmode = flmPHDATA;
 			nc->l1direct = 1;
+			break;
+		default:
+			break;
+		}
+
+		if (lp->Bprotocol.B2 == 1) {	/* X.75 has own flowctrl */
+			nc->l2trans = 1;
+			if (lp->Bprotocol.B1 == 0) {
+				nc->l1direct = 1;
+				nc->flowmode = flmPHDATA;
+			}
 		} else {
-			nc->flowmode = flmIndication;
+			nc->l2trans = 0;
+			if (lp->Bprotocol.B1 == 0) { // HDLC
+				nc->l1direct = 1;
+				nc->flowmode = flmPHDATA;
+			}
 		}
-		break;
-	case 4:
-		nc->flowmode = flmPHDATA;
-		nc->l1direct = 1;
-		break;
-	default:
-		break;
-	}
+		if (lp->Bprotocol.B3 == 0) {
+			nc->l3trans = 1;
+			nc->ncci_m.fsm = &ncci_fsm;
+		} else
+			nc->ncci_m.fsm = &ncci_fsm;
+		// nc->ncci_m.fsm = &ncciD_fsm;
 
-	if (lp->Bprotocol.B2 == 1) {	/* X.75 has own flowctrl */
-		nc->l2trans = 1;
-		if (lp->Bprotocol.B1 == 0) {
-			nc->l1direct = 1;
-			nc->flowmode = flmPHDATA;
+		if (nc->window > CAPI_MAXDATAWINDOW) {
+			wprint("%s: Datawindow too big (%d) reduced to (%d)\n", CAPIobjIDstr(&nc->cobj),
+				nc->window, CAPI_MAXDATAWINDOW);
+			nc->window = CAPI_MAXDATAWINDOW;
 		}
+		initNCCIHeaders(nc);
+		nc->osize = 256;
+		dprint(MIDEBUG_NCCI, "%s: created\n", CAPIobjIDstr(&nc->cobj));
 	} else {
-		nc->l2trans = 0;
-		if (lp->Bprotocol.B1 == 0) { // HDLC
-			nc->l1direct = 1;
-			nc->flowmode = flmPHDATA;
-		}
+		free(nc);
+		nc = NULL;
 	}
-	if (lp->Bprotocol.B3 == 0) {
-		nc->l3trans = 1;
-		nc->ncci_m.fsm = &ncci_fsm;
-	} else
-		nc->ncci_m.fsm = &ncci_fsm;
-	// nc->ncci_m.fsm = &ncciD_fsm;
-
-	if (nc->window > CAPI_MAXDATAWINDOW) {
-		wprint("NCCI %06x: Datawindow too big (%d) reduced to (%d)\n", nc->ncci, nc->window, CAPI_MAXDATAWINDOW);
-		nc->window = CAPI_MAXDATAWINDOW;
-	}
-	initNCCIHeaders(nc);
-	nc->osize = 256;
-	if (lp->Nccis) {
-		wprint("NCCI %06x: lp->Nccis already used for NCCI %06x (%p/%p)\n", nc->ncci, lp->Nccis->ncci, nc, lp->Nccis);
-		old = lp->Nccis;
-		while (old->next)
-			old = old->next;
-		old->next = nc;
-	} else
-		lp->Nccis = nc;
-	dprint(MIDEBUG_NCCI, "NCCI %06x: created\n", nc->ncci);
 	return nc;
 }
 
-void ncciFree(struct mNCCI *ncci)
+void Free_NCCI(struct mCAPIobj *co)
 {
+	struct mNCCI *ncci = container_of(co, struct mNCCI, cobj);
 	int i;
 
-	dprint(MIDEBUG_NCCI, "NCCI %06x: freeing\n", ncci->ncci);
+	dprint(MIDEBUG_NCCI, "%s: freeing\n", CAPIobjIDstr(co));
 
 	/* cleanup data queues */
 	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
 		if (ncci->xmit_handles[i].pkt)
 			free_mc_buf(ncci->xmit_handles[i].pkt);
 	}
-	if (ncci->lp)
-		lPLCIDelNCCI(ncci);
-	else
-		wprint("NCCI %06x: PLCI not linked\n", ncci->ncci);
-	dprint(MIDEBUG_NCCI, "NCCI %06x: freeing done\n", ncci->ncci);
-	free(ncci);
+	lPLCIDelNCCI(ncci);
+	if (ncci->appl) {
+		put_cobj(&ncci->appl->cobj);
+		ncci->appl = NULL;
+	}
+	if (co->itemcnt) {
+		wprint("%s: still %d items in %slisthead\n", CAPIobjIDstr(co), co->itemcnt,
+			co->listhead ? "" : "NULL ");
+	}
+	if (co->parent)
+		put_cobj(co->parent);
+	co->parent = NULL;
+	if (ncci->ncpi) {
+		free(ncci->ncpi);
+		ncci->ncpi = NULL;
+	}
+	dprint(MIDEBUG_NCCI, "%s: freeing done\n", CAPIobjIDstr(co));
+	free_capiobject(co, ncci);
+}
+
+void cleanup_ncci(struct mNCCI *ncci)
+{
+	if (ncci->cobj.cleaned)
+		return;
+	if (ncci->cobj.itemcnt) {
+		dprint(MIDEBUG_NCCI, "%s: still %d items in %slisthead\n", CAPIobjIDstr(&ncci->cobj), ncci->cobj.itemcnt,
+			ncci->cobj.listhead ? "" : "NULL ");
+	}
+	ncci->cobj.cleaned = 1;
+	delist_cobj(&ncci->cobj);
 }
 
 void dump_ncci(struct lPLCI *lp)
 {
 	struct mNCCI *ncci;
+	struct mCAPIobj *co;
+	const char *ids;
 
-	pthread_rwlock_rdlock(&lp->lock);
-	ncci = lp->Nccis;
-	while (ncci) {
-		iprint("NCCI %06x state:%s Appl:%d %s%s%s%s%s flowmode=%d %s\n",
-			ncci->ncci, str_st_ncci[ncci->ncci_m.state], ncci->appl->AppId,
+	pthread_rwlock_rdlock(&lp->cobj.lock);
+	co = lp->cobj.listhead;
+	while (co) {
+		ncci = container_of(co, struct mNCCI, cobj);
+		ids = CAPIobjIDstr(co);
+		iprint("%s: state:%s %s%s%s%s%s flowmode=%d %s\n", ids, _mi_ncci_st2str(ncci),
 			ncci->l1trans ? "L1trans " : "", ncci->l2trans ? "L2trans " : "", ncci->l3trans ? "L3trans " : "",
 			ncci->l1direct ? "L1direct " : "", ncci->dtmflisten ? "DTMFListen " : "",
 			ncci->flowmode, ncci->dlbusy ? "DLBUSY " : "");
-		iprint("NCCI %06x isize:%d osize:%d iidx:%d oidx:%d ridx:%d\n", ncci->ncci, ncci->isize, ncci->osize,
+		iprint("%s: isize:%d osize:%d iidx:%d oidx:%d ridx:%d\n", ids, ncci->isize, ncci->osize,
 			ncci->iidx, ncci->oidx, ncci->ridx);
+		iprint("%s: Reason_B3:%04x NCPI:len %d\n", ids, ncci->Reason_B3, ncci->ncpi ? ncci->ncpi[0] : 0);
 		if (!pthread_mutex_trylock(&ncci->lock)) {
 			if (ncci->BIlink) {
 				if (ncci->BIlink && ncci->BIlink->type == BType_Fax)
@@ -677,18 +779,11 @@ void dump_ncci(struct lPLCI *lp)
 			}
 			pthread_mutex_unlock(&ncci->lock);
 		} else {
-			iprint("NCCI %06x locked no BIlink dumping\n", ncci->ncci);
+			iprint("%s: locked no BIlink dumping\n", ids);
 		}
-		ncci = ncci->next;
+		co = co->next;
 	}
-	pthread_rwlock_unlock(&lp->lock);
-}
-
-void ncciDel_lPlci(struct mNCCI *ncci)
-{
-	dprint(MIDEBUG_NCCI, "NCCI %06x: unlink PLCI:%04x\n", ncci->ncci, ncci->lp ? ncci->lp->plci : -1);
-	ncci->lp = NULL;
-	/* maybe we should release the NCCI here */
+	pthread_rwlock_unlock(&lp->cobj.lock);
 }
 
 void ncciReleaseLink(struct mNCCI *ncci)
@@ -728,7 +823,7 @@ static void SendDataB3Down(struct mNCCI *ncci, uint16_t len)
 	}
 	mc = ncci->xmit_handles[ncci->oidx].pkt;
 	if (!ncci->BIlink) {
-		wprint("NCCI %06x: BInstance is gone - packet ignored\n", ncci->ncci);
+		wprint("%s: BInstance is gone - packet ignored\n", CAPIobjIDstr(&ncci->cobj));
 		AnswerDataB3Req(ncci, mc, CapiMessageNotSupportedInCurrentState);
 		pthread_mutex_unlock(&ncci->lock);
 		return;
@@ -782,7 +877,7 @@ static void SendDataB3Down(struct mNCCI *ncci, uint16_t len)
 	} else {
 		if (ncci->flowmode == flmPHDATA) {
 			if (ncci->dlbusy) {
-				wprint("NCCI %06x: dlbusy set\n", ncci->ncci);
+				wprint("%s: dlbusy set\n", CAPIobjIDstr(&ncci->cobj));
 				pthread_mutex_unlock(&ncci->lock);
 				return;
 			} else
@@ -802,10 +897,11 @@ static void SendDataB3Down(struct mNCCI *ncci, uint16_t len)
 	ret = sendmsg(ncci->BIlink->fd, &ncci->down_msg, MSG_DONTWAIT);
 	if (ret != tot) {
 		err = errno;
-		wprint("NCCI %06x: send returned %d while sending %d bytes type %s id %d errno=%d - %s\n", ncci->ncci, ret, tot,
-			_mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, err, strerror(err));
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send msg_iovlen=%zd iv[0]=%zd,%p iv[1]=%zd,%p iv[2]=%zd,%p\n",
-			ncci->ncci, ncci->down_msg.msg_iovlen,
+		wprint("%s: send returned %d while sending %d bytes type %s id %d errno=%d - %s\n",
+			CAPIobjIDstr(&ncci->cobj), ret, tot, _mi_msg_type2str(ncci->down_header.prim),
+			ncci->down_header.id, err, strerror(err));
+		dprint(MIDEBUG_NCCI_DATA, "%s: send msg_iovlen=%zd iv[0]=%zd,%p iv[1]=%zd,%p iv[2]=%zd,%p\n",
+			CAPIobjIDstr(&ncci->cobj), ncci->down_msg.msg_iovlen,
 			ncci->down_iv[0].iov_len, ncci->down_iv[0].iov_base,
 			ncci->down_iv[1].iov_len, ncci->down_iv[1].iov_base,
 			ncci->down_iv[2].iov_len, ncci->down_iv[2].iov_base);
@@ -821,12 +917,11 @@ static void SendDataB3Down(struct mNCCI *ncci, uint16_t len)
 		pthread_mutex_unlock(&ncci->lock);
 		return;
 	} else {
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send down %d bytes type %s id %d current oidx[%d] sent %d/%d\n",
-			ncci->ncci, ret, _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id, ncci->oidx,
-			ncci->xmit_handles[ncci->oidx].sent, ncci->xmit_handles[ncci->oidx].dlen);
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: send msg_iovlen=%zd iv[0]=%zd,%p iv[1]=%zd,%p iv[2]=%zd,%p\n",
-			ncci->ncci, ncci->down_msg.msg_iovlen,
-			ncci->down_iv[0].iov_len, ncci->down_iv[0].iov_base,
+		dprint(MIDEBUG_NCCI_DATA, "%s: send down %d bytes type %s id %d current oidx[%d] sent %d/%d\n",
+			CAPIobjIDstr(&ncci->cobj), ret, _mi_msg_type2str(ncci->down_header.prim), ncci->down_header.id,
+			ncci->oidx, ncci->xmit_handles[ncci->oidx].sent, ncci->xmit_handles[ncci->oidx].dlen);
+		dprint(MIDEBUG_NCCI_DATA, "%s: send msg_iovlen=%zd iv[0]=%zd,%p iv[1]=%zd,%p iv[2]=%zd,%p\n",
+			CAPIobjIDstr(&ncci->cobj), ncci->down_msg.msg_iovlen, ncci->down_iv[0].iov_len, ncci->down_iv[0].iov_base,
 			ncci->down_iv[1].iov_len, ncci->down_iv[1].iov_base,
 			ncci->down_iv[2].iov_len, ncci->down_iv[2].iov_base);
 	}
@@ -869,21 +964,21 @@ static uint16_t ncciDataReq(struct mNCCI *ncci, struct mc_buf *mc)
 
 	off = CAPIMSG_LEN(mc->rb);
 	if (off != 22 && off != 30) {
-		wprint("NCCI %06x: Illegal message len %d\n", ncci->ncci, off);
+		wprint("%s: Illegal message len %d\n", CAPIobjIDstr(&ncci->cobj), off);
 		AnswerDataB3Req(ncci, mc, CapiIllMessageParmCoding);
 		return 0;
 	}
 	pthread_mutex_lock(&ncci->lock);
 	if (!ncci->BIlink) {
 		pthread_mutex_unlock(&ncci->lock);
-		wprint("NCCI %06x: BInstance is gone - packet ignored\n", ncci->ncci);
+		wprint("%s: BInstance is gone - packet ignored\n", CAPIobjIDstr(&ncci->cobj));
 		AnswerDataB3Req(ncci, mc, CapiMessageNotSupportedInCurrentState);
 		return 0;
 	}
 	if (ncci->BIlink->tty > -1) {
 		/* We have a packet from pseudo tty */
 		if (ncci->xmit_handles[ncci->iidx].pkt) {
-			wprint("NCCI %06x: tty CapiSendQueueFull\n", ncci->ncci);
+			wprint("%s: tty CapiSendQueueFull\n", CAPIobjIDstr(&ncci->cobj));
 			/* TODO FLOW CONTROL */
 			pthread_mutex_unlock(&ncci->lock);
 			free_mc_buf(mc);
@@ -896,7 +991,7 @@ static uint16_t ncciDataReq(struct mNCCI *ncci, struct mc_buf *mc)
 			dhexprint(MIDEBUG_NCCI_DATA, "Queued Data: ", mc->rp, len);
 		} else {
 			/* TODO FLOW CONTROL */
-			wprint("NCCI %06x: tty got ctrl %02x\n", ncci->ncci, *mc->rp);
+			wprint("%s: tty got ctrl %02x\n", CAPIobjIDstr(&ncci->cobj), *mc->rp);
 			pthread_mutex_unlock(&ncci->lock);
 			free_mc_buf(mc);
 			return 0;
@@ -905,7 +1000,7 @@ static uint16_t ncciDataReq(struct mNCCI *ncci, struct mc_buf *mc)
 		ncci->xmit_handles[ncci->iidx].MsgId = 0;
 		off = 8;
 	} else if (ncci->xmit_handles[ncci->iidx].pkt) {
-		wprint("NCCI %06x: CapiSendQueueFull\n", ncci->ncci);
+		wprint("%s: CapiSendQueueFull\n", CAPIobjIDstr(&ncci->cobj));
 		pthread_mutex_unlock(&ncci->lock);
 		AnswerDataB3Req(ncci, mc, CapiSendQueueFull);
 		return 0;
@@ -921,8 +1016,9 @@ static uint16_t ncciDataReq(struct mNCCI *ncci, struct mc_buf *mc)
 	mc->len = len;
 	ncci->xmit_handles[ncci->iidx].sp = mc->rp;
 
-	dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: handle = %d data offset %d totlen %d datalen %d flowmode:%d ncci->dlbusy:%d\n",
-	       ncci->ncci, ncci->xmit_handles[ncci->iidx].DataHandle, off, mc->len, len, ncci->flowmode, ncci->dlbusy);
+	dprint(MIDEBUG_NCCI_DATA, "%s: handle = %d data offset %d totlen %d datalen %d flowmode:%d ncci->dlbusy:%d\n",
+	       CAPIobjIDstr(&ncci->cobj), ncci->xmit_handles[ncci->iidx].DataHandle, off, mc->len, len,
+	       ncci->flowmode, ncci->dlbusy);
 	ncci->iidx++;
 	if (ncci->iidx == ncci->window)
 		ncci->iidx = 0;
@@ -946,13 +1042,13 @@ static int ncciDataInd(struct mNCCI *ncci, int pr, struct mc_buf *mc)
 	dlen = mc->len - sizeof(*hh);
 	pthread_mutex_lock(&ncci->lock);
 	if (ncci->isize != dlen && (ncci->flowmode == flmIndication)) {
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: New isize (%d --> %d) set\n", ncci->ncci, ncci->isize, dlen);
+		dprint(MIDEBUG_NCCI_DATA, "%s: New isize (%d --> %d) set\n", CAPIobjIDstr(&ncci->cobj), ncci->isize, dlen);
 		ncci->isize = dlen;
 		ncci->osize = dlen;
 	}
 	if (!ncci->BIlink) {
 		pthread_mutex_unlock(&ncci->lock);
-		wprint("NCCI %06x: : frame with %d bytes dropped BIlink gone\n", ncci->ncci, dlen);
+		wprint("%s: : frame with %d bytes dropped BIlink gone\n", CAPIobjIDstr(&ncci->cobj), dlen);
 		return -EINVAL;
 	}
 	if (ncci->BIlink->tty > -1) {
@@ -962,11 +1058,11 @@ static int ncciDataInd(struct mNCCI *ncci, int pr, struct mc_buf *mc)
 		mc->rp = (unsigned char *)hh;
 		ret = write(ncci->BIlink->tty, mc->rp, dlen);
 		if (ret != dlen)
-			wprint("NCCI %06x: frame with %d bytes only %d bytes were written to tty - %s\n",
-				ncci->ncci, dlen, ret, strerror(errno));
+			wprint("%s: frame with %d bytes only %d bytes were written to tty - %s\n",
+				CAPIobjIDstr(&ncci->cobj), dlen, ret, strerror(errno));
 		else {
-			dprint(MIDEBUG_NCCI, "NCCI %06x: frame with %d bytes was written to tty\n",
-				ncci->ncci, dlen);
+			dprint(MIDEBUG_NCCI, "%s: frame with %d bytes was written to tty\n",
+				CAPIobjIDstr(&ncci->cobj), dlen);
 			dhexprint(MIDEBUG_NCCI_DATA, "Data: ", mc->rp, dlen);
 		}
 		free_mc_buf(mc);
@@ -979,7 +1075,7 @@ static int ncciDataInd(struct mNCCI *ncci, int pr, struct mc_buf *mc)
 
 	if (i == ncci->window) {
 		// FIXME: trigger flow control if supported by L2 protocol
-		wprint("NCCI %06x: : frame with %d bytes discarded\n", ncci->ncci, dlen);
+		wprint("%s: : frame with %d bytes discarded\n", CAPIobjIDstr(&ncci->cobj), dlen);
 		pthread_mutex_unlock(&ncci->lock);
 		return -EBUSY;
 	}
@@ -1005,12 +1101,12 @@ static int ncciDataInd(struct mNCCI *ncci, int pr, struct mc_buf *mc)
 
 	pthread_mutex_unlock(&ncci->lock);
 	if (ret != tot) {
-		wprint("NCCI %06x: frame with %d + %d bytes only %d bytes are sent - %s\n",
-		       ncci->ncci, dlen, CAPI_B3_DATA_IND_HEADER_SIZE, ret, strerror(errno));
+		wprint("%s: frame with %d + %d bytes only %d bytes are sent - %s\n",
+		       CAPIobjIDstr(&ncci->cobj), dlen, CAPI_B3_DATA_IND_HEADER_SIZE, ret, strerror(errno));
 		ret = -EINVAL;
 	} else
-		dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: frame with %d + %d bytes handle %d was sent ret %d\n",
-		       ncci->ncci, CAPI_B3_DATA_IND_HEADER_SIZE, dlen, dh, ret);
+		dprint(MIDEBUG_NCCI_DATA, "%s: frame with %d + %d bytes handle %d was sent ret %d\n",
+		       CAPIobjIDstr(&ncci->cobj), CAPI_B3_DATA_IND_HEADER_SIZE, dlen, dh, ret);
 	if (ncci->flowmode == flmIndication)
 		SendDataB3Down(ncci, dlen);
 	return ret;
@@ -1023,7 +1119,8 @@ static void ncciDataConf(struct mNCCI *ncci, struct mc_buf *mc)
 
 	hh = (struct mISDNhead *)mc->rb;
 	if (ncci->flowmode != flmPHDATA) {
-		wprint("NCCI %06x: Got DATA confirm for %x - but flow mode(%d)\n", ncci->ncci, hh->id, ncci->flowmode);
+		wprint("%s: Got DATA confirm for %x - but flow mode(%d)\n", CAPIobjIDstr(&ncci->cobj),
+			hh->id, ncci->flowmode);
 		free_mc_buf(mc);
 		return;
 	}
@@ -1031,7 +1128,7 @@ static void ncciDataConf(struct mNCCI *ncci, struct mc_buf *mc)
 	pthread_mutex_lock(&ncci->lock);
 	if (!ncci->BIlink) {
 		pthread_mutex_unlock(&ncci->lock);
-		wprint("NCCI %06x: ack dropped BIlink gone\n", ncci->ncci);
+		wprint("%s: ack dropped BIlink gone\n", CAPIobjIDstr(&ncci->cobj));
 		free_mc_buf(mc);
 		return;
 	}
@@ -1044,15 +1141,15 @@ static void ncciDataConf(struct mNCCI *ncci, struct mc_buf *mc)
 		}
 	}
 	if (i == ncci->window) {
-		wprint("NCCI %06x: Got DATA confirm for %x - but ID not found\n", ncci->ncci, hh->id);
+		wprint("%s: Got DATA confirm for %x - but ID not found\n", CAPIobjIDstr(&ncci->cobj), hh->id);
 		for (i = 0; i < ncci->window; i++)
-			wprint("NCCI %06x: PktId[%d] %x\n", ncci->ncci, i, ncci->xmit_handles[i].PktId);
+			wprint(" %s: PktId[%d] %x\n", CAPIobjIDstr(&ncci->cobj), i, ncci->xmit_handles[i].PktId);
 		pthread_mutex_unlock(&ncci->lock);
 		free_mc_buf(mc);
 		return;
 	}
-	dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: confirm xmit_handles[%d] pktid=%x handle=%d\n", ncci->ncci, i, hh->id,
-	       ncci->xmit_handles[i].DataHandle);
+	dprint(MIDEBUG_NCCI_DATA, "%s: confirm xmit_handles[%d] pktid=%x handle=%d\n",
+		CAPIobjIDstr(&ncci->cobj), i, hh->id, ncci->xmit_handles[i].DataHandle);
 	free_mc_buf(mc);
 	mc = ncci->xmit_handles[i].pkt;
 	ncci->xmit_handles[i].pkt = NULL;
@@ -1073,7 +1170,8 @@ static void ncciDataResp(struct mNCCI *ncci, struct mc_buf *mc)
 	pthread_mutex_lock(&ncci->lock);
 	for (i = 0; i < ncci->window; i++) {
 		if (ncci->recv_handles[i] == dh) {
-			dprint(MIDEBUG_NCCI_DATA, "NCCI %06x: data handle %d acked at pos %d\n", ncci->ncci, dh, i);
+			dprint(MIDEBUG_NCCI_DATA, "%s: data handle %d acked at pos %d\n",
+				CAPIobjIDstr(&ncci->cobj), dh, i);
 			ncci->recv_handles[i] = 0;
 			break;
 		}
@@ -1084,7 +1182,7 @@ static void ncciDataResp(struct mNCCI *ncci, struct mc_buf *mc)
 		dp = deb;
 		for (i = 0; i < ncci->window; i++)
 			dp += sprintf(dp, " [%d]=%d", i, ncci->recv_handles[i]);
-		wprint("NCCI %06x: data handle %d not in%s\n", ncci->ncci, dh, deb);
+		wprint("%s: data handle %d not in%s\n", CAPIobjIDstr(&ncci->cobj), dh, deb);
 	}
 	pthread_mutex_unlock(&ncci->lock);
 	free_mc_buf(mc);
@@ -1095,10 +1193,19 @@ static int ncciGetCmsg(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, struct m
 	int retval = CapiNoError;
 
 	if (!ncci->l3trans) {
-		eprint("NCCI %06x: Error L3 not transparent", ncci->ncci);
+		eprint("%s: Error L3 not transparent", CAPIobjIDstr(&ncci->cobj));
 		return -EINVAL;
 	}
 	switch (CAPICMD(cmd, subcmd)) {
+	case CAPI_DISCONNECT_IND:
+		/* This does inform NCCI about a received DISCONNECT in the D-channel */
+		retval = FsmEvent(&ncci->ncci_m, EV_L3_DISCONNECT_IND, mc);
+		if (ncci->ncci_m.state == 0) {
+			retval = 0;
+		} else {
+			return -EBUSY;
+		}
+		break;
 	case CAPI_CONNECT_B3_REQ:
 		retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_REQ, mc);
 		break;
@@ -1125,15 +1232,16 @@ static int ncciGetCmsg(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, struct m
 		retval = FsmEvent(&ncci->ncci_m, EV_AP_MANUFACTURER_REQ, mc);
 		break;
 	default:
-		eprint("NCCI %06x: Error Unhandled command %02x/%02x\n", ncci->ncci, cmd, subcmd);
+		eprint("%s: Error Unhandled command %02x/%02x\n", CAPIobjIDstr(&ncci->cobj), cmd, subcmd);
 		retval = CapiMessageNotSupportedInCurrentState;
 	}
 	if (retval) {
 		if (subcmd == CAPI_REQ)
 			retval = CapiMessageNotSupportedInCurrentState;
 		else {		/* RESP */
-			wprint("NCCI %06x: Error Message %02x/%02x not supported in state %s\n", ncci->ncci, cmd, subcmd,
-			       str_st_ncci[ncci->ncci_m.state]);
+			wprint("%s: Error Message %02x/%02x not supported in state %s\n",
+				CAPIobjIDstr(&ncci->cobj), cmd, subcmd,
+				_mi_ncci_st2str(ncci));
 			retval = CapiNoError;
 		}
 	}
@@ -1175,14 +1283,14 @@ static int ncciSendMessage(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, stru
 				ret = ncciDataReq(ncci, mc);
 			} else {
 				ret = CapiMessageNotSupportedInCurrentState;
-				wprint("NCCI %06x: DATA_B3_REQ - but but NCCI state %s\n", ncci->ncci,
-				       str_st_ncci[ncci->ncci_m.state]);
+				wprint("%s: DATA_B3_REQ - but but NCCI state %s\n", CAPIobjIDstr(&ncci->cobj),
+				       _mi_ncci_st2str(ncci));
 			}
 		} else if (subcmd == CAPI_RESP) {
 			ncciDataResp(ncci, mc);
 			ret = CapiNoError;
 		} else {
-			wprint("NCCI %06x: Unknown subcommand %02x\n", ncci->ncci, subcmd);
+			wprint("%s: Unknown subcommand %02x\n", CAPIobjIDstr(&ncci->cobj), subcmd);
 			free_mc_buf(mc);
 			ret = CapiNoError;
 		}
@@ -1191,8 +1299,8 @@ static int ncciSendMessage(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, stru
 			ret = ncciDataReq(ncci, mc);
 		} else {
 			ret = CapiMessageNotSupportedInCurrentState;
-			wprint("NCCI %06x: DATA_TTY_REQ - but but NCCI state %s\n", ncci->ncci,
-				str_st_ncci[ncci->ncci_m.state]);
+			wprint("%s: DATA_TTY_REQ - but but NCCI state %s\n", CAPIobjIDstr(&ncci->cobj),
+				_mi_ncci_st2str(ncci));
 		}
 	} else {
 		ret = ncciGetCmsg(ncci, cmd, subcmd, mc);
@@ -1203,24 +1311,36 @@ static int ncciSendMessage(struct mNCCI *ncci, uint8_t cmd, uint8_t subcmd, stru
 int ncciB3Data(struct BInstance *bi, struct mc_buf *mc)
 {
 	struct mNCCI *ncci;
+	int ret;
+
+	ncci = get_ncci(bi->b3data);
+	if (mc == NULL) {
+		if (ncci) {
+			dprint(MIDEBUG_NCCI, "%s: release request\n", CAPIobjIDstr(&ncci->cobj));
+			put_cobj(&ncci->cobj); /* ref from get_ncci() */
+			bi->b3data = NULL;
+			put_cobj(&ncci->cobj); /* ref from bi->b3data */
+		} else
+			wprint("b3data already gone\n");
+		return 0;
+	}
 
 	if (mc->cmsg.Command == CAPI_CONNECT_B3 && mc->cmsg.Subcommand == CAPI_REQ) {
-		pthread_rwlock_wrlock(&bi->lp->lock);
-		ncci = bi->b3data;
 		if (ncci)
-			wprint("NCCI %06x: already assigned\n", ncci->ncci);
+			wprint("%s: already assigned\n", CAPIobjIDstr(&ncci->cobj));
 		else {
 			ncci = ConnectB3Request(bi->lp, mc);
-			bi->b3data = ncci;
+			bi->b3data = get_ncci(ncci);
 		}
-		pthread_rwlock_unlock(&bi->lp->lock);
-	} else
-		ncci = bi->b3data;
+	}
+
 	if (!ncci) {
-		wprint("No NCCI asigned for  PCLI %04x\n", bi->lp->plci);
+		wprint("No NCCI asigned for  PCLI %04x\n", bi->lp->cobj.id);
 		return -EINVAL;
 	}
-	return ncciSendMessage(ncci, mc->cmsg.Command,  mc->cmsg.Subcommand, mc);
+	ret = ncciSendMessage(ncci, mc->cmsg.Command,  mc->cmsg.Subcommand, mc);
+	put_ncci(ncci);
+	return ret;
 }
 
 int ncciB3Message(struct mNCCI *ncci, struct mc_buf *mc)
@@ -1267,15 +1387,16 @@ int ncciB3Message(struct mNCCI *ncci, struct mc_buf *mc)
 		retval = FsmEvent(&ncci->ncci_m, EV_AP_MANUFACTURER_REQ, mc);
 		break;
 	default:
-		eprint("NCCI %06x: Error Unhandled command %02x/%02x\n", ncci->ncci, cmd, subcmd);
+		eprint("%s: Error Unhandled command %02x/%02x\n", CAPIobjIDstr(&ncci->cobj),
+			cmd, subcmd);
 		retval = CapiMessageNotSupportedInCurrentState;
 	}
 	if (retval) {
 		if (subcmd == CAPI_REQ)
 			retval = CapiMessageNotSupportedInCurrentState;
 		else {		/* RESP */
-			wprint("NCCI %06x: Error Message %02x/%02x not supported in state %s\n", ncci->ncci, cmd, subcmd,
-			       str_st_ncci[ncci->ncci_m.state]);
+			wprint("%s: Error Message %s %02x/%02x not supported in state %s\n", CAPIobjIDstr(&ncci->cobj),
+				capi20_cmd2str(cmd, subcmd), cmd, subcmd, _mi_ncci_st2str(ncci));
 			retval = CapiNoError;
 		}
 	}
@@ -1290,11 +1411,12 @@ int ncciL4L3(struct mNCCI *ncci, uint32_t prim, int id, int len, void *data, str
 
 	if (!ncci->BIlink)
 		return -ENOTCONN;
-	dprint(MIDEBUG_NCCI, "NCCI %06x: prim %s id %x len %d\n", ncci->ncci, _mi_msg_type2str(prim), id, len);
+	dprint(MIDEBUG_NCCI, "%s: prim %s id %x len %d\n", CAPIobjIDstr(&ncci->cobj), _mi_msg_type2str(prim), id, len);
 	if (!mc) {
 		loc = alloc_mc_buf();
 		if (!loc) {
-			eprint("NCCI %06x: prim %s id %x len %d cannot allocate buffer\n", ncci->ncci, _mi_msg_type2str(prim), id,
+			eprint("%s: prim %s id %x len %d cannot allocate buffer\n", CAPIobjIDstr(&ncci->cobj),
+				_mi_msg_type2str(prim), id,
 			       len);
 			return -ENOMEM;
 		}
@@ -1324,9 +1446,10 @@ int ncciL4L3(struct mNCCI *ncci, uint32_t prim, int id, int len, void *data, str
 int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 {
 	struct mISDNhead *hh;
-	struct mNCCI *ncci = bi->b3data;
+	struct mNCCI *ncci;
 	int ret = 0;
 
+	ncci = get_ncci(bi->b3data);
 	if (!mc) {
 		/* timeout release */
 		ncciReleaseLink(ncci);
@@ -1347,7 +1470,7 @@ int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 			ret = ncciDataInd(ncci, hh->prim, mc);
 		} else {
 			wprint("Controller%d ch%d: Got %s but but NCCI state %s\n", bi->pc->profile.ncontroller, bi->nr,
-				_mi_msg_type2str(hh->prim), str_st_ncci[ncci->ncci_m.state]);
+				_mi_msg_type2str(hh->prim), _mi_ncci_st2str(ncci));
 			ret = 1;
 		}
 		break;
@@ -1364,15 +1487,13 @@ int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 	case PH_ACTIVATE_CNF:
 	case DL_ESTABLISH_CNF:
 		if (!ncci) {
-			pthread_rwlock_wrlock(&bi->lp->lock);
 			ncci = ncciCreate(bi->lp);
 			if (!ncci) {
-				pthread_rwlock_unlock(&bi->lp->lock);
-				eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
+				eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->cobj.id : 0xffff);
 				return -ENOMEM;
-			} else
-				bi->b3data = ncci;
-			pthread_rwlock_unlock(&bi->lp->lock);
+			} else {
+				bi->b3data = get_ncci(ncci);
+			}
 		}
 		FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_CONF, mc);
 #ifdef UNSINN
@@ -1388,17 +1509,16 @@ int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 	case PH_ACTIVATE_IND:
 	case DL_ESTABLISH_IND:
 		if (!ncci) {
-			pthread_rwlock_wrlock(&bi->lp->lock);
 			ncci = ncciCreate(bi->lp);
 			if (!ncci) {
-				pthread_rwlock_unlock(&bi->lp->lock);
-				eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
+				eprint("Cannot create NCCI for PLCI %04x\n", bi->lp ? bi->lp->cobj.id : 0xffff);
 				return -ENOMEM;
-			} else
-				bi->b3data = ncci;
-			pthread_rwlock_unlock(&bi->lp->lock);
+			} else {
+				bi->b3data = get_ncci(ncci);
+			}
 		} else
-			dprint(MIDEBUG_NCCI, "NCCI %06x: %s on existing NCCIx\n", ncci->ncci, _mi_msg_type2str(hh->prim));
+			dprint(MIDEBUG_NCCI, "%s: %s on existing NCCIx\n", CAPIobjIDstr(&ncci->cobj),
+				_mi_msg_type2str(hh->prim));
 		FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_IND, mc);
 		ret = 1;
 		break;
@@ -1441,6 +1561,7 @@ int recvBdirect(struct BInstance *bi, struct mc_buf *mc)
 			_mi_msg_type2str(hh->prim), hh->prim, hh->id, mc->len);
 		ret = -EINVAL;
 	}
+	put_ncci(ncci);
 	return ret;
 }
 

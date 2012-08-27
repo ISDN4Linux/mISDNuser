@@ -11,59 +11,105 @@
  * this package for more details.
  */
 
+#define _GNU_SOURCE
+#include <unistd.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
 #include "m_capi.h"
 #include "mc_buffer.h"
 
-static struct mApplication *mApplications;
-static pthread_rwlock_t mAppListLock;
+static struct mCAPIobj AppRoot;
+
+/* not in capi header files yet */
+void capi_freeapplid(unsigned);
 
 int mApplication_init(void)
 {
 	int ret;
 
-	ret = pthread_rwlock_init(&mAppListLock, NULL);
+	memset(&AppRoot, 0, sizeof(AppRoot));
+	ret = init_cobj(&AppRoot, NULL, Cot_Root, 0, 0);
 	return ret;
+}
+
+static void app_sendcontrol(struct mApplication *appl, int cmd)
+{
+	int ret;
+
+	if (appl->cpipe[1] > 0) {
+		ret = write(appl->cpipe[1], &cmd, sizeof(cmd));
+		if (ret < sizeof(cmd))
+			eprint("%s: refcount %d cannot write cmd=%x to controlpipe(%d) ret=%d - %s\n",
+				CAPIobjIDstr(&appl->cobj), appl->cobj.refcnt, cmd, appl->cpipe[1], ret, strerror(errno));
+	} else
+		eprint("%s: refcount %d cannot write cmd=%x - control pipe closed\n",
+			CAPIobjIDstr(&appl->cobj), appl->cobj.refcnt, cmd);
 }
 
 struct mApplication *RegisterApplication(uint16_t ApplId, uint32_t MaxB3Connection, uint32_t MaxB3Blks, uint32_t MaxSizeB3)
 {
-	struct mApplication *appl, *old;
+	struct mApplication *appl;
+	int ret;
 
-	pthread_rwlock_wrlock(&mAppListLock);
-	old = mApplications;
-	while (old) {
-		if (old->AppId == ApplId) {
-			wprint("Application %d already registered\n", ApplId);
-			pthread_rwlock_unlock(&mAppListLock);
-			return NULL;
-		}
-		if (!old->next)
-			break;
-		old = old->next;
-	}
 	appl = calloc(1, sizeof(*appl));
 	if (appl) {
-		pthread_rwlock_init(&appl->llock, NULL);
-		appl->AppId = ApplId;
-		appl->MaxB3Con = MaxB3Connection;
-		appl->MaxB3Blk = MaxB3Blks;
-		appl->MaxB3Size = MaxSizeB3;
-		if (old)
-			old->next = appl;
-		else
-			mApplications = appl;
+		appl->lcl = calloc(mI_ControllerCount, sizeof(void *));
+		if (appl->lcl) {
+			appl->cobj.id2 = ApplId;
+			ret = init_cobj_registered(&appl->cobj, &AppRoot, Cot_Application, 0);
+			if (ret) {
+				eprint("Appl %d: Error on init CapiObj - %s\n", ApplId, strerror(ret));
+				free(appl->lcl);
+				free(appl);
+				appl = NULL;
+			} else {
+				if (ret) {
+					wprint("Application %d already registered\n", ApplId);
+					put_cobj(&AppRoot);
+					free(appl->lcl);
+					free(appl);
+					appl = NULL;
+				} else {
+					appl->MaxB3Con = MaxB3Connection;
+					appl->MaxB3Blk = MaxB3Blks;
+					appl->MaxB3Size = MaxSizeB3;
+					appl->cpipe[0] = -1;
+					appl->cpipe[1] = -1;
+				}
+			}
+		} else {
+			eprint("Appl %d: No memory for lController array\n", ApplId);
+			free(appl);
+			appl = NULL;
+		}
 	} else {
-		eprint("No memory for application (%zd bytes)\n", sizeof(*appl));
+		eprint("Appl %d: No memory for application (%zd bytes)\n", ApplId, sizeof(*appl));
 	}
-	pthread_rwlock_unlock(&mAppListLock);
 	return appl;
 }
 
+int register_lController(struct mApplication *appl, struct lController *lc)
+{
+	unsigned int i;
+
+	i = lc->cobj.id - 1;
+	if (i >= mI_ControllerCount) {
+		eprint("%s: Register invalid controller ID:%d\n", CAPIobjIDstr(&appl->cobj), lc->cobj.id);
+		return -EINVAL;
+	}
+	if (appl->lcl[i]) {
+		eprint("%s: controller idx %d ID:%d\already registered\n", CAPIobjIDstr(&appl->cobj), i, lc->cobj.id);
+		return -EBUSY;
+	}
+	appl->lcl[i] = lc;
+	get_cobj(&lc->cobj);
+	return 0;
+}
+
 /*
- * Destroy the Application
+ * Release the Application
  *
  * depending who initiate this we cannot release imediatly, if
  * any AppPlci is still in use.
@@ -74,77 +120,182 @@ struct mApplication *RegisterApplication(uint16_t ApplId, uint32_t MaxB3Connecti
  *         3 - the controller is removed
  *         4 - the CAPI module will be unload
  */
-void ReleaseApplication(struct mApplication *appl)
+void ReleaseApplication(struct mApplication *appl, int unregister)
 {
-	struct mApplication *ma;
-	struct lController *lc, *lcn;
+	int ret;
+	unsigned int i;
 
-	/* first remove from list */
-	pthread_rwlock_wrlock(&mAppListLock);
-	ma = mApplications;
-	while (ma) {
-		if (ma == appl) {
-			mApplications = appl->next;
-			appl->next = NULL;
-			break;
-		} else if (ma->next == appl) {
-			ma->next = appl->next;
-			appl->next = NULL;
-			break;
-		}
-		ma = ma->next;
-	}
-	pthread_rwlock_unlock(&mAppListLock);
-	/* remove assigned logical controllers */
-	pthread_rwlock_wrlock(&appl->llock);
-	lc = appl->contL;
-	while (lc) {
-		lcn = lc->nextA;
-		dprint(MIDEBUG_CONTROLLER, "Appl:%3d remove lc=%p (next:%p)\n", appl->AppId, lc, lcn);
-		rm_lController(lc);
-		lc = lcn;
-	}
+	pthread_rwlock_wrlock(&appl->cobj.lock);
+	if (appl->cobj.cleaned) {
+		pthread_rwlock_unlock(&appl->cobj.lock);
+		wprint("%s: already cleaned\n", CAPIobjIDstr(&appl->cobj));
+		return;
+	} else
+		appl->cobj.cleaned = 1;
+
+	appl->unregistered = unregister;
+
+	ret = pipe2(appl->cpipe, O_NONBLOCK);
+	if (ret)
+		eprint("%s: Cannot open control pipe - %s\n", CAPIobjIDstr(&appl->cobj), strerror(errno));
 	close(appl->fd);
-	dprint(MIDEBUG_CAPIMSG, "Appl:%3d removed\n", appl->AppId);
-	pthread_rwlock_unlock(&appl->llock);
-	pthread_rwlock_destroy(&appl->llock);
-	free(appl);
+	appl->fd = -1;
+
+	pthread_rwlock_unlock(&appl->cobj.lock);
+
+	/* Signal assigned logical controllers Application is gone */
+	for (i = 0; i < mI_ControllerCount; i++) {
+		if (appl->lcl[i]) {
+			release_lController(appl->lcl[i]);
+			cleanup_lController(appl->lcl[i]);
+		}
+	}
+	dprint(MIDEBUG_CAPIMSG, "%s: cleaning done refcnt:%d\n", CAPIobjIDstr(&appl->cobj), appl->cobj.refcnt);
+	app_sendcontrol(appl, MI_PUT_APPLICATION);
+}
+
+int ReleaseAllApplications(void)
+{
+	struct mApplication *appl;
+	struct mCAPIobj *co;
+	int ret, cnt = 0, fd;
+
+	co = get_next_cobj(&AppRoot, NULL);
+	while (co) {
+		appl = container_of(co, struct mApplication, cobj);
+		fd = appl->fd;
+		ReleaseApplication(appl, 0);
+		ret = mIcapi_mainpoll_releaseApp(fd, appl->cpipe[0]);
+		if (ret < 0)
+			eprint("%s mainpoll not released\n", CAPIobjIDstr(&appl->cobj));
+		co = get_next_cobj(&AppRoot, co);
+		cnt++;
+	}
+	return cnt;
+}
+
+void Free_Application(struct mCAPIobj *co)
+{
+	unsigned int i;
+	struct mApplication *appl = container_of(co, struct mApplication, cobj);
+	struct lController *lc;
+
+	delist_cobj(&appl->cobj);
+	if (appl->lcl) {
+		for (i = 0; i < mI_ControllerCount; i++) {
+			lc = appl->lcl[i];
+			appl->lcl[i] = NULL;
+			if (lc) {
+				release_lController(lc);
+				Free_lController(&lc->cobj);
+			}
+		}
+	}
+	if (!appl->unregistered) /* filedescriptor was closed */
+		capi_freeapplid(appl->cobj.id2);
+	if (appl->fd > 0)
+		close(appl->fd);
+	appl->fd = -1;
+	if (appl->cpipe[1] > 0)
+		close(appl->cpipe[1]);
+	appl->cpipe[1] = -1;
+	if (appl->cpipe[0] > 0)
+		close(appl->cpipe[0]);
+	appl->cpipe[0] = -1;
+
+	put_cobj(appl->cobj.parent);
+	appl->cobj.parent = NULL;
+	iprint("%s: refcnt=%d freed\n", CAPIobjIDstr(&appl->cobj), appl->cobj.refcnt);
+	pthread_rwlock_destroy(&appl->cobj.lock);
+	if (appl->lcl)
+		free(appl->lcl);
+	appl->lcl = NULL;
+	free_capiobject(&appl->cobj, appl);
 }
 
 void dump_applications(void)
 {
 	struct mApplication *ap;
-	struct lController *lc;
+	struct mCAPIobj *co;
+	unsigned int i;
 
-	pthread_rwlock_rdlock(&mAppListLock);
-	ap = mApplications;
-	while (ap) {
-		iprint("Application Id:%d MaxB3Con:%d MaxB3Blk:%d MaxB3Size:%d\n", ap->AppId, ap->MaxB3Con, ap->MaxB3Blk,
-			ap->MaxB3Size);
-		pthread_rwlock_rdlock(&ap->llock);
-		lc = ap->contL;
-		while (lc) {
-			dump_lcontroller(lc);
-			lc = lc->nextA;
-		}
-		pthread_rwlock_unlock(&ap->llock);
-		ap = ap->next;
+	if (pthread_rwlock_tryrdlock(&AppRoot.lock)) {
+		wprint("Cannot read lock application list for dumping\n");
+		return;
 	}
-	pthread_rwlock_unlock(&mAppListLock);
+	co = AppRoot.listhead;
+	while (co) {
+		ap = container_of(co, struct mApplication, cobj);
+		iprint("%s: MaxB3Con:%d MaxB3Blk:%d MaxB3Size:%d\n", CAPIobjIDstr(&ap->cobj),
+			ap->MaxB3Con, ap->MaxB3Blk, ap->MaxB3Size);
+		iprint("%s: Refs:%d cleaned:%s unregistered:%s cpipe(%d,%d)\n", CAPIobjIDstr(&ap->cobj),
+			ap->cobj.refcnt, ap->cobj.cleaned ? "yes" : "no", ap->unregistered ? "yes" : "no",
+			ap->cpipe[0], ap->cpipe[1]);
+		for (i = 0; i < mI_ControllerCount; i++) {
+			if (ap->lcl[i]) {
+				dump_lcontroller(ap->lcl[i]);
+				ap->lcl[i]->listed = 1;
+			}
+		}
+		co = co->next;
+	}
+	pthread_rwlock_unlock(&AppRoot.lock);
 }
 
-struct lController *get_lController(struct mApplication *app, int cont)
+void Put_Application_cleaned(struct mCAPIobj *co)
+{
+	struct mApplication *appl = container_of(co, struct mApplication, cobj);
+
+	if (appl->cobj.cleaned && appl->cpipe[1] > 0)
+		app_sendcontrol(appl, MI_PUT_APPLICATION);
+}
+
+void delisten_application(struct lController *lc)
+{
+	unsigned int i;
+	struct mApplication *appl;
+
+	appl = lc->Appl;
+	if (!appl) {
+		wprint("Appl not linked\n");
+		return;
+	}
+	lc->Appl = NULL;
+	i = lc->cobj.id;
+	i--;
+	if (i <  mI_ControllerCount) {
+		if (appl->lcl[i])
+			 put_cobj(&lc->cobj);
+		appl->lcl[i] = NULL;
+	}
+	put_cobj(&appl->cobj);
+}
+
+struct lController *get_lController(struct mApplication *appl, unsigned int cont)
 {
 	struct lController *lc;
 
-	pthread_rwlock_rdlock(&app->llock);
-	lc = app->contL;
-	while (lc) {
-		if (lc->Contr->profile.ncontroller == cont)
-			break;
-		lc = lc->nextC;
+	if (cont > 0 && cont <= mI_ControllerCount)
+		lc = appl->lcl[cont - 1];
+	else {
+		wprint("%s: wrong controller id %d (max %d)\n", CAPIobjIDstr(&appl->cobj), cont, mI_ControllerCount);
+		lc = NULL;
 	}
-	pthread_rwlock_unlock(&app->llock);
+	if (lc)
+		get_cobj(&lc->cobj);
+	return lc;
+}
+
+static struct lController *find_lController(struct mApplication *appl, unsigned int cont)
+{
+	struct lController *lc;
+
+	if (cont > 0 && cont <= mI_ControllerCount)
+		lc = appl->lcl[cont - 1];
+	else {
+		wprint("%s: wrong controller id %d (max %d)\n", CAPIobjIDstr(&appl->cobj), cont, mI_ControllerCount);
+		lc = NULL;
+	}
 	return lc;
 }
 
@@ -152,24 +303,66 @@ void SendMessage2Application(struct mApplication *appl, struct mc_buf *mc)
 {
 	int ret;
 
+	if (mI_debug_mask & MIDEBUG_CAPIMSG)
+		 mCapi_message2str(mc);
 	ret = send(appl->fd, mc->rb, mc->len, 0);
 	if (ret != mc->len)
 		wprint("Message send error len=%d ret=%d - %s\n", mc->len, ret, strerror(errno));
-	if (mI_debug_mask & MIDEBUG_CAPIMSG)
-		 mCapi_message2str(mc);
 }
 
 void SendCmsg2Application(struct mApplication *appl, struct mc_buf *mc)
 {
 	int ret;
 
-	capi_cmsg2message(&mc->cmsg, mc->rb);
-	mc->len = CAPIMSG_LEN(mc->rb);
-	ret = send(appl->fd, mc->rb, mc->len, 0);
-	if (ret != mc->len)
-		eprint("Message send error len=%d ret=%d - %s\n", mc->len, ret, strerror(errno));
-	else if (mI_debug_mask & MIDEBUG_CAPIMSG)
-		mCapi_message2str(mc);
+	if (appl->cobj.cleaned || appl->fd < 0) {
+		/* Application is gone so we need answer INDICATIONS to avoid blocking the state machine */
+		wprint("%s: Cannot send %s to released application\n", CAPIobjIDstr(&appl->cobj),
+			capi20_cmd2str(mc->cmsg.Command, mc->cmsg.Subcommand));
+		if (mc->cmsg.Subcommand != CAPI_IND)
+			return;
+		switch(mc->cmsg.Command) {
+		// for NCCI state machine
+		case CAPI_CONNECT_B3:
+			mc->cmsg.Reject = 2;
+		case CAPI_CONNECT_B3_ACTIVE:
+		case CAPI_DISCONNECT_B3:
+			break;
+		// for PLCI state machine
+		case CAPI_CONNECT:
+			mc->cmsg.Reject = 2;
+		case CAPI_CONNECT_ACTIVE:
+		case CAPI_DISCONNECT:
+			break;
+		case CAPI_FACILITY:
+		case CAPI_MANUFACTURER:
+		case CAPI_INFO:
+			wprint("%s %s ignored\n", CAPIobjIDstr(&appl->cobj),
+				capi20_cmd2str(mc->cmsg.Command, mc->cmsg.Subcommand));
+			return;
+		default:
+			wprint("%s: %s not handled\n", CAPIobjIDstr(&appl->cobj),
+				capi20_cmd2str(mc->cmsg.Command, mc->cmsg.Subcommand));
+			return;
+		}
+		capi20_cmsg_answer(&mc->cmsg);
+		capi_cmsg2message(&mc->cmsg, mc->rb);
+		mc->len = CAPIMSG_LEN(mc->rb);
+		mc->refcnt++; /* The message is reused, so increment the refcnt to allow double free */
+		dprint(MIDEBUG_CONTROLLER, "%s: sent emulated answer %s to PutMessageApplication\n",
+			CAPIobjIDstr(&appl->cobj), capi20_cmd2str(mc->cmsg.Command, mc->cmsg.Subcommand));
+		ret = PutMessageApplication(appl, mc);
+		if (ret)
+			dprint(MIDEBUG_CONTROLLER, "%s: sent emulated answer %s to PutMessageApplication returned=%d\n",
+				CAPIobjIDstr(&appl->cobj), capi20_cmd2str(mc->cmsg.Command, mc->cmsg.Subcommand), ret);
+	} else {
+		capi_cmsg2message(&mc->cmsg, mc->rb);
+		mc->len = CAPIMSG_LEN(mc->rb);
+		if (mI_debug_mask & MIDEBUG_CAPIMSG)
+			mCapi_message2str(mc);
+		ret = send(appl->fd, mc->rb, mc->len, 0);
+		if (ret != mc->len)
+			eprint("Message send error len=%d ret=%d - %s\n", mc->len, ret, strerror(errno));
+	}
 }
 
 void SendCmsgAnswer2Application(struct mApplication *appl, struct mc_buf *mc, __u16 Info)
@@ -181,14 +374,19 @@ void SendCmsgAnswer2Application(struct mApplication *appl, struct mc_buf *mc, __
 
 struct lPLCI *get_lPLCI4plci(struct mApplication *appl, uint32_t id)
 {
+	struct lPLCI *lp = NULL;;
 	struct lController *lc;
 	struct mPLCI *plci;
 
-	lc = get_lController(appl, id & 0x7f);
-	if (!lc)
-		return NULL;
-	plci = getPLCI4Id(lc->Contr, id & 0xFFFF);
-	return get_lPLCI4Id(plci, appl->AppId, 0);
+	lc = find_lController(appl, id & 0x7f);
+	if (lc) {
+		plci = getPLCI4Id(p4lController(lc), id & 0xFFFF);
+		if (plci) {
+			lp = get_lPLCI4Id(plci, appl->cobj.id2);
+			put_cobj(&plci->cobj);
+		}
+	}
+	return lp;
 }
 
 #define CapiFacilityNotSupported		0x300b
@@ -209,7 +407,9 @@ static int FacilityMessage(struct mApplication *appl, struct pController *pc, st
 	case 0x0001:		// DTMF
 		dprint(MIDEBUG_CONTROLLER, "DTMF addr %06x\n", mc->cmsg.adr.adrNCCI);
 		plci = getPLCI4Id(pc, mc->cmsg.adr.adrPLCI & 0xFFFF);
-		lp = get_lPLCI4Id(plci, mc->cmsg.ApplId, 0);
+		lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
+		if (plci)
+			put_cobj(&plci->cobj);
 		bi = lp ? lp->BIlink : NULL;
 		if  (bi) {
 			ret = bi->from_up(bi, mc);
@@ -217,6 +417,8 @@ static int FacilityMessage(struct mApplication *appl, struct pController *pc, st
 			wprint("DTMF addr %06x lPLCI not found\n", mc->cmsg.adr.adrNCCI);
 			ret = CapiIllController;
 		}
+		if (lp)
+			put_cobj(&lp->cobj);
 		break;
 	case 0x0003:		// SupplementaryServices
 		// ret = SupplementaryFacilityReq(appl, mc);
@@ -239,11 +441,11 @@ static int FacilityMessage(struct mApplication *appl, struct pController *pc, st
 
 int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 {
-	int id;
+	unsigned int id;
 	struct pController *pc;
 	struct lController *lc;
-	struct mPLCI *plci;
-	struct lPLCI *lp;
+	struct mPLCI *plci = NULL;
+	struct lPLCI *lp = NULL;
 	struct BInstance *bi;
 	uint8_t cmd, subcmd;
 	int ret = CapiNoError;
@@ -261,30 +463,51 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 	id = CAPIMSG_CONTROL(mc->rb);
 	lc = get_lController(appl, id & 0x7f);
 	if (lc)
-		pc = lc->Contr;
+		pc = p4lController(lc);
 	else
 		pc = get_cController(id & 0x7f);
 	if (!pc) {
 		eprint("message %x controller for id %06x not found\n", cmd, id);
 	}
-	dprint(MIDEBUG_CONTROLLER, "ID: %06x cmd %02x/%02x %s\n", id, cmd, subcmd, capi20_cmd2str(cmd, subcmd));
+	dprint(MIDEBUG_CONTROLLER, "%s: ID:%06x cmd %02x/%02x %s\n", CAPIobjIDstr(&appl->cobj),
+		id, cmd, subcmd, capi20_cmd2str(cmd, subcmd));
 	switch (cmd) {
 		// for NCCI state machine
 	case CAPI_DATA_B3:
 	case CAPI_CONNECT_B3_ACTIVE:
-	case CAPI_DISCONNECT_B3:
 	case CAPI_RESET_B3:
 		mcbuf_rb2cmsg(mc);
 		if ((subcmd == CAPI_REQ) || (subcmd == CAPI_RESP)) {
 			plci = getPLCI4Id(pc, mc->cmsg.adr.adrPLCI & 0xFFFF);
-			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId, 0);
+			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
 			bi = lp ? lp->BIlink : NULL;
 			if (bi) {
 				ret = bi->from_up(bi, mc);
 			} else {
-				wprint("Application%d: cmd %x (%s) plci %04x lplci %04x BIlink not found\n", appl->AppId, cmd,
-				       capi20_cmd2str(mc->cmsg.Command, mc->cmsg.Subcommand),
-				       plci ? plci->plci : 0xffff, lp ? lp->plci : 0xffff);
+				wprint("%s: cmd %x (%s) %s  %s  BIlink not found\n", CAPIobjIDstr(&appl->cobj), cmd,
+					capi20_cmd2str(mc->cmsg.Command, mc->cmsg.Subcommand),
+					plci ? CAPIobjIDstr(&plci->cobj) : "no plci",
+					lp ? CAPIobjIDstr(&lp->cobj) : "no lplci");
+				ret = CapiIllController;
+			}
+		} else
+			ret = CapiIllCmdOrSubcmdOrMsgToSmall;
+		break;
+	case CAPI_DISCONNECT_B3:
+		mcbuf_rb2cmsg(mc);
+		if ((subcmd == CAPI_REQ) || (subcmd == CAPI_RESP)) {
+			plci = getPLCI4Id(pc, mc->cmsg.adr.adrPLCI & 0xFFFF);
+			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
+			bi = lp ? lp->BIlink : NULL;
+			if (bi) {
+				ret = bi->from_up(bi, mc);
+			} else if (subcmd == CAPI_RESP) {
+				dprint(MIDEBUG_CONTROLLER, "%s: cmd %x (%s) %s  %s  BIlink already gone - OK\n", CAPIobjIDstr(&appl->cobj), cmd,
+					capi20_cmd2str(mc->cmsg.Command, mc->cmsg.Subcommand),
+					plci ? CAPIobjIDstr(&plci->cobj) : "no plci",
+					lp ? CAPIobjIDstr(&lp->cobj) : "no lplci");
+				ret = 1; /* free msg in calling function main_recv() */
+			} else {
 				ret = CapiIllController;
 			}
 		} else
@@ -293,14 +516,15 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 	case CAPI_CONNECT_B3:
 		mcbuf_rb2cmsg(mc);
 		plci = getPLCI4Id(pc, mc->cmsg.adr.adrPLCI & 0xFFFF);
-		lp = get_lPLCI4Id(plci, mc->cmsg.ApplId, 0);
+		lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
 		bi = lp ? lp->BIlink : NULL;
 		if (bi) {
 			ret = bi->from_up(bi, mc);
 		} else {
-			wprint("Application%d: cmd %x (%s) plci %04x lplci %04x BIlink not found\n", appl->AppId, cmd,
-			       capi20_cmd2str(mc->cmsg.Command, mc->cmsg.Subcommand),
-			       plci ? plci->plci : 0xffff, lp ? lp->plci : 0xffff);
+			wprint("%s: cmd %x (%s) %s  %s  BIlink not found\n", CAPIobjIDstr(&appl->cobj), cmd,
+				capi20_cmd2str(mc->cmsg.Command, mc->cmsg.Subcommand),
+				plci ? CAPIobjIDstr(&plci->cobj) : "no plci",
+				lp ? CAPIobjIDstr(&lp->cobj) : "no lplci");
 			ret = CapiIllController;
 		}
 		break;
@@ -310,15 +534,15 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 		mcbuf_rb2cmsg(mc);
 		plci = getPLCI4Id(pc, mc->cmsg.adr.adrPLCI);
 		dprint(MIDEBUG_PLCI, "%s adrPLCI %06x plci:%04x ApplId %d\n", capi20_cmd2str(cmd, subcmd), mc->cmsg.adr.adrPLCI,
-		       plci ? plci->plci : 0xffff, mc->cmsg.ApplId);
+		       plci ? plci->cobj.id : 0xffff, mc->cmsg.ApplId);
 		if (subcmd == CAPI_REQ) {
 			if (plci) {
-				lp = get_lPLCI4Id(plci, mc->cmsg.ApplId, 0);
+				lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
 				if (lp)
 					ret = lPLCISendMessage(lp, mc);
 				else {
 					wprint("%s adrPLCI %06x plci:%04x ApplId %d no plci found\n", capi20_cmd2str(cmd, subcmd),
-					       mc->cmsg.adr.adrPLCI, plci ? plci->plci : 0xffff, mc->cmsg.ApplId);
+					       mc->cmsg.adr.adrPLCI, plci ? plci->cobj.id : 0xffff, mc->cmsg.ApplId);
 					ret = CapiIllController;
 				}
 			} else {
@@ -337,12 +561,12 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 				ret = mPLCISendMessage(lc, mc);
 			}
 		} else if (subcmd == CAPI_RESP) {
-			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId, 0);
+			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
 			if (lp)
 				ret = lPLCISendMessage(lp, mc);
 			else {
 				wprint("%s adrPLCI %06x plci:%04x ApplId %d no plci found\n", capi20_cmd2str(cmd, subcmd),
-				       mc->cmsg.adr.adrPLCI, plci ? plci->plci : 0xffff, mc->cmsg.ApplId);
+				       mc->cmsg.adr.adrPLCI, plci ? plci->cobj.id : 0xffff, mc->cmsg.ApplId);
 				ret = CapiIllController;
 			}
 		} else
@@ -355,9 +579,9 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 		mcbuf_rb2cmsg(mc);
 		if ((subcmd == CAPI_REQ) || (subcmd == CAPI_RESP)) {
 			plci = getPLCI4Id(pc, mc->cmsg.adr.adrPLCI);
-			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId, 0);
+			lp = get_lPLCI4Id(plci, mc->cmsg.ApplId);
 			dprint(MIDEBUG_PLCI, "adrPLCI %06x plci:%04x ApplId %d lp %p\n", mc->cmsg.adr.adrPLCI,
-			       plci ? plci->plci : 0xffff, mc->cmsg.ApplId, lp);
+			       plci ? plci->cobj.id : 0xffff, mc->cmsg.ApplId, lp);
 			if (lp)
 				ret = lPLCISendMessage(lp, mc);
 			else
@@ -397,6 +621,12 @@ int PutMessageApplication(struct mApplication *appl, struct mc_buf *mc)
 	}
 	if (ret && subcmd != CAPI_RESP)
 		SendCmsgAnswer2Application(appl, mc, ret);
+	if (lp)
+		put_cobj(&lp->cobj);
+	if (plci)
+		put_cobj(&plci->cobj);
+	if (lc)
+		put_cobj(&lc->cobj);
 	return ret;
 }
 

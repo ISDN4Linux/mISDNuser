@@ -37,17 +37,14 @@ static struct Fsm listen_fsm = { 0, 0, 0, 0, 0 };
 static void listen_debug(struct FsmInst *fi, char *fmt, ...)
 {
 	char tmp[128];
-	char *p = tmp;
 	va_list args;
 	struct lController *lc = fi->userdata;
 
 	if (!fi->debug)
 		return;
 	va_start(args, fmt);
-	p += sprintf(p, "Controller%d ApplId %d listen ", lc->Contr->profile.ncontroller, lc->Appl->AppId);
-	p += vsprintf(p, fmt, args);
-	*p = 0;
-	dprint(MIDEBUG_STATES, "%s\n", tmp);
+	vsnprintf(tmp, 128, fmt, args);
+	dprint(MIDEBUG_STATES, "%s: listen %s\n", CAPIobjIDstr(&lc->cobj), tmp);
 	va_end(args);
 }
 
@@ -55,21 +52,17 @@ static void listen_req_l_x(struct FsmInst *fi, int event, void *arg, int state)
 {
 	struct lController *lc = fi->userdata;
 	struct mc_buf *mc = arg;
+	const char *ids;
 
 	FsmChangeState(fi, state);
-
-	dprint(MIDEBUG_CONTROLLER, "Controller%d: lc=%p nC=%p nA=%p\n",
-		lc->Contr->profile.ncontroller, lc, lc->nextC, lc->nextA);
-	dprint(MIDEBUG_CONTROLLER, "Controller%d: set InfoMask %08x -> %08x\n",
-	       lc->Contr->profile.ncontroller, lc->InfoMask, mc->cmsg.InfoMask);
-	dprint(MIDEBUG_CONTROLLER, "Controller%d: set CIPmask %08x -> %08x\n",
-	       lc->Contr->profile.ncontroller, lc->CIPmask, mc->cmsg.CIPmask);
-	dprint(MIDEBUG_CONTROLLER, "Controller%d: set CIPmask2 %08x -> %08x\n",
-	       lc->Contr->profile.ncontroller, lc->CIPmask2, mc->cmsg.CIPmask2);
+	ids = CAPIobjIDstr(&lc->cobj);
+	dprint(MIDEBUG_CONTROLLER, "%s: set InfoMask %08x -> %08x\n", ids, lc->InfoMask, mc->cmsg.InfoMask);
+	dprint(MIDEBUG_CONTROLLER, "%s: set CIPmask %08x -> %08x\n", ids, lc->CIPmask, mc->cmsg.CIPmask);
+	dprint(MIDEBUG_CONTROLLER, "%s: set CIPmask2 %08x -> %08x\n", ids, lc->CIPmask2, mc->cmsg.CIPmask2);
 	lc->InfoMask = mc->cmsg.InfoMask;
 	lc->CIPmask = mc->cmsg.CIPmask;
 	lc->CIPmask2 = mc->cmsg.CIPmask2;
-	ListenController(lc->Contr);
+	ListenController(p4lController(lc));
 	capi_cmsg_answer(&mc->cmsg);
 	mc->cmsg.Info = CapiNoError;
 	FsmEvent(&lc->listen_m, EV_LISTEN_CONF, mc);
@@ -123,83 +116,106 @@ const int FN_LISTEN_COUNT = sizeof(fn_listen_list) / sizeof(struct FsmNode);
 
 struct lController *addlController(struct mApplication *app, struct pController *pc, int openl3)
 {
-	struct lController *lc, *old;
+	struct lController *lc;
+	int ret;
 
 	if (openl3) {
 		if (OpenLayer3(pc)) {
-			eprint("Controller%d: Application %d - cannot open L3 instance\n", pc->profile.ncontroller, app->AppId);
+			eprint("Controller%d: Application %d - cannot open L3 instance\n", pc->profile.ncontroller, app->cobj.id2);
 			return NULL;
 		}
 	}
 	lc = calloc(1, sizeof(*lc));
 	if (lc) {
-		lc->Appl = app;
-		lc->Contr = pc;
-		lc->listen_m.fsm = &listen_fsm;
-		lc->listen_m.state = ST_LISTEN_L_0;
-		lc->listen_m.debug = MIDEBUG_CONTROLLER & mI_debug_mask;
-		lc->listen_m.userdata = lc;
-		lc->listen_m.printdebug = listen_debug;
-		lc->InfoMask = 0;
-		lc->CIPmask = 0;
-		lc->CIPmask2 = 0;
-		pthread_rwlock_wrlock(&pc->llock);
-		old = pc->lClist;
-		while (old && old->nextC)
-			old = old->nextC;
-		if (old)
-			old->nextC = lc;
-		else
-			pc->lClist = lc;
-		pthread_rwlock_unlock(&pc->llock);
-		pthread_rwlock_wrlock(&app->llock);
-		old = app->contL;
-		while (old && old->nextA)
-			old = old->nextA;
-		if (old)
-			old->nextA = lc;
-		else
-			app->contL = lc;
-		pthread_rwlock_unlock(&app->llock);
+		lc->cobj.id2 = app->cobj.id2;
+		ret = init_cobj_registered(&lc->cobj, &pc->cobjLC, Cot_lController, 0x0000ff);
+		if (ret) {
+			eprint("Controller%d: Application %d - cannot init\n", pc->profile.ncontroller, app->cobj.id2);
+			free(lc);
+			lc = NULL;
+		} else {
+			lc->Appl = app;
+			get_cobj(&app->cobj);
+			lc->listen_m.fsm = &listen_fsm;
+			lc->listen_m.state = ST_LISTEN_L_0;
+			lc->listen_m.debug = MIDEBUG_CONTROLLER & mI_debug_mask;
+			lc->listen_m.userdata = lc;
+			lc->listen_m.printdebug = listen_debug;
+			lc->InfoMask = 0;
+			lc->CIPmask = 0;
+			lc->CIPmask2 = 0;
+			ret = register_lController(app, lc);
+			if (ret) {
+				put_cobj(&app->cobj);
+				eprint("Controller%d: - cannot register LC on Application %d - %s\n", pc->profile.ncontroller,
+					app->cobj.id2, strerror(-ret));
+				free(lc);
+				lc = NULL;
+			}
+		}
 	} else
-		eprint("Controller%d: Application %d - no memory for lController\n", pc->profile.ncontroller, app->AppId);
+		eprint("Controller%d: Application %d - no memory for lController\n", pc->profile.ncontroller, app->cobj.id2);
 	return lc;
 }
 
-void free_lController(struct lController *lc)
+void dump_lControllers(struct pController *pc)
 {
-	struct lController *cur, *old;
+	struct mCAPIobj *co;
+	struct lController *lc;
 
-	if (!lc->Contr) {
-		free(lc);
+	if (pthread_rwlock_tryrdlock(&pc->cobjLC.lock)) {
+		wprint("Cannot read lock LC list for dumping\n");
 		return;
 	}
-	cur = lc->Contr->lClist;
-	old = cur;
-	while (cur) {
-		if (cur == lc) {
-			old->nextC = cur->nextC;
-			break;
-		}
-		old = cur;
-		cur = cur->nextC;
+	co = pc->cobjLC.listhead;
+	while (co) {
+		lc = container_of(co, struct lController, cobj);
+		if (lc->listed)
+			lc->listed = 0;
+		else
+			dump_lcontroller(lc);
+		co = co->next;
 	}
-	if (lc == lc->Contr->lClist)
-		lc->Contr->lClist = lc->nextC;
-	free(lc);
+	pthread_rwlock_unlock(&pc->cobjLC.lock);
 }
 
-void rm_lController(struct lController *lc)
+void cleanup_lController(struct lController *lc)
 {
-	struct pController *pc = lc->Contr;
+	struct pController *pc = p4lController(lc);
 
-	if (pc) {
-		pthread_rwlock_wrlock(&pc->llock);
-		free_lController(lc);
-		pthread_rwlock_unlock(&pc->llock);
-	} else
-		free(lc);
+	dprint(MIDEBUG_CONTROLLER, "%s: cleaning now refcnt %d (%scleaned)\n", CAPIobjIDstr(&lc->cobj),
+		lc->cobj.refcnt, lc->cobj.cleaned ? "" : "not ");
+	if (lc->cobj.cleaned) {
+		return;
+	}
+	lc->cobj.cleaned = 1;
+	delisten_application(lc);
+	delist_cobj(&lc->cobj);
+	if (pc)
+		ListenController(pc);
 }
+
+void Free_lController(struct mCAPIobj *co)
+{
+	struct lController *lc = container_of(co, struct lController, cobj);
+	struct pController *pc = p4lController(lc);
+
+	if (lc->Appl)
+		delisten_application(lc);
+	if (pc) {
+		co->cleaned = 1;
+		if (co->parent) {
+			delist_cobj(co);
+			put_cobj(co->parent);
+			co->parent = NULL;
+		}
+		/* update controller masks */
+		ListenController(pc);
+	}
+	dprint(MIDEBUG_CONTROLLER, "%s: freeing done\n", CAPIobjIDstr(co));
+	free_capiobject(co, lc);
+}
+
 
 int listenRequest(struct lController *lc, struct mc_buf *mc)
 {
@@ -217,8 +233,8 @@ int listenHandle(struct lController *lc, uint16_t CIPValue)
 
 void dump_lcontroller(struct lController *lc)
 {
-	iprint("Listen ContrNo:%d InfoMask:%08x CIPmask:%08x CIPmask2:%08x state:%s\n", lc->Contr->profile.ncontroller,
-		lc->InfoMask, lc->CIPmask, lc->CIPmask2, str_st_listen[lc->listen_m.state]);
+	iprint("%s: Refs:%d state:%s Info:%08x CIP:%08x CIP2:%08x\n", CAPIobjIDstr(&lc->cobj), lc->cobj.refcnt,
+		str_st_listen[lc->listen_m.state], lc->InfoMask, lc->CIPmask, lc->CIPmask2);
 }
 
 void init_listen(void)

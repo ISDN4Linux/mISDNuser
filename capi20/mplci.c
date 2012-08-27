@@ -20,141 +20,135 @@
 #include "mc_buffer.h"
 #include <mISDN/q931.h>
 
-struct mPLCI *new_mPLCI(struct pController *pc, int pid, struct lPLCI *lp)
+struct mPLCI *new_mPLCI(struct pController *pc, unsigned int pid)
 {
 	struct mPLCI *plci;
-	int ret, plci_nr = 1;
+	int ret;
 
-	pthread_rwlock_wrlock(&pc->llock);
-	plci = pc->plciL;
-	if (plci) {
-		plci_nr = (plci->plci >> 8) & 0xff;
-		plci_nr++;
-		if (plci_nr > 255) {
-		        pthread_rwlock_unlock(&pc->llock);
-			return NULL;
-                }
-	}
 	plci = calloc(1, sizeof(*plci));
-	if (plci) {
-		plci->plci = pc->profile.ncontroller | (plci_nr << 8);
-		plci->pid = pid;
-		plci->pc = pc;
-		plci->lPLCIs = lp;
-	        ret = pthread_rwlock_init(&plci->llock, NULL);
-	        if (ret) {
-	                eprint("PID:%x cannot init lock for plci %04x ret:%d - %s\n", pid, plci->plci, ret, strerror(ret));
-	                free(plci);
-	                plci = NULL;
-                } else {
-        		plci->next = pc->plciL;
-	        	pc->plciL = plci;
-                }
+	if (!plci) {
+		eprint("Controller:%x PID:%x no memory for PLCI\n", pc->mNr, pid);
+		return NULL;
 	}
-	pthread_rwlock_unlock(&pc->llock);
+	ret = init_cobj_registered(&plci->cobj, &pc->cobjPLCI, Cot_PLCI, 0x01ff);
+	if (ret) {
+		eprint("Controller:%x PID:%x Error on init - no IDs left\n", pc->mNr, pid);
+		free(plci);
+		plci = NULL;
+	} else {
+		plci->cobj.id2 = pid;
+		plci->pc = pc;
+	}
 	return plci;
 }
 
 void dump_controller_plci(struct pController *pc)
 {
+	struct mCAPIobj *co;
 	struct mPLCI *plci;
 
-	pthread_rwlock_rdlock(&pc->llock);
-	plci = pc->plciL;
-	while (plci) {
-		iprint("PLCI %04x pid=%x NumberAppl:%d %s %s\n", plci->plci, plci->pid, plci->nAppl,
-			plci->alerting ? "alerting" : "", plci->outgoing ? "outgoing" : "incoming");
-		pthread_rwlock_rdlock(&plci->llock);
-		dump_Lplcis(plci->lPLCIs);
-		pthread_rwlock_unlock(&plci->llock);
-		plci = plci->next;
+	pthread_rwlock_rdlock(&pc->cobjPLCI.lock);
+	co = pc->cobjPLCI.listhead;
+	while (co) {
+		plci = container_of(co, struct mPLCI, cobj);
+		iprint("%s refcnt:%d number lPLCI:%d %s%s\n", CAPIobjIDstr(co), co->refcnt, co->itemcnt,
+			plci->alerting ? "alerting " : "", plci->outgoing ? "outgoing" : "incoming");
+		pthread_rwlock_rdlock(&co->lock);
+		if (co->listhead)
+			dump_Lplcis(container_of(co->listhead, struct lPLCI, cobj));
+		pthread_rwlock_unlock(&co->lock);
+		co = co->next;
 	}
-	pthread_rwlock_unlock(&pc->llock);
+	pthread_rwlock_unlock(&pc->cobjPLCI.lock);
 }
 
-int free_mPLCI(struct mPLCI *plci)
+void Free_PLCI(struct mCAPIobj *co)
 {
-	struct mPLCI *p;
-	struct pController *pc;
+	struct mPLCI *plci = container_of(co, struct mPLCI, cobj);
+
+	if (!co->cleaned) {
+		delist_cobj(co);
+		co->cleaned = 1;
+	}
+	plci->pc = NULL;
+	if (co->parent) {
+		put_cobj(co->parent);
+		co->parent = NULL;
+	}
+	dprint(MIDEBUG_PLCI, "%s: freeing done\n", CAPIobjIDstr(co));
+	free_capiobject(co, plci);
+}
+
+static void cleanup_mPLCI(struct mPLCI *plci)
+{
+	struct pController *pc = plci->pc;
+	struct mCAPIobj *co;
 	struct lPLCI *lp;
 
-	pthread_rwlock_rdlock(&plci->llock);
-	lp = plci->lPLCIs;
-	while (lp) {
-	        pthread_rwlock_unlock(&plci->llock);
-		lPLCI_free(lp); /* can call plciDetachlPLCI - so do not lock here */
-		pthread_rwlock_rdlock(&plci->llock);
-		lp = plci->lPLCIs;
+	plci->cobj.cleaned = 1;
+	co = get_next_cobj(&plci->cobj, NULL);
+	while (co) {
+		lp = container_of(co, struct lPLCI, cobj);
+		cleanup_lPLCI(lp);
+		co = get_next_cobj(&plci->cobj, co);
 	}
-	pthread_rwlock_unlock(&plci->llock);
-	if (plci->nAppl) {
-		wprint("Application count (%d) mismatch for PLCI %04x\n", plci->nAppl, plci->plci);
+	if (plci->cobj.itemcnt) {
+		wprint("%s: lPLCI count %d not zero\n", CAPIobjIDstr(&plci->cobj), plci->cobj.itemcnt);
 	}
-	pc = plci->pc;
-	pthread_rwlock_wrlock(&pc->llock);
-	p = pc->plciL;
-	if (p == plci)
-		pc->plciL = plci->next;
-	else {
-		while (p && p->next) {
-			if (p->next == plci) {
-				p->next = plci->next;
-				break;
-			}
-			p = p->next;
-		}
-	}
-	pthread_rwlock_unlock(&pc->llock);
-	pthread_rwlock_destroy(&plci->llock);
-	free(plci);
-	return 0;
-}
-
-int plciAttach_lPLCI(struct mPLCI *plci, struct lPLCI *lp)
-{
-	struct lPLCI *test;
-
-	pthread_rwlock_wrlock(&plci->llock);
-	test = get_lPLCI4Id(plci, lp->lc->Appl->AppId, 1);
-	if (test) {
-	        pthread_rwlock_unlock(&plci->llock);
-		eprint("lPLCI for application %d already attached\n", lp->lc->Appl->AppId);
-		return -1;
-	}
-	lp->PLCI = plci;
-	lp->next = plci->lPLCIs;
-	plci->lPLCIs = lp;
-	plci->nAppl++;
-	pthread_rwlock_unlock(&plci->llock);
-	return plci->nAppl;
+	if (pc) {
+		plci->pc = NULL;
+		delist_cobj(&plci->cobj);
+	} else
+		eprint("%s: no pcontroller assigned\n", CAPIobjIDstr(&plci->cobj));
 }
 
 void plciDetachlPLCI(struct lPLCI *lp)
 {
-	struct lPLCI *o;
 	struct mPLCI *p;
+	int mt;
+	struct l3_msg *l3m;
 
-	p = lp->PLCI;
-
-	pthread_rwlock_wrlock(&p->llock);
-	if (p->lPLCIs == lp) {
-		p->lPLCIs = lp->next;
-		p->nAppl--;
-	} else {
-		o = p->lPLCIs;
-		while (o && o->next) {
-			if (o->next == lp) {
-				o->next = lp->next;
-				p->nAppl--;
-				break;
-			}
-			o = o->next;
-		}
+	p = p4lPLCI(lp);
+	if (!p) {
+		eprint("%s: detach no PLCI\n", CAPIobjIDstr(&lp->cobj));
+		return;
 	}
-	pthread_rwlock_unlock(&p->llock);
-	if (p->nAppl == 0 && p->lPLCIs == NULL) {
-		dprint(MIDEBUG_PLCI, "All lPLCIs are gone remove PLCI %04x now\n", p->plci);
-		free_mPLCI(p);
+	if (lp->rel_req) {
+		/* need to store cause for final answer */
+		if (lp->cause_loc == CAUSE_LOC_USER) {
+			dprint(MIDEBUG_PLCI, "%s: set final cause plci:#%d lplci:#%d\n",
+				CAPIobjIDstr(&lp->cobj), p->cause, lp->cause);
+			if (p->cause <= 0) {
+				p->cause = lp->cause;
+			} else if (lp->cause < p->cause) {
+				/* for now we prefer lower values, maybe need changed */
+				p->cause = lp->cause;
+			}
+			p->cause_loc = CAUSE_LOC_USER;
+		} else
+			wprint("%s: cause got owerwritten loc:#%d cause #%d - not stored\n",
+				CAPIobjIDstr(&lp->cobj), lp->cause_loc, lp->cause);
+
+	}
+	delist_cobj(&lp->cobj);
+	if (p->cobj.itemcnt == 0) {
+		if (p->cause > 0) {
+			dprint(MIDEBUG_PLCI, "%s: last lPLCI gone clear call cause #%d\n",
+				CAPIobjIDstr(&p->cobj), p->cause);
+			l3m = alloc_l3_msg();
+			if (!l3m) {
+				eprint("%s: disconnect not send no l3m\n", CAPIobjIDstr(&p->cobj));
+			} else {
+				if (p->alerting)
+					mt = MT_DISCONNECT;
+				else
+					mt = MT_RELEASE_COMPLETE;
+				mi_encode_cause(l3m, p->cause, p->cause_loc, 0, NULL);
+				plciL4L3(p, mt, l3m);
+			}
+		}
+		dprint(MIDEBUG_PLCI, "%s: All lPLCIs are gone remove PLCI now\n", CAPIobjIDstr(&p->cobj));
+		cleanup_mPLCI(p);
 	}
 }
 
@@ -163,65 +157,76 @@ static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 	uint16_t CIPValue;
 	uint32_t CIPmask;
 	struct pController *pc;
+	struct mCAPIobj *co;
 	struct lController *lc;
 	struct lPLCI *lp;
 	uint8_t found = 0;
+	int cause = CAUSE_INCOMPATIBLE_DEST;
 	int ret;
 
+	if (!mc || !mc->l3m) {
+		eprint("%s: SETUP without message\n", CAPIobjIDstr(&plci->cobj));
+		return;
+	}
 	CIPValue = q931CIPValue(mc, &CIPmask);
 	pc = plci->pc;
-	dprint(MIDEBUG_PLCI, "PLCI %04x: Check CIPvalue %d (%08x) with CIPmask %08x\n", plci->plci, CIPValue, CIPmask, pc->CIPmask);
+	dprint(MIDEBUG_PLCI, "%s: check CIPvalue %d (%08x) with CIPmask %08x chanIE:%s\n",
+		CAPIobjIDstr(&plci->cobj), CIPValue, CIPmask, pc->CIPmask, mc->l3m->channel_id ? "yes" : "no");
 	if (CIPValue && ((CIPmask & pc->CIPmask) || (pc->CIPmask & 1))) {
 		/* at least one Application is listen for this service */
-		pthread_rwlock_rdlock(&pc->llock);
-		lc = pc->lClist;
-		while (lc) {
+		co = get_next_cobj(&pc->cobjLC, NULL);
+		while (co) {
+			lc = container_of(co, struct lController, cobj);
 			if ((lc->CIPmask & CIPmask) || (lc->CIPmask & 1)) {
 				ret = lPLCICreate(&lp, lc, plci);
 				if (!ret) {
-					ret = plciAttach_lPLCI(plci, lp);
-					if (0 < ret) {
+					lPLCI_l3l4(lp, pr, mc);
+					dprint(MIDEBUG_PLCI, "%s: SETUP %s\n",
+						CAPIobjIDstr(&lp->cobj), lp->ignored ? "ignored - no B-channel" : "delivered");
+					if (!lp->ignored) {
 						found++;
-						lPLCI_l3l4(lp, pr, mc);
 					} else {
-						wprint("Cannot attach lPLCI on PLCI %04x return %d\n", plci->plci, ret);
-						lPLCI_free(lp);
+						if (lp->cause)
+							cause = lp->cause;
 					}
+					put_cobj(&lp->cobj);
 				} else {
-					wprint("Cannot create lPLCI for PLCI %04x\n", plci->plci);
+					wprint("%s: cannot create lPLCI\n", CAPIobjIDstr(&plci->cobj));
 				}
 			}
-			lc = lc->nextC;
+			co = get_next_cobj(&pc->cobjLC, co);
 		}
-		pthread_rwlock_unlock(&pc->llock);
 	}
 	if (found == 0) {
 		struct l3_msg *l3m;
 
 		l3m = alloc_l3_msg();
 		if (l3m) {
-			if (!mi_encode_cause(l3m, CAUSE_INCOMPATIBLE_DEST, CAUSE_LOC_USER, 0, NULL)) {
-				ret = pc->l3->to_layer3(pc->l3, MT_RELEASE_COMPLETE, plci->pid, l3m);
+			dprint(MIDEBUG_PLCI, "%s: send %s cause #%d (0x%02x) to layer3\n",
+				CAPIobjIDstr(&plci->cobj), _mi_msg_type2str(MT_RELEASE_COMPLETE), cause, cause);
+			if (!mi_encode_cause(l3m, cause, CAUSE_LOC_USER, 0, NULL)) {
+				ret = pc->l3->to_layer3(pc->l3, MT_RELEASE_COMPLETE, plci->cobj.id2, l3m);
 				if (ret) {
-					wprint("Error %d -  %s on sending %s to pid %x\n", ret, strerror(-ret),
-					       _mi_msg_type2str(MT_RELEASE_COMPLETE), plci->pid);
+					wprint("%s: Error %d -  %s on sending %s to pid %x\n", CAPIobjIDstr(&plci->cobj), ret,
+						strerror(-ret), _mi_msg_type2str(MT_RELEASE_COMPLETE), plci->cobj.id2);
 					free_l3_msg(l3m);
 				}
 			}
 		} else
-			eprint("Cannot allocate l3 message plci %x\n", plci->plci);
-		free_mPLCI(plci);
+			eprint("%s: cannot allocate l3 message plci\n", CAPIobjIDstr(&plci->cobj));
+
+		cleanup_mPLCI(plci);
 	}
 }
 
 int plci_l3l4(struct mPLCI *plci, int pr, struct l3_msg *l3m)
 {
-	struct lPLCI *lp, *nxt;
 	struct mc_buf *mc;
+	struct mCAPIobj *co;
 
 	mc = alloc_mc_buf();
 	if (!mc) {
-		wprint("PLCI %04x: Cannot allocate mc_buf for %s\n", plci->plci, _mi_msg_type2str(pr));
+		wprint("%s: Cannot allocate mc_buf for %s\n", CAPIobjIDstr(&plci->cobj), _mi_msg_type2str(pr));
 		return -ENOMEM;
 	}
 	mc->l3m = l3m;
@@ -230,12 +235,10 @@ int plci_l3l4(struct mPLCI *plci, int pr, struct l3_msg *l3m)
 		plciHandleSetupInd(plci, pr, mc);
 		break;
 	default:
-		lp = plci->lPLCIs;
-		while (lp) {
-		        /* maybe lPLCI_l3l4() will free lp, so get the next now */
-		        nxt = lp->next;
-			lPLCI_l3l4(lp, pr, mc);
-			lp = nxt;
+		co = get_next_cobj(&plci->cobj, NULL);
+		while (co) {
+			lPLCI_l3l4(container_of(co, struct lPLCI, cobj), pr, mc);
+			co = get_next_cobj(&plci->cobj, co);
 		}
 		break;
 	}
@@ -248,26 +251,24 @@ int mPLCISendMessage(struct lController *lc, struct mc_buf *mc)
 	struct mPLCI *plci;
 	struct lPLCI *lp;
 	int ret;
+	struct pController *pc;
 
+	pc = p4lController(lc);
 	switch (mc->cmsg.Command) {
 	case CAPI_CONNECT:
-		plci = new_mPLCI(lc->Contr, 0, NULL);
+		plci = new_mPLCI(pc, 0);
 		if (plci) {
 			ret = lPLCICreate(&lp, lc, plci);
 			if (!ret) {
-				ret = plciAttach_lPLCI(plci, lp);
-				if (0 < ret)
-					ret = lPLCISendMessage(lp, mc);
-				else {
-					wprint("Cannot attach lPLCI on PLCI %04x return %d\n", plci->plci, ret);
-					ret = CapiMsgOSResourceErr;
-				}
+				ret = lPLCISendMessage(lp, mc);
+				put_cobj(&lp->cobj);
 			} else {
-				wprint("Cannot create lPLCI for PLCI %04x\n", plci->plci);
+				wprint("%s: cannot create lPLCI Appl-%03d", CAPIobjIDstr(&plci->cobj), lc->cobj.id2);
 				ret = CapiMsgOSResourceErr;
 			}
+			put_cobj(&plci->cobj);
 		} else {
-			wprint("Cannot create PLCI for controller %d\n", lc->Contr->profile.ncontroller);
+			wprint("Cannot create PLCI for controller %d\n", pc->profile.ncontroller);
 			ret = CapiMsgOSResourceErr;
 		}
 		break;
@@ -279,85 +280,90 @@ int mPLCISendMessage(struct lController *lc, struct mc_buf *mc)
 	return ret;
 }
 
-struct lPLCI *get_lPLCI4Id(struct mPLCI *plci, uint16_t appId, int locked)
+struct lPLCI *get_lPLCI4Id(struct mPLCI *plci, uint16_t appId)
 {
-	struct lPLCI *lp;
-	struct lController *lc;
-	struct mApplication *app;
+	struct mCAPIobj *co;
 
 	if (!plci)
 		return NULL;
-        if (!locked)
-                pthread_rwlock_rdlock(&plci->llock);
-	lp = plci->lPLCIs;
-	while (lp) {
-		lc = lp->lc;
-		if (lc) {
-			app = lc->Appl;
-			if (app) {
-				if (appId == app->AppId)
-					break;
-			} else
-				wprint("PLCI:%04x lc no application assigned\n", plci->plci);
-		} else
-			wprint("PLCI:%04x lp no lc assigned\n", plci->plci);
-		lp = lp->next;
+	co = get_next_cobj(&plci->cobj, NULL);
+	while (co) {
+		if (appId == co->id2)
+			break;
+		co = get_next_cobj(&plci->cobj, co);
 	}
-	if (!locked)
-        	pthread_rwlock_unlock(&plci->llock);
-	return lp;
+	return co ? container_of(co, struct lPLCI, cobj) : NULL;
 }
 
 struct mPLCI *getPLCI4pid(struct pController *pc, int pid)
 {
-	struct mPLCI *plci;
+	struct mCAPIobj *co;
 
-	if (pc) {
-	        pthread_rwlock_rdlock(&pc->llock);
-		plci = pc->plciL;
-                while (plci) {
-                        if (plci->pid == pid)
-                                break;
-                        plci = plci->next;
-                }
-                pthread_rwlock_unlock(&pc->llock);
-	} else {
-		plci = NULL;
-        }
-	return plci;
+	co = get_next_cobj(&pc->cobjPLCI, NULL);
+	while (co) {
+		if (co->id2 == pid)
+			break;
+		co = get_next_cobj(&pc->cobjPLCI, co);
+	}
+	return co ? container_of(co, struct mPLCI, cobj) : NULL;
 }
 
 struct mPLCI *getPLCI4Id(struct pController *pc, uint32_t id)
 {
-	struct mPLCI *plci;
+	struct mCAPIobj *co;
 
-	if (pc) {
-	        pthread_rwlock_rdlock(&pc->llock);
-	        plci = pc->plciL;
-                while (plci) {
-                        if (plci->plci == id)
-                                break;
-                        plci = plci->next;
-                }
-                pthread_rwlock_unlock(&pc->llock);
-	} else {
-		plci = NULL;
-        }
-	return plci;
+	co = get_next_cobj(&pc->cobjPLCI, NULL);
+	while (co) {
+		if (co->id == id)
+			break;
+		co = get_next_cobj(&pc->cobjPLCI, co);
+	}
+	return co ? container_of(co, struct mPLCI, cobj) : NULL;
 }
 
 int plciL4L3(struct mPLCI *plci, int mt, struct l3_msg *l3m)
 {
 	int ret;
 
-	ret = plci->pc->l3->to_layer3(plci->pc->l3, mt, plci->pid, l3m);
+	ret = plci->pc->l3->to_layer3(plci->pc->l3, mt, plci->cobj.id2, l3m);
 	if (ret < 0) {
-		wprint("Error sending %s to controller %d pid %x %s msg\n", _mi_msg_type2str(mt),
-		       plci->pc->profile.ncontroller, plci->pid, l3m ? "with" : "no");
+		wprint("%s: Error sending %s to controller %d pid %x %s msg\n", CAPIobjIDstr(&plci->cobj), _mi_msg_type2str(mt),
+			plci->pc->profile.ncontroller, plci->cobj.id2, l3m ? "with" : "no");
 		if (l3m)
 			free_l3_msg(l3m);
 	}
-	dprint(MIDEBUG_PLCI, "Sending %s to layer3 pid %x controller %d %s msg\n", _mi_msg_type2str(mt),
-	       plci->pc->profile.ncontroller, plci->pid, l3m ? "with" : "no");
+	dprint(MIDEBUG_PLCI, "%s: Sending %s to layer3 %s msg\n",
+		CAPIobjIDstr(&plci->cobj), _mi_msg_type2str(mt), l3m ? "with" : "no");
 	return ret;
+}
+
+unsigned int plci_new_pid(struct mPLCI *plci)
+{
+	return request_new_pid(plci->pc->l3);
+}
+
+void release_lController(struct lController *lc)
+{
+	struct mCAPIobj *cop, *colp;
+	struct lPLCI *lp;
+	struct pController *pc = p4lController(lc);
+
+	if (pc) {
+		cop = get_next_cobj(&pc->cobjPLCI, NULL);
+		while (cop) {
+			colp = get_next_cobj(cop, NULL);
+			while (colp) {
+				lp = container_of(colp, struct lPLCI, cobj);
+				if (lc == lp->lc) {
+					if (!lp->rel_req) {
+						dprint(MIDEBUG_PLCI, "%s do release\n", CAPIobjIDstr(colp));
+						lPLCIRelease(lp);
+					} else
+						dprint(MIDEBUG_PLCI, "%s: release already done\n", CAPIobjIDstr(colp));
+				}
+				colp = get_next_cobj(cop, colp);
+			}
+			cop = get_next_cobj(&pc->cobjPLCI, cop);
+		}
+	}
 }
