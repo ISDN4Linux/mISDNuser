@@ -1313,8 +1313,11 @@ l3dss1_restart_ack(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 static void
 l3dss1_dummy(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 {
-	if (l3m)
+	if (l3m) {
+		dprint(DBGM_L3, "Got %s (%x) dss1 TE state %d - unhandled\n",
+			_mi_msg_type2str(l3m->type), l3m->type, pc->state);
 		free_l3_msg(l3m);
+	}
 }
 
 static void
