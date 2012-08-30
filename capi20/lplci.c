@@ -705,7 +705,7 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 	struct mPLCI *plci = lp->PLCI;
 	struct mc_buf *mc = arg;
 	struct l3_msg *l3m;
-	int cause;
+	int cause = 0;
 
 	if (mc->cmsg.Reject == 0) {	// accept
 		if (lPLCICheckBprotocol(lp, &mc->cmsg)) {
@@ -721,33 +721,34 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 	// ignore, reject 
 	switch (mc->cmsg.Reject) {
 	case 1:
-		break;		// Ignore - no message should be sent
+		cause = CAUSE_NOUSER_RESPONDING;
+		break;		// Ignore
 	case 2:
-		cause = 0x90;
-		break;		// normal call clearing
+		cause = CAUSE_NORMAL_CLEARING;
+		break;
 	case 3:
-		cause = 0x91;
-		break;		// user busy
+		cause = CAUSE_USER_BUSY;
+		break;
 	case 4:
-		cause = 0xac;
-		break;		// req circuit/channel not avail
+		cause = CAUSE_REQUESTED_CHANNEL;
+		break;
 	case 5:
-		cause = 0x9d;
-		break;		// fac rejected
+		cause = CAUSE_FACILITY_REJECTED;
+		break;
 	case 6:
-		cause = 0x86;
-		break;		// channel unacceptable
+		cause = CAUSE_CHANNEL_UNACCEPT;
+		break;
 	case 7:
-		cause = 0xd8;
-		break;		// incompatible dest
+		cause = CAUSE_INCOMPATIBLE_DEST;
+		break;
 	case 8:
-		cause = 0x9b;
-		break;		// dest out of order
+		cause = CAUSE_DEST_OUT_OF_ORDER;
+		break;
 	default:
 		if ((mc->cmsg.Reject & 0xff00) == 0x3400) {
-			cause = mc->cmsg.Reject & 0xff;
+			cause = mc->cmsg.Reject & 0x7f;
 		} else {
-			cause = 0x90;	// normal call clearing
+			cause = CAUSE_NORMAL_CLEARING;	// normal call clearing
 		}
 	}
 	// FIXME
@@ -757,7 +758,7 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 	//      lPLCIClearOtherApps(lp);
 	// }
 	// plciDetachlPLCI(plci, lp);
-	if (mc->cmsg.Reject != 1) {
+	if (mc->cmsg.Reject != 0) {
 		if (plci->nAppl == 1) {
 			int mt;
 
