@@ -30,6 +30,8 @@ static	int	Max_Cache;
 #define MB_TYP_L3	3
 
 #ifdef MEMLEAK_DEBUG
+#include <mISDN/q931.h>
+
 static struct Aqueue {
 	struct lhead	Alist;
 	pthread_mutex_t	lock;
@@ -184,6 +186,9 @@ _alloc_mbuffer(int typ, const char *file, int lineno, const char *func)
 	case MB_TYP_L2:
 		m =  mdequeue(&free_queue_l2);
 		break;
+	default:
+		eprint("%s: wrong type %d\n", __func__, typ);
+		return NULL;
 	}
 	if (!m)
 		m = _new_mbuffer(typ, file, lineno, func);
