@@ -611,6 +611,8 @@ static struct fax *mFaxCreate(struct BInstance	*bi)
 					wprint("Cannot InitFax for incoming PLCI %04x\n", bi->lp ? bi->lp->plci : 0xffff);
 					free(nf);
 					nf = NULL;
+					pthread_mutex_unlock(&bi->lp->lock);
+					return nf;
 				}
 			}
 			ncciL4L3(nf->ncci, PH_CONTROL_REQ, HW_FIFO_STATUS_ON, 0, NULL, NULL);
