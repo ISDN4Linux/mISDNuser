@@ -475,8 +475,6 @@ mi_encode_connected_nr(struct l3_msg *l3m, char *nr, int pres, unsigned int scre
 		l = 1;
 		ie[0] = 0x80 | (type << 4) | plan;
 	}
-	if (pres > 0) /* restricted or no available, no number should be sent */
-		nr = NULL;
 	if (nr && *nr) {
 		strncpy((char *)&ie[l], nr, 30);
 		l += strlen(nr);
