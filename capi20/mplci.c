@@ -180,21 +180,26 @@ static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 			if ((lc->CIPmask & CIPmask) || (lc->CIPmask & 1)) {
 				ret = lPLCICreate(&lp, lc, plci);
 				if (!ret) {
-					lPLCI_l3l4(lp, pr, mc);
-					dprint(MIDEBUG_PLCI, "%s: SETUP %s\n",
-						CAPIobjIDstr(&lp->cobj), lp->ignored ? "ignored - no B-channel" : "delivered");
-					if (!lp->ignored) {
-						found++;
-					} else {
-						if (lp->cause)
-							cause = lp->cause;
-					}
+					found++; 
 					put_cobj(&lp->cobj);
 				} else {
 					wprint("%s: cannot create lPLCI\n", CAPIobjIDstr(&plci->cobj));
 				}
 			}
 			co = get_next_cobj(&pc->cobjLC, co);
+		}
+		if (plci->cobj.itemcnt) {
+			/* at least one lplci was created */
+			co = get_next_cobj(&plci->cobj, NULL);
+			while (co) {
+				lp = container_of(co, struct lPLCI, cobj);
+				lPLCI_l3l4(lp, pr, mc);
+				dprint(MIDEBUG_PLCI, "%s: SETUP %s\n",
+					CAPIobjIDstr(&lp->cobj), lp->ignored ? "ignored - no B-channel" : "delivered");
+				if (lp->ignored)
+					cleanup_lPLCI(lp);
+				co = get_next_cobj(&plci->cobj, co);
+			}
 		}
 	}
 	if (found == 0) {

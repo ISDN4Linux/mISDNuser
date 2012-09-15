@@ -1055,6 +1055,10 @@ static void plci_cc_setup_ind(struct FsmInst *fi, int event, void *arg)
 			ret = check_free_bchannels(p4lController(lp->lc));
 			if (ret == 0)
 				lp->cause = CAUSE_USER_BUSY;
+			else
+				lp->cause = CAUSE_NO_CHANNEL;
+			lp->cause_loc = CAUSE_LOC_USER;
+			lp->rel_req = 1;
 			return;
 		} else {
 			wprint("%s: Channel ID:%s SETUP without channelid is indicated as waiting call\n",
