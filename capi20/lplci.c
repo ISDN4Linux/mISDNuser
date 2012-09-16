@@ -319,10 +319,24 @@ static void lPLCIInfoIndIE(struct lPLCI *lp, unsigned char ie, uint32_t mask, st
 	Send2Application(lp, mc);
 }
 
-uint16_t q931CIPValue(struct mc_buf * mc, uint32_t *m)
+uint16_t CIPMask2CIPValue(uint32_t mask)
 {
-	uint16_t CIPValue = 0;
-	uint32_t CIPMask;
+	uint16_t val = 31;
+	uint32_t m = 0x80000000;
+
+	/*return highest set bit position */
+	while (val) {
+		if (m & mask)
+			break;
+		val--;
+		m >>= 1;
+	}
+	return val;
+}
+
+uint32_t q931CIPMask(struct mc_buf * mc)
+{
+	uint32_t CIPMask = 0;
 	int capability, mode, rate, oct5;
 	int hlc = -1, ehlc = -1;
 	int ret, l;
@@ -356,39 +370,38 @@ uint16_t q931CIPValue(struct mc_buf * mc, uint32_t *m)
 	if (mode == 0) {
 		switch (capability) {
 		case Q931_CAP_SPEECH:
-			CIPValue = 1;
+			CIPMask |= 0x0002;
 			break;
 		case Q931_CAP_UNRES_DIGITAL:
-			CIPValue = 2;
+			CIPMask |= 0x0004;
 			break;
 		case Q931_CAP_RES_DIGITAL:
-			CIPValue = 3;
+			CIPMask |= 0x0008;
 			break;
 		case Q931_CAP_3KHZ_AUDIO:
-			CIPValue = 4;
+			CIPMask |= 0x0010;
 			break;
 		case Q931_CAP_7KHZ_AUDIO:
 			if (oct5 == 0xA5)
-				CIPValue = 9;
+				CIPMask |= 0x0200;
 			else
-				CIPValue = 5;
+				CIPMask |= 0x0020;
 			break;
 		case Q931_CAP_VIDEO:
-			CIPValue = 6;
+			CIPMask |= 0x0040;
 			break;
 		default:
 			wprint("No valid capability %x in bearer %s\n", capability, bdebug);
 			return 0;
 		}
 	} else if (mode == 2) {
-		CIPValue = 7;
+		CIPMask |= 0x0080;
 	} else {
 		wprint("Invalid mode %d in bearer %s\n", mode, bdebug);
 		return 0;
 	}
 
-	CIPMask = 1 << CIPValue;
-
+	dprint(MIDEBUG_PLCI, "Decoded bearer %s  to CIPMask %08x\n", bdebug, CIPMask);
 	if (mc->l3m->hlc) {
 		ret = mi_decode_hlc(mc->l3m, &hlc, &ehlc);
 		l = *mc->l3m->hlc;
@@ -400,63 +413,62 @@ uint16_t q931CIPValue(struct mc_buf * mc, uint32_t *m)
 		if (!ret) {
 			switch (hlc) {
 			case 0x01:
-				if (CIPValue == 1)
-					CIPValue = 16;
-				else if (CIPValue == 9)
-					CIPValue = 26;
+				if (CIPMask & 0x0002)
+					CIPMask |= 0x00010000;
+				else if (CIPMask & 0x0200)
+					CIPMask |= 0x04000000;
 				break;
 			case 0x04:
-				if (CIPValue == 4)
-					CIPValue = 17;
+				if (CIPMask & 0x0010)
+					CIPMask |= 0x00020000;
 				break;
 			case 0x21:
-				if (CIPValue == 2)
-					CIPValue = 18;
+				if (CIPMask & 0x0004)
+					CIPMask |= 0x00040000;
 				break;
 			case 0x24:
-				if (CIPValue == 2)
-					CIPValue = 19;
+				if (CIPMask & 0x0004)
+					CIPMask |= 0x00080000;
 				break;
 			case 0x28:
-				if (CIPValue == 2)
-					CIPValue = 20;
+				if (CIPMask & 0x0004)
+					CIPMask |= 0x00100000;
 				break;
 			case 0x31:
-				if (CIPValue == 2)
-					CIPValue = 21;
+				if (CIPMask & 0x0004)
+					CIPMask |= 0x00200000;
 				break;
 			case 0x32:
-				if (CIPValue == 2)
-					CIPValue = 22;
+				if (CIPMask & 0x0004)
+					CIPMask |= 0x00400000;
 				break;
 			case 0x35:
-				if (CIPValue == 2)
-					CIPValue = 23;
+				if (CIPMask & 0x0004)
+					CIPMask |= 0x00800000;
 				break;
 			case 0x38:
-				if (CIPValue == 2)
-					CIPValue = 24;
+				if (CIPMask & 0x0004)
+					CIPMask |= 0x01000000;
 				break;
 			case 0x41:
-				if (CIPValue == 2)
-					CIPValue = 25;
+				if (CIPMask & 0x0004)
+					CIPMask |= 0x02000000;
 				break;
 			case 0x60:
-				if (CIPValue == 2 && ehlc == 2)
-					CIPValue = 28;
-				else if (CIPValue == 9 && ehlc == 1)
-					CIPValue = 27;
+				if ((CIPMask & 0x0004) && ehlc == 2)
+					CIPMask |= 0x10000000;
+				else if ((CIPMask & 0x0200) && ehlc == 1)
+					CIPMask |= 0x08000000;
 				break;
 			default:
 				break;
 			}
+			dprint(MIDEBUG_PLCI, "Decoded HLC %s to CIPMask %08x\n", bdebug, CIPMask);
 		} else
 			wprint("Cannot decode HLC %s return %d - %s\n", bdebug, ret, strerror(-ret));
 	}
-	CIPMask |= 1 << CIPValue;
-	if (m)
-		*m = CIPMask;
-	return CIPValue;
+	 /* Bit 0 always set ALL */
+	return CIPMask | 1;
 }
 
 static uint16_t CIPValue2setup(uint16_t CIPValue, struct l3_msg * l3m)
@@ -1082,7 +1094,7 @@ static void plci_cc_setup_ind(struct FsmInst *fi, int event, void *arg)
 	lPLCICmsgHeader(lp, &mc->cmsg, CAPI_CONNECT, CAPI_IND);
 
 	mc->cmsg.BChannelinformation = BChannelInfo;
-	mc->cmsg.CIPValue = q931CIPValue(mc, NULL);
+	mc->cmsg.CIPValue = CIPMask2CIPValue(lp->cipmask);
 	if (mc->l3m->called_nr && *mc->l3m->called_nr)
 		mc->cmsg.CalledPartyNumber = mc->l3m->called_nr;
 	if (mc->l3m->called_sub && *mc->l3m->called_sub)
@@ -1720,7 +1732,7 @@ static struct FsmNode fn_plci_list[] = {
 
 const int FN_PLCI_COUNT = sizeof(fn_plci_list) / sizeof(struct FsmNode);
 
-int lPLCICreate(struct lPLCI **lpp, struct lController *lc, struct mPLCI *plci)
+int lPLCICreate(struct lPLCI **lpp, struct lController *lc, struct mPLCI *plci, uint32_t cipmask)
 {
 	struct lPLCI *lp;
 	int ret;
@@ -1734,6 +1746,7 @@ int lPLCICreate(struct lPLCI **lpp, struct lController *lc, struct mPLCI *plci)
 		free(lp);
 		return ret;
 	}
+	lp->cipmask = cipmask;
 	lp->lc = lc;
 	get_cobj(&lc->cobj);
 	lp->Appl = lc->Appl;
@@ -1852,11 +1865,12 @@ void dump_Lplcis(struct lPLCI *lp) {
 	while (co) {
 		ids = CAPIobjIDstr(co);
 		lp = container_of(co, struct lPLCI, cobj);
-		iprint("%s: refcnt:%d state:%s chid.nr:0x%x NCCIs:%d autohangup:%s%s\n", ids, co->refcnt,
-			str_st_plci[lp->plci_m.state], lp->chid.nr, co->itemcnt, lp->autohangup ? "yes" : "no",
-			lp->ignored ? " ignored" : "");
-		iprint("%s: l1dtmf:%s cause:0x%02x loc:%x rel_req:%s disc_req:%s\n", ids, lp->l1dtmf ? "yes" : "no",
-			lp->cause, lp->cause_loc, lp->rel_req ? "yes" : "no", lp->disc_req ? "yes" : "no");
+		iprint("%s: state:%s chid.nr:0x%x NCCIs:%d autohangup:%s%s\n", ids,
+			str_st_plci[lp->plci_m.state], lp->chid.nr, co->itemcnt,
+			lp->autohangup ? "yes" : "no", lp->ignored ? " ignored" : "");
+		iprint("%s: cipmask:%08x l1dtmf:%s cause:0x%02x loc:%x rel_req:%s disc_req:%s\n", ids, lp->cipmask,
+			lp->l1dtmf ? "yes" : "no", lp->cause, lp->cause_loc, lp->rel_req ? "yes" : "no",
+			lp->disc_req ? "yes" : "no");
 		bi = lp->BIlink;
 		if (bi) {
 			iprint("%s: BI[%d] used:%d proto:%x fd:%d tty:%d type:%s DownId:%d UpId:%d\n", ids, bi->nr,  bi->usecnt,

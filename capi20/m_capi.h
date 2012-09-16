@@ -337,6 +337,7 @@ struct lPLCI {
 	int				cause_loc;
 	struct misdn_channel_info	chid;
 	struct Bprotocol		Bprotocol;
+	uint32_t			cipmask;
 	unsigned int			l1dtmf:1;
 	unsigned int			autohangup:1;
 	unsigned int			disc_req:1;
@@ -350,13 +351,14 @@ struct lPLCI {
 
 void init_lPLCI_fsm(void);
 void free_lPLCI_fsm(void);
-int lPLCICreate(struct lPLCI **, struct lController *, struct mPLCI *);
+int lPLCICreate(struct lPLCI **, struct lController *, struct mPLCI *, uint32_t);
 void cleanup_lPLCI(struct lPLCI *);
 void Free_lPLCI(struct mCAPIobj *);
 void lPLCIRelease(struct lPLCI *);
 void lPLCI_l3l4(struct lPLCI *, int, struct mc_buf *);
 uint16_t lPLCISendMessage(struct lPLCI *, struct mc_buf *);
-uint16_t q931CIPValue(struct mc_buf *, uint32_t *);
+uint32_t q931CIPMask(struct mc_buf *);
+uint16_t CIPMask2CIPValue(uint32_t);
 void lPLCIDelNCCI(struct mNCCI *);
 struct mNCCI *ConnectB3Request(struct lPLCI *, struct mc_buf *);
 void B3ReleaseLink(struct lPLCI *, struct BInstance *);

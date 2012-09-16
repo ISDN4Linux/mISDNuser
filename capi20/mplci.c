@@ -155,8 +155,7 @@ void plciDetachlPLCI(struct lPLCI *lp)
 
 static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 {
-	uint16_t CIPValue;
-	uint32_t CIPmask;
+	uint32_t CIPmask, cipm;
 	struct pController *pc;
 	struct mCAPIobj *co;
 	struct lController *lc;
@@ -169,17 +168,18 @@ static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 		eprint("%s: SETUP without message\n", CAPIobjIDstr(&plci->cobj));
 		return;
 	}
-	CIPValue = q931CIPValue(mc, &CIPmask);
+	CIPmask = q931CIPMask(mc);
 	pc = plci->pc;
-	dprint(MIDEBUG_PLCI, "%s: check CIPvalue %d (%08x) with CIPmask %08x chanIE:%s\n",
-		CAPIobjIDstr(&plci->cobj), CIPValue, CIPmask, pc->CIPmask, mc->l3m->channel_id ? "yes" : "no");
-	if (CIPValue && ((CIPmask & pc->CIPmask) || (pc->CIPmask & 1))) {
+	dprint(MIDEBUG_PLCI, "%s: check CIPMask(%08x) with controller CIPmask %08x chanIE:%s\n",
+		CAPIobjIDstr(&plci->cobj), CIPmask, pc->CIPmask, mc->l3m->channel_id ? "yes" : "no");
+	if (CIPmask & pc->CIPmask) {
 		/* at least one Application is listen for this service */
 		co = get_next_cobj(&pc->cobjLC, NULL);
 		while (co) {
 			lc = container_of(co, struct lController, cobj);
+			cipm  = lc->CIPmask & CIPmask;
 			if ((lc->CIPmask & CIPmask) || (lc->CIPmask & 1)) {
-				ret = lPLCICreate(&lp, lc, plci);
+				ret = lPLCICreate(&lp, lc, plci, cipm);
 				if (ret == 0) {
 					found++; 
 					put_cobj(&lp->cobj);
@@ -282,7 +282,7 @@ int mPLCISendMessage(struct lController *lc, struct mc_buf *mc)
 	case CAPI_CONNECT:
 		plci = new_mPLCI(pc, 0);
 		if (plci) {
-			ret = lPLCICreate(&lp, lc, plci);
+			ret = lPLCICreate(&lp, lc, plci, 0);
 			if (!ret) {
 				ret = lPLCISendMessage(lp, mc);
 				put_cobj(&lp->cobj);
