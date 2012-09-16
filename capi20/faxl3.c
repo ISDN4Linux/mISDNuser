@@ -592,6 +592,7 @@ static void phaseE_handler(t30_state_t *t30, void *user_data, int result)
 	const char *ids;
 	struct mFAX *fax = get_mFAX(user_data);
 	struct mNCCI *ncci;
+	struct mc_buf *mc;
 
 	if (!fax) {
 		eprint("Unsuccessful get_mFAX()\n");
@@ -602,6 +603,20 @@ static void phaseE_handler(t30_state_t *t30, void *user_data, int result)
 	fax->phE_res = result;
 	t30_get_transfer_statistics(t30, &fax->t30stats);
 	ncci = get_faxncci(fax);
+	if (ncci && result) {
+		if ((ncci->ncci_m.state == ST_NCCI_N_0) && !ncci->cobj.cleaned) {
+			/* Never left state N0 , so we need indicate a call first */
+			fax->b3transfer_error = 1;
+			mc = alloc_mc_buf();
+			if (mc) {
+				ncciCmsgHeader(ncci, mc, CAPI_CONNECT_B3, CAPI_IND);
+				mc->cmsg.NCPI = NULL; /* default - we do not have info */
+				ncciB3Message(ncci, mc);
+				free_mc_buf(mc);
+			} else
+				eprint("No msg buffer\n");
+		}
+	}
 	StopDownLink(fax, ncci);
 	ids = CAPIobjIDstr(&fax->cobj);
 	dprint(MIDEBUG_NCCI, "%s: BitRate %d\n", ids, fax->t30stats.bit_rate);
@@ -1566,7 +1581,11 @@ int FaxB3Message(struct BInstance *bi, struct mc_buf *mc)
 		retval = 0;
 		break;
 	case CAPI_CONNECT_B3_RESP:
-		retval = ncciB3Message(ncci, mc);
+		if (!fax->b3transfer_error) /* Do not send CONNECT_B3_ACTIVE if error */
+			retval = ncciB3Message(ncci, mc);
+		else
+			dprint(MIDEBUG_NCCI, "%s: ignored CONNECT_B3_RESP in %s\n",
+				CAPIobjIDstr(&fax->cobj), _mi_ncci_st2str(ncci));
 		break;
 	case CAPI_CONNECT_B3_ACTIVE_RESP:
 		retval = ncciB3Message(ncci, mc);

@@ -486,7 +486,12 @@ static void ncci_disconnect_active(struct FsmInst *fi, int event, void *arg)
 	dprint(MIDEBUG_NCCI, "%s: disconnect from L3 itemcnt:%d\n", CAPIobjIDstr(&ncci->cobj), ncci->cobj.itemcnt);
 }
 
+static void ncci_ignore(struct FsmInst *fi, int event, void *arg)
+{
+	struct mNCCI *ncci = fi->userdata;
 
+	dprint(MIDEBUG_NCCI, "%s: ignore %s in %s\n", CAPIobjIDstr(&ncci->cobj), str_ev_ncci[event], _mi_ncci_st2str(ncci));
+}
 
 static struct FsmNode fn_ncci_list[] = {
 	{ST_NCCI_N_0, EV_AP_CONNECT_B3_REQ, ncci_connect_b3_req},
@@ -557,6 +562,7 @@ static struct FsmNode fn_ncci_list[] = {
 	{ST_NCCI_N_4, EV_AP_MANUFACTURER_REQ, ncci_manufacturer_req},
 	{ST_NCCI_N_4, EV_NC_LINKDOWN, ncci_linkdown},
 
+	{ST_NCCI_N_5, EV_AP_CONNECT_B3_RESP, ncci_ignore},
 	{ST_NCCI_N_5, EV_AP_DISCONNECT_B3_RESP, ncci_disconnect_b3_resp},
 	{ST_NCCI_N_5, EV_AP_RELEASE, ncci_appl_release},
 };
@@ -1394,7 +1400,7 @@ int ncciB3Message(struct mNCCI *ncci, struct mc_buf *mc)
 	if (retval) {
 		if (subcmd == CAPI_REQ)
 			retval = CapiMessageNotSupportedInCurrentState;
-		else {		/* RESP */
+		else {	/* RESP */
 			wprint("%s: Error Message %s %02x/%02x not supported in state %s\n", CAPIobjIDstr(&ncci->cobj),
 				capi20_cmd2str(cmd, subcmd), cmd, subcmd, _mi_ncci_st2str(ncci));
 			retval = CapiNoError;
