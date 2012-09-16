@@ -50,6 +50,17 @@ extern int	WriteWaveFiles;
 extern char	*TempDirectory;
 extern pid_t	gettid(void);
 
+/* Master control defines */
+
+#define MICD_EV_MASK		0xffff0000
+#define MICD_EV_LEN		0x0000ffff
+#define MICD_CTRL_SHUTDOWN	0x42010000
+#define MICD_CTRL_DISABLE_POLL	0x42020000
+#define MICD_CTRL_ENABLE_POLL	0x42030000
+
+int send_master_control(int, int, void *);
+
+
 struct mCAPIobj;
 struct mApplication;
 struct mPLCI;
@@ -448,7 +459,7 @@ static inline void dump_fax_status(struct BInstance *bi) {};
 #define MIDEBUG_NCCI_DATA	(MC_DEBUG_NCCI_DATA << 24)
 #define MIDEBUG_CAPIOBJ		(MC_DEBUG_CAPIOBJ << 24)
 
-#define MI_PUT_APPLICATION	0x42000001
+#define MI_PUT_APPLICATION	0x42000000
 
 int mIcapi_mainpoll_releaseApp(int, int);
 

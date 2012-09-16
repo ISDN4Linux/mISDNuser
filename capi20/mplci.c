@@ -16,6 +16,7 @@
  *
  */
 
+#include <sched.h>
 #include "m_capi.h"
 #include "mc_buffer.h"
 #include <mISDN/q931.h>
@@ -162,7 +163,7 @@ static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 	struct lPLCI *lp;
 	uint8_t found = 0;
 	int cause = CAUSE_INCOMPATIBLE_DEST;
-	int ret;
+	int ret, *fds, *cur;
 
 	if (!mc || !mc->l3m) {
 		eprint("%s: SETUP without message\n", CAPIobjIDstr(&plci->cobj));
@@ -179,7 +180,7 @@ static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 			lc = container_of(co, struct lController, cobj);
 			if ((lc->CIPmask & CIPmask) || (lc->CIPmask & 1)) {
 				ret = lPLCICreate(&lp, lc, plci);
-				if (!ret) {
+				if (ret == 0) {
 					found++; 
 					put_cobj(&lp->cobj);
 				} else {
@@ -190,6 +191,21 @@ static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 		}
 		if (plci->cobj.itemcnt) {
 			/* at least one lplci was created */
+			fds = calloc(found, sizeof(int));
+			if (!fds)
+				eprint("%s: cannot allocate fds buffer for %d fd - will crash soon\n", CAPIobjIDstr(&plci->cobj), found);
+			cur = fds;
+			pthread_rwlock_rdlock(&plci->cobj.lock);
+			co = plci->cobj.listhead;
+			while (co) {
+				lp = container_of(co, struct lPLCI, cobj);
+				*cur++ = lp->Appl->fd;
+				co = co->next;
+			}
+			pthread_rwlock_unlock(&plci->cobj.lock);
+			/* disable answers until all controller are informed */
+			send_master_control(MICD_CTRL_DISABLE_POLL, found * sizeof(int), fds);
+			sched_yield(); /* make sure that the disable could be processed */
 			co = get_next_cobj(&plci->cobj, NULL);
 			while (co) {
 				lp = container_of(co, struct lPLCI, cobj);
@@ -200,6 +216,9 @@ static void plciHandleSetupInd(struct mPLCI *plci, int pr, struct mc_buf *mc)
 					cleanup_lPLCI(lp);
 				co = get_next_cobj(&plci->cobj, co);
 			}
+			/* Now enable answers again */
+			send_master_control(MICD_CTRL_ENABLE_POLL, found * sizeof(int), fds);
+			free(fds);
 		}
 	}
 	if (found == 0) {

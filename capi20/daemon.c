@@ -50,7 +50,7 @@ extern int ptsname_r(int fd, char *buf, size_t buflen);
 #define DEF_CONFIG_FILE	"/etc/capi20.conf"
 #endif
 
-#define MISDNCAPID_VERSION	"0.9"
+#define MISDNCAPID_VERSION	"1.0"
 
 typedef enum {
 	PIT_None = 0,
@@ -69,7 +69,6 @@ struct pollInfo {
 	void		*data;
 };
 
-#define MI_CONTROL_SHUTDOWN	0x01000000
 /* give 5 sec periode to allow releasing all applications */
 #define MI_SHUTDOWN_DELAY	5000
 
@@ -300,19 +299,48 @@ err:
 	return nr_controller;
 }
 
+int send_master_control(int event, int len, void *para)
+{
+	int ret, err, *msg, totlen = sizeof(event);
+
+	if (len > 0) {
+		totlen += len;
+		msg = malloc(totlen);
+		if (!msg) {
+			eprint("Cannot alloc %d bytes for maincontrol message\n", totlen);
+			return -ENOMEM;
+		}
+		*msg = event | len;
+		msg++;
+		memcpy(msg, para, len);
+		msg--;
+	} else {
+		msg = &event;
+	}
+	ret = write(mIControl[1], msg, totlen);
+	if (ret != totlen) {
+		if (ret < 0)
+			err = errno;
+		else
+			err = EMSGSIZE;
+		eprint("Cannot send maincontrol message %08x return %d (%d) - %s\n", *msg, ret, totlen, strerror(err));
+		ret = -err;
+	} else {
+		ret = 0;
+	}
+	if (len > 0)
+		free(msg);
+	return ret;
+}
+
 /**********************************************************************
 Signal handler for clean shutdown
 ***********************************************************************/
 static void
 termHandler(int sig)
 {
-	int ret, contr = MI_CONTROL_SHUTDOWN;
-
 	iprint("Terminating on signal %d -- request shutdown mISDNcapid\n", sig);
-
-	ret = write(mIControl[1], &contr, sizeof(contr));
-	if (ret != sizeof(contr))
-		eprint("Error sending shutdown to mainloop after signal %d - %s\n", sig, strerror(errno));
+	send_master_control(MICD_CTRL_SHUTDOWN, 0, NULL);
 	return;
 }
 
@@ -483,6 +511,23 @@ static int del_mainpoll(int fd)
 	return -1;
 }
 
+static int modify_mainpoll(int enable, int fd)
+{
+	int i;
+
+	for (i = 0; i < mainpoll_max; i++) {
+		if (mainpoll[i].fd == fd) {
+			if (enable)
+				mainpoll[i].events = POLLIN | POLLPRI;
+			else
+				mainpoll[i].events = POLLPRI;
+			dprint(MIDEBUG_CONTROLLER, "Mainpoll: fd=%d now %s\n", fd, enable ? "enabled" : "disabled");
+			return 0;
+		}
+	}
+	return  -EINVAL;
+}
+
 int mIcapi_mainpoll_releaseApp(int fd, int newfd)
 {
 	int i;
@@ -499,6 +544,63 @@ int mIcapi_mainpoll_releaseApp(int fd, int newfd)
 		}
 	}
 	return -1;
+}
+
+static int main_control(int idx)
+{
+	int ret, event, len, *fds;
+	void *para = NULL;
+
+	len = sizeof(event);
+	ret = read(mainpoll[idx].fd, &event, len);
+
+	if (ret != len) {
+		if (ret > 0)
+			event = -EMSGSIZE;
+		else
+			event = -errno;
+		eprint("Event for MasterControl read error read return %d (%d) - %s\n", ret, len, strerror(-event));
+		return event;
+	}
+	len = event & MICD_EV_LEN;
+	if (len) {
+		para = malloc(len);
+		if (!para) {
+			eprint("Event for MasterControl cannot alloc %d bytes for parameter\n", len);
+			return -ENOMEM;
+		}
+		ret = read(mainpoll[idx].fd, para, len);
+		if (ret != len) {
+			if (ret > 0)
+				event = -EMSGSIZE;
+			else
+				event = -errno;
+			eprint("Event for MasterControl read error read on parameter return %d (%d) - %s\n", ret, len, strerror(-event));
+			return event;
+		}
+	}
+	switch (event & MICD_EV_MASK) {
+	case MICD_CTRL_SHUTDOWN:
+		break;
+	case MICD_CTRL_DISABLE_POLL:
+	case MICD_CTRL_ENABLE_POLL:
+		len /= sizeof(int);
+		fds = para;
+		while (len) {
+			ret = modify_mainpoll((event & MICD_EV_MASK) == MICD_CTRL_ENABLE_POLL, *fds);
+			if (ret)
+				wprint("modify_mainpoll for fd=%d failed\n", *fds);
+			len--;
+			fds++;
+		}
+		break;
+	default:
+		eprint("Unknown event for MasterControl %08x - ignored\n", event);
+		event = -EINVAL;
+	}
+	if (para)
+		free(para);
+	return event;
 }
 
 void clean_all(void)
@@ -1938,21 +2040,17 @@ int main_loop(void)
 					}
 					break;
 				case PIT_Control:
-					res = read(mainpoll[i].fd, &error, sizeof(error));
-					if (res == sizeof(error)) {
-						if (error == MI_CONTROL_SHUTDOWN) {
-							iprint("Pollevent ShutdownRequest\n");
-							polldelay = MI_SHUTDOWN_DELAY;
-							ShutDown = 1;
-							res = ReleaseAllApplications();
-							if (res <= 0) { /* No Apllication or error shutdown now */
-								running = 0;
-								error = res;
-							}
-						} else
-							eprint("Pollevent for MasterControl read %x\n", error);
-					} else
-						eprint("Pollevent for MasterControl read error - %s\n", strerror(errno));
+					res = main_control(i);
+					if (res == MICD_CTRL_SHUTDOWN) {
+						iprint("Pollevent ShutdownRequest\n");
+						polldelay = MI_SHUTDOWN_DELAY;
+						ShutDown = 1;
+						res = ReleaseAllApplications();
+						if (res <= 0) { /* No Apllication or error shutdown now */
+							running = 0;
+							error = res;
+						}
+					}
 					break;
 				case PIT_ReleasedApp:
 					res = read(mainpoll[i].fd, &error, sizeof(error));
