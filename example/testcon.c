@@ -81,6 +81,7 @@ char *pname;
 	fprintf(stderr,"                   13 L1 Test AIS set)\n");
 	fprintf(stderr,"                   14 L1 Test AIS cleared)\n");
 	fprintf(stderr,"                   15 L1 Test set state machine  to given -n value (allowed values 0-7, 7 - auto state enabled)\n");
+	fprintf(stderr,"                   16 Reject calls with cause values (given via -n)\n");
 	fprintf(stderr,"  -n <phone nr>   Phonenumber to dial or on -F12 T3 value\n");
 	fprintf(stderr,"  -vn             Printing debug info level n\n");
 	fprintf(stderr,"\n");
@@ -90,6 +91,7 @@ typedef struct _devinfo {
 	int			cardnr;
 	int			func;
 	char			phonenr[32];
+	unsigned char		cause;
 	int			layer2;
 	struct sockaddr_mISDN	l2addr;
 	int			bchan;
@@ -142,7 +144,7 @@ static char tt_char[] = "0123456789ABCD*#";
 	*ptr++ = mty; \
 } while(0)
 
-int play_msg(devinfo_t *di) {
+static int play_msg(devinfo_t *di) {
 	unsigned char buf[PLAY_SIZE + MISDN_HEADER_LEN];
 	struct  mISDNhead *hh = (struct  mISDNhead *)buf;
 	int len, ret;
@@ -168,7 +170,7 @@ int play_msg(devinfo_t *di) {
 	return ret;
 }
 
-int send_data(devinfo_t *di) {
+static int send_data(devinfo_t *di) {
 	char buf[MAX_DATA_BUF + MISDN_HEADER_LEN];
 	struct  mISDNhead *hh = (struct  mISDNhead *)buf;
 	char *data;
@@ -201,7 +203,7 @@ int send_data(devinfo_t *di) {
 	return ret;
 }
 
-int setup_bchannel(devinfo_t *di) {
+static int setup_bchannel(devinfo_t *di) {
 	int			ret;
 	struct sockaddr_mISDN	addr;
 
@@ -241,7 +243,7 @@ int setup_bchannel(devinfo_t *di) {
 	return ret;
 }
 
-int send_SETUP(devinfo_t *di, int SI, char *PNr) {
+static int send_SETUP(devinfo_t *di, int SI, char *PNr) {
 	char			*msg, buf[64];
 	char			*np,*p;
 	struct  mISDNhead 	*hh = (struct  mISDNhead *)buf;
@@ -278,7 +280,82 @@ int send_SETUP(devinfo_t *di, int SI, char *PNr) {
 	return ret;
 }
 
-int activate_bchan(devinfo_t *di) {
+static int send_msg_with_cause(devinfo_t *di, unsigned char mt) {
+	char			*msg, buf[64];
+	char			*p;
+	struct  mISDNhead 	*hh = (struct  mISDNhead *)buf;
+	int			ret, len;
+
+	p = msg = buf + MISDN_HEADER_LEN;
+	MsgHead(p, di->cr, mt);
+	*p++ = IE_CAUSE;
+	*p++ = 0x2;	/* Length */
+	*p++ = 0x82;	/* Coding Std. CCITT, public network*/
+	*p++ = 0x80 | (di->cause & 0x7f);
+
+	len = p - msg;
+	hh->prim = DL_DATA_REQ;
+	hh->id = MISDN_ID_ANY;
+	ret = sendto(di->layer2, buf, len + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+	if (ret < 0)
+		fprintf(stdout, "sendto error  %s\n", strerror(errno));
+	else if (VerifyOn > 2)
+		fprintf(stdout,"send %s with %d bytes cause #%d\n", mi_msg_type2str(mt), ret, di->cause);
+	return ret;
+}
+
+static int send_answer(devinfo_t *di, unsigned char mt, unsigned char channel_id) {
+	char			*msg, buf[64];
+	char			*p;
+	struct  mISDNhead 	*hh = (struct  mISDNhead *)buf;
+	int			ret, len;
+
+	p = msg = buf + MISDN_HEADER_LEN;
+	MsgHead(p, di->cr, mt);
+	*p++ = IE_CHANNEL_ID;
+	*p++ = 0x1;	/* Length */
+	*p++ = channel_id;
+
+	len = p - msg;
+	hh->prim = DL_DATA_REQ;
+	hh->id = MISDN_ID_ANY;
+	ret = sendto(di->layer2, buf, len + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+	if (ret < 0)
+		fprintf(stdout, "sendto error  %s\n", strerror(errno));
+	else if (VerifyOn > 2)
+		fprintf(stdout,"send %s with %d bytes cause #%d\n", mi_msg_type2str(mt), ret, di->cause);
+	return ret;
+}
+
+static int send_status(devinfo_t *di, unsigned char state) {
+	char			*msg, buf[64];
+	char			*p;
+	struct  mISDNhead 	*hh = (struct  mISDNhead *)buf;
+	int			ret, len;
+
+	p = msg = buf + MISDN_HEADER_LEN;
+	MsgHead(p, di->cr, MT_STATUS);
+	*p++ = IE_CAUSE;
+	*p++ = 0x2;	/* Length */
+	*p++ = 0x82;	/* Coding Std. CCITT, public network*/
+	*p++ = 0x80 | (di->cause & 0x7f);
+
+	*p++ = IE_CALL_STATE;
+	*p++ = 1;
+	*p++ = state;
+
+	len = p - msg;
+	hh->prim = DL_DATA_REQ;
+	hh->id = MISDN_ID_ANY;
+	ret = sendto(di->layer2, buf, len + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+	if (ret < 0)
+		fprintf(stdout, "sendto error  %s\n", strerror(errno));
+	else if (VerifyOn > 2)
+		fprintf(stdout,"send %s with %d bytes cause #%d state %d\n", mi_msg_type2str(MT_STATUS), ret, di->cause, state);
+	return ret;
+}
+
+static int activate_bchan(devinfo_t *di) {
 	unsigned char 		buf[2048];
 	struct  mISDNhead	*hh = (struct  mISDNhead *)buf;
 	struct timeval		tout;
@@ -340,7 +417,7 @@ int activate_bchan(devinfo_t *di) {
 	return ret;
 }
 
-int deactivate_bchan(devinfo_t *di) {
+static int deactivate_bchan(devinfo_t *di) {
 	unsigned char 		buf[2048];
 	struct  mISDNhead	*hh = (struct  mISDNhead *)buf;
 	struct timeval		tout;
@@ -407,7 +484,7 @@ int deactivate_bchan(devinfo_t *di) {
 }
 
 #ifdef NOTYET
-int send_touchtone(devinfo_t *di, int tone) {
+static int send_touchtone(devinfo_t *di, int tone) {
 	struct  mISDNhead frm;
 	int tval, ret;
 
@@ -423,7 +500,7 @@ int send_touchtone(devinfo_t *di, int tone) {
 }
 #endif
 
-void
+static void
 do_hw_loop(devinfo_t *di)
 {
 	struct mISDN_ctrl_req	creq;
@@ -439,7 +516,7 @@ do_hw_loop(devinfo_t *di)
 		di->flag  |= FLG_BCHANNEL_LOOPSET;
 }
 
-void
+static void
 del_hw_loop(devinfo_t *di)
 {
 	struct mISDN_ctrl_req	creq;
@@ -456,7 +533,7 @@ del_hw_loop(devinfo_t *di)
 	di->flag &= ~FLG_BCHANNEL_LOOPSET;
 }
 
-int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
+static int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 {
 	struct  mISDNhead	*hh = (struct  mISDNhead *)buf;
 
@@ -504,11 +581,11 @@ int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 #define L3_MT_OFF	(MISDN_HEADER_LEN + 3)
 #define L3_CR_VAL	(MISDN_HEADER_LEN + 2)
 
-int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
+static int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 {
 	struct mISDNhead	*hh = (struct  mISDNhead *)buf;
 	unsigned char		*p, *msg;
-	int			ret, l;
+	int			ret, l, result = 0;
 
 	if (len < MISDN_HEADER_LEN) {
 		if (VerifyOn)
@@ -543,9 +620,15 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 			}
 			idx++;
 		}
-		if (di->used_bchannel < 1 || di->used_bchannel > 2) {
-			fprintf(stdout,"got no valid bchannel nr %d\n", di->used_bchannel);
-			return 1;
+		switch (di->func) {
+		case 16:
+		case 17:
+			break;
+		default:
+			if (di->used_bchannel < 1 || di->used_bchannel > 2) {
+				fprintf(stdout,"got no valid bchannel nr %d\n", di->used_bchannel);
+				return 1;
+			}
 		}
 		switch (di->func) {
 			case 5:
@@ -574,6 +657,11 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 			case 7:
 				di->flag |= FLG_BCHANNEL_SETUP;
 				break;
+			case 16:
+			case 17:
+				send_answer(di, MT_SETUP_ACKNOWLEDGE, 0x81); /* B1 channel */
+				send_msg_with_cause(di, MT_DISCONNECT);
+				return 0;
 		}
 		if (!(di->flag & FLG_CALL_ORGINATE)) {
 			p = msg = buf + MISDN_HEADER_LEN;
@@ -584,7 +672,7 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 			ret = sendto(di->layer2, buf, l + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
 			if (ret < 0) {
 				fprintf(stdout, "sendto error  %s\n", strerror(errno));
-				return 4;
+				result = 4;
 			}
 		}
 	} else if ((len > L3_MT_OFF) && (buf[L3_MT_OFF] == MT_CONNECT) && (di->flag & FLG_CALL_ORGINATE)) {
@@ -689,10 +777,40 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 		if (ret < 0) {
 			fprintf(stdout, "sendto error  %s\n", strerror(errno));
 		}
-		return 7;
+		switch (di->func) {
+		case 16:
+		case 17:
+			result = 0;
+			break;
+		default:
+			result = 7;
+			break;
+		}
 	} else if ((len > L3_MT_OFF) && (buf[L3_MT_OFF] == MT_RELEASE_COMPLETE)) {
-		/* on a disconnecting msg leave loop */
-		return 8;
+		result = 8;
+	} else if ((len > L3_MT_OFF) && (buf[L3_MT_OFF] == MT_RESTART)) {
+		l = di->cr;
+		di->cr = buf[L3_CR_VAL];
+		switch (di->func) {
+		case 17:
+			di->cause = CAUSE_NOTCOMPAT_STATE_OR_MT_NOTIMPLEMENTED;
+			send_status(di, 0);
+			break;
+		default:
+			di->cr = buf[L3_CR_VAL];
+			
+			p = msg = buf + MISDN_HEADER_LEN;
+			MsgHead(p, di->cr, MT_RESTART_ACKNOWLEDGE);
+			/* we use the same content as recaived for the answer */
+			hh->prim = DL_DATA_REQ;
+			hh->id = MISDN_ID_ANY;
+			ret = sendto(di->layer2, buf, len, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+			if (ret < 0)
+				fprintf(stdout, "sendto error  %s\n", strerror(errno));
+			break;
+		}
+		di->cr = l;
+		result = 9;
 	} else {
 		if (VerifyOn) {
 			fprintf(stdout,"got unexpected D frame prim %s (%x) id(%x) len(%d)\n",
@@ -705,23 +823,24 @@ int do_dchannel(devinfo_t *di, int len, unsigned char *buf)
 			}
 		}
 	}
-	return 0;
+	return result;
 }
 
-int do_connection(devinfo_t *di) {
-	unsigned char		*p, *msg, buf[MAX_REC_BUF];
+static int do_connection(devinfo_t *di) {
+	unsigned char		buf[MAX_REC_BUF];
 	struct  mISDNhead	*hh;
 	struct timeval		tout;
 	struct sockaddr_mISDN	l2addr;
 	socklen_t		alen;
 	fd_set			rds;
-	int			ret = 0, l;
+	int			ret = 0;
 
 	if (di->setloopback)
-	        return 0;
-        if (di->func > 12)
-                return 0;
+		return 0;
+	if (di->func > 12 && di->func < 16)
+		return 0;
 	hh = (struct  mISDNhead *)buf;
+
 	if (strlen(di->phonenr)) {
 		di->flag |= FLG_CALL_ORGINATE;
 		di->cr = 0x81;
@@ -752,15 +871,8 @@ int do_connection(devinfo_t *di) {
 					send_touchtone(di, tt_char[di->val]);
 				} else {
 					/* After last tone disconnect */
-					p = msg = buf + mISDN_HEADER_LEN;
-					MsgHead(p, di->cr, MT_DISCONNECT);
-					l = p - msg;
-					hh->prim = DL_DATA_REQ;
-					hh->id = MISDN_ID_ANY;
-					ret = sendto(di->layer2, buf, l + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
-					if (ret < 0) {
-						fprintf(stdout, "sendto error  %s\n", strerror(errno));
-					}
+					di->cause = CAUSE_NORMAL_CLEARING;
+					send_msg_with_cause(di, MT_DISCONNECT);
 					di->flag &= ~FLG_SEND_TONE;
 				}
 				continue;
@@ -785,30 +897,27 @@ int do_connection(devinfo_t *di) {
 				continue;
 			}
 			if (di->flag & FLG_BCHANNEL_LOOPSET) {
-			        if (di->func == 7) { /* we never end on timeout */
-			                if (VerifyOn>3)
-			                        fprintf(stdout,"timed out but continue\n");
-			                continue;
-                                }
+				if (di->func == 7) { /* we never end on timeout */
+					if (VerifyOn>3)
+						fprintf(stdout,"timed out but continue\n");
+					continue;
+				}
 			}
-			/* hangup */
-			fprintf(stdout,"timed out sending hangup\n");
-			p = msg = buf + MISDN_HEADER_LEN;
-			if (di->flag & FLG_CALL_ACTIVE)
-				MsgHead(p, di->cr, MT_DISCONNECT);
-			else
-				MsgHead(p, di->cr, MT_RELEASE_COMPLETE);
-			l = p - msg;
-			hh->prim = DL_DATA_REQ;
-			hh->id = MISDN_ID_ANY;
-			ret = sendto(di->layer2, buf, l + MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
-			if (ret < 0) {
-				fprintf(stdout, "sendto error  %s\n", strerror(errno));
+			if (di->func == 16 || di->func == 17) {
+				break; /* we are cleared */
+			} else {
+				/* hangup */
+				fprintf(stdout,"timed out sending hangup\n");
+				di->cause = CAUSE_NORMAL_CLEARING;
+				if (di->flag & FLG_CALL_ACTIVE)
+					send_msg_with_cause(di, MT_DISCONNECT);
+				else
+					send_msg_with_cause(di, MT_RELEASE_COMPLETE);
+				if (di->flag & FLG_CALL_ACTIVE)
+					di->flag &= ~FLG_CALL_ACTIVE;
+				else
+					break;
 			}
-			if (di->flag & FLG_CALL_ACTIVE)
-				di->flag &= ~FLG_CALL_ACTIVE;
-			else
-				break;
 		}
 		if (FD_ISSET(di->bchan, &rds)) {
 			/* B-Channel related messages */
@@ -881,7 +990,7 @@ int do_connection(devinfo_t *di) {
 	return 0;
 }
 
-int do_setup(devinfo_t *di) {
+static int do_setup(devinfo_t *di) {
 	int 			cnt, ret = 0;
 	int			sk;
 	struct mISDN_devinfo	devinfo;
@@ -894,6 +1003,12 @@ int do_setup(devinfo_t *di) {
 	struct mISDN_ctrl_req	creq;
 
 	di->dproto = ISDN_P_LAPD_TE;
+	di->l2addr.family = AF_ISDN;
+	di->l2addr.dev = di->cardnr;
+	di->l2addr.channel = 0;
+	di->l2addr.sapi = 0;
+	di->l2addr.tei = 127;
+
 	switch (di->func) {
 		case 0:
 		case 5:
@@ -926,18 +1041,25 @@ int do_setup(devinfo_t *di) {
 			di->si = 1;
 			di->flag |= FLG_BCHANNEL_LOOP;
 			break;
-                case 8:
-                case 9:
-                case 10:
-                case 11:
-                        di->setloopback = di->func - 7;
-                        break;
-                case 12:
-                case 13:
-                case 14:
-                case 15:
-                        di->dproto = ISDN_P_LAPD_NT;
-                        break;
+		case 8:
+		case 9:
+		case 10:
+		case 11:
+			di->setloopback = di->func - 7;
+			break;
+		case 12:
+		case 13:
+		case 14:
+		case 15:
+			di->dproto = ISDN_P_LAPD_NT;
+			break;
+		case 17:
+		case 16:
+			di->dproto = ISDN_P_LAPD_NT;
+			di->cause = atol(di->phonenr);
+			di->l2addr.tei = 0; /* P2P */
+			di->phonenr[0] = 0;
+			break;
 		default:
 			fprintf(stdout,"unknown program function %d\n",
 				di->func);
@@ -987,12 +1109,6 @@ int do_setup(devinfo_t *di) {
 		return 6;
 	}
 
-	di->l2addr.family = AF_ISDN;
-	di->l2addr.dev = di->cardnr;
-	di->l2addr.channel = 0;
-	di->l2addr.sapi = 0;
-	di->l2addr.tei = 127;
-
 	ret = bind(di->layer2, (struct sockaddr *) &di->l2addr, sizeof(di->l2addr));
 
 	if (ret < 0) {
@@ -1030,8 +1146,8 @@ int do_setup(devinfo_t *di) {
 			return 8;
 		}
 		if (!di->phonenr[0]) {
-		        fprintf(stdout,"Setting Timer 3 value - need to give value with -n\n");
-		        return 8;
+			fprintf(stdout,"Setting Timer 3 value - need to give value with -n\n");
+			return 8;
 		}
 	}
 
@@ -1042,9 +1158,9 @@ int do_setup(devinfo_t *di) {
 		if (ret < 0)
 			fprintf(stdout,"hw_loop ioctl error %s\n", strerror(errno));
 		else
-		        fprintf(stdout,"dhw_loop ioctl (%d) successful\n", di->setloopback);
-                close(di->layer2);
-                return ret;
+			fprintf(stdout,"dhw_loop ioctl (%d) successful\n", di->setloopback);
+		close(di->layer2);
+		return ret;
 	}
 	if (di->func == 12) {
 		creq.op = MISDN_CTRL_L1_TIMER3;
@@ -1054,9 +1170,9 @@ int do_setup(devinfo_t *di) {
 		if (ret < 0)
 			fprintf(stdout,"Timer3 ioctl error %s\n", strerror(errno));
 		else
-		        fprintf(stdout,"Timer3 ioctl (%d) successful\n", di->setloopback);
-                close(di->layer2);
-                return ret;
+			fprintf(stdout,"Timer3 ioctl (%d) successful\n", di->setloopback);
+		close(di->layer2);
+		return ret;
 	}
 	if (di->func == 13) {
 
@@ -1067,9 +1183,9 @@ int do_setup(devinfo_t *di) {
 		if (ret < 0)
 			fprintf(stdout,"AIS ioctl error %s\n", strerror(errno));
 		else
-		        fprintf(stdout,"AIS ioctl enable successful\n");
-                close(di->layer2);
-                return ret;
+			fprintf(stdout,"AIS ioctl enable successful\n");
+		close(di->layer2);
+		return ret;
 	}
 	if (di->func == 14) {
 		creq.op = MISDN_CTRL_L1_AIS_TEST;
@@ -1079,9 +1195,9 @@ int do_setup(devinfo_t *di) {
 		if (ret < 0)
 			fprintf(stdout,"AIS ioctl error %s\n", strerror(errno));
 		else
-		        fprintf(stdout,"AIS ioctl disable successful\n");
-                close(di->layer2);
-                return ret;
+			fprintf(stdout,"AIS ioctl disable successful\n");
+		close(di->layer2);
+		return ret;
 	}
 	if (di->func == 15) {
 		creq.op = MISDN_CTRL_L1_STATE_TEST;
@@ -1091,9 +1207,9 @@ int do_setup(devinfo_t *di) {
 		if (ret < 0)
 			fprintf(stdout,"L1 state set ioctl error %s\n", strerror(errno));
 		else
-		        fprintf(stdout,"L1 set state(%ld) ioctl successful\n", atol(di->phonenr));
-                close(di->layer2);
-                return ret;
+			fprintf(stdout,"L1 set state(%ld) ioctl successful\n", atol(di->phonenr));
+		close(di->layer2);
+		return ret;
 	}
 
 	hh = (struct mISDNhead *)buffer;
@@ -1148,6 +1264,30 @@ int do_setup(devinfo_t *di) {
 				if (VerifyOn>3)
 					fprintf(stdout,"dl_etablish send ret=%d\n", ret);
 
+			} else if (hh->prim == MPH_ACTIVATE_IND) {
+				fprintf(stdout, "got MPH_ACTIVATE_IND\n");
+				if (alen == sizeof(l2addr)) {
+					if (VerifyOn)
+						fprintf(stdout, "use channel(%d) sapi(%d) tei(%d) for now\n", l2addr.channel, l2addr.sapi, l2addr.tei);
+					di->l2addr = l2addr;
+				}
+				if (di->func == 16 || di->func == 17) {
+					fprintf(stdout, "NT Mode SAPI:%d TEI:%d activated\n", l2addr.sapi, l2addr.tei);
+				} else {
+					if (l2addr.tei != 127)
+						continue;
+				}
+				hh->prim = DL_ESTABLISH_REQ;
+				hh->id   = MISDN_ID_ANY;
+				ret = sendto(di->layer2, buffer, MISDN_HEADER_LEN, 0, (struct sockaddr *)&di->l2addr, sizeof(di->l2addr));
+				
+				if (ret < 0) {
+					fprintf(stdout, "could not send DL_ESTABLISH_REQ %s\n", strerror(errno));
+					return 12;
+				}
+				
+				if (VerifyOn>3)
+					fprintf(stdout,"dl_etablish send ret=%d\n", ret);
 			} else if (hh->prim == DL_ESTABLISH_CNF) {
 				fprintf(stdout, "got DL_ESTABLISH_CNF\n");
 				break;
@@ -1206,8 +1346,8 @@ char *argv[];
 						}
 						break;
 					case 'n':
-					        if (!argv[aidx][2]) {
-					        	idx = 0;
+						if (!argv[aidx][2]) {
+							idx = 0;
 							aidx++;
 						} else {
 							idx=2;
@@ -1239,7 +1379,7 @@ char *argv[];
 					exit(1);
 				}
 			}
-                                   aidx++;
+			aidx++;
 		} while (aidx<argc);
 	}
 	err = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
