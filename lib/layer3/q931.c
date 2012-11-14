@@ -678,6 +678,15 @@ mi_encode_facility(struct l3_msg *l3m, struct asn1_parm *fac)
 	return 0;
 }
 
+int
+mi_encode_notification_ind(struct l3_msg *l3m, int notInd)
+{
+	notInd |= 0x80;
+
+	return add_layer3_ie(l3m, IE_NOTIFY, 1, (unsigned char*) &notInd);
+
+}
+
 /* helper functions to decode common IE */
 
 #define _ASSIGN_PVAL(p, v)	if (p) *p = (v)
@@ -1121,6 +1130,17 @@ mi_decode_facility(struct l3_msg *l3m, struct asn1_parm *fac)
 	if (!fac)
 		return 0;
 	return decodeFac(l3m->facility, fac);
+}
+
+int
+mi_decode_notification_ind(struct l3_msg *l3m, int *notInd)
+{
+	if (l3m == NULL || !l3m->notify)
+		return 0;
+	if (!notInd)
+		return 0;
+	_ASSIGN_PVAL(notInd, l3m->notify[1] & 0x7f);
+	return 0;
 }
 
 const char *
