@@ -23,13 +23,13 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <mISDN/q931.h>
-#include <spandsp.h>
 #include "ncci.h"
 #include "alaw.h"
 #include "sff.h"
 #include "g3_mh.h"
 
 #ifdef USE_SOFTFAX
+#include <spandsp.h>
 
 struct mFAX {
 	struct mCAPIobj		cobj;
