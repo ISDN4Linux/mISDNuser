@@ -324,7 +324,7 @@ int mISDN_handler(void)
 						mISDNport->prev->que_len = len;
 						hh->prim = PH_ACTIVATE_REQ; 
 						hh->id = 0;
-						len = sendto(mISDNport->d_sock, data, MISDN_HEADER_LEN, 0, NULL, 0);
+						len = sendto(mISDNport->prev->d_sock, data, MISDN_HEADER_LEN, 0, NULL, 0);
 						if (len <= 0)
 							fprintf(stderr, "Failed to send to socket %d of port %d\n", mISDNport->d_sock, mISDNport->portnum);
 					}
@@ -349,7 +349,7 @@ int mISDN_handler(void)
 						mISDNport->next->que_len = len;
 						hh->prim = PH_ACTIVATE_REQ; 
 						hh->id = 0;
-						len = sendto(mISDNport->d_sock, data, MISDN_HEADER_LEN, 0, NULL, 0);
+						len = sendto(mISDNport->next->d_sock, data, MISDN_HEADER_LEN, 0, NULL, 0);
 						if (len <= 0)
 							fprintf(stderr, "Failed to send to socket %d of port %d\n", mISDNport->d_sock, mISDNport->portnum);
 					}
