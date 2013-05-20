@@ -357,7 +357,7 @@ mi_encode_hlc(struct l3_msg *l3m, int hlc, int ehlc)
 	ie[1] = hlc & 0x7f;
 	
 	if (ehlc < 0)
-		ie[1] | 0x80;
+		ie[1] |= 0x80;
 	else {
 		l = 3;
 		ie[2] = 0x80 | (ehlc & 0x7f);
