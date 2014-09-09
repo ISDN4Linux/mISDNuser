@@ -988,6 +988,16 @@ static int CreateBchannelThread(struct BInstance *bi, int pcnt)
 {
 	int ret, i;
 
+	if (bi->cpipe[0] > -1) {
+		wprint("bi->cpipe[0] open (fd=%d) - close now\n", bi->cpipe[0]);
+		close(bi->cpipe[0]);
+		bi->cpipe[0] = -1;
+	}
+	if (bi->cpipe[1] > -1) {
+		wprint("bi->cpipe[1] open (fd=%d) - close now\n", bi->cpipe[1]);
+		close(bi->cpipe[1]);
+		bi->cpipe[1] = -1;
+	}
 	ret = pipe(bi->cpipe);
 	if (ret) {
 		eprint("error - %s\n", strerror(errno));
@@ -1592,11 +1602,23 @@ static void ShutdownAppl(int idx, int unregister)
 		eprint("Application not assigned\n");
 		return;
 	}
+	if (appl->cpipe[0] > -1) {
+		wprint("%s appl->cpipe[0] open (fd=%d) - close now\n", CAPIobjIDstr(&appl->cobj), appl->cpipe[0]);
+		close(appl->cpipe[0]);
+		appl->cpipe[0] = -1;
+	}
+	if (appl->cpipe[1] > -1) {
+		wprint("%s: appl->cpipe[1] open (fd=%d) - close now\n", CAPIobjIDstr(&appl->cobj), appl->cpipe[1]);
+		close(appl->cpipe[1]);
+		appl->cpipe[1] = -1;
+	}
 	ret = pipe2(appl->cpipe, O_NONBLOCK);
 	if (ret) {
 		eprint("Cannot open application %d control pipe - %s\n", appl->cobj.id2, strerror(errno));
 		mainpoll[idx].fd = -1;
 	} else {
+		dprint(MIDEBUG_CONTROLLER, "%s: open application control pipe fds=(%d, %d)\n",
+		       CAPIobjIDstr(&appl->cobj), appl->cpipe[0], appl->cpipe [1]);
 	}
 	ReleaseApplication(appl, unregister);
 	pollinfo[idx].type = PIT_ReleasedApp;
@@ -1917,6 +1939,9 @@ int main_loop(void)
 	socklen_t alen;
 	struct mApplication *appl;
 
+	if ((mIControl[0] > -1) || (mIControl[1] > -1)) {
+		eprint("Error restarting main_loop with open mIControl pipe(%d,%d)\n", mIControl[0], mIControl[1]);
+	}
 	ret = pipe(mIControl);
 	if (ret) {
 		eprint("error setup MasterControl pipe - %s\n", strerror(errno));

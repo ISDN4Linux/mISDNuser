@@ -1,4 +1,4 @@
-/* 
+/*
  * application.c
  *
  * Written by Karsten Keil <kkeil@linux-pingi.de>
@@ -135,9 +135,30 @@ void ReleaseApplication(struct mApplication *appl, int unregister)
 
 	appl->unregistered = unregister;
 
-	ret = pipe2(appl->cpipe, O_NONBLOCK);
-	if (ret)
-		eprint("%s: Cannot open control pipe - %s\n", CAPIobjIDstr(&appl->cobj), strerror(errno));
+	if (appl->cpipe[0] > -1) {
+		if (appl->cpipe[1] > -1) {
+			wprint("%s: appl->cpipe fds=(%d, %d)  already open - reuse pipe\n",
+			       CAPIobjIDstr(&appl->cobj), appl->cpipe[0], appl->cpipe[1]);
+		} else {
+			wprint("%s: appl->cpipe[0] fd=%d open but appl->cpipe[1] not - close now\n",
+			       CAPIobjIDstr(&appl->cobj), appl->cpipe[0]);
+			close(appl->cpipe[0]);
+			appl->cpipe[0] = -1;
+		}
+	} else if (appl->cpipe[1] > -1) {
+		wprint("%s: appl->cpipe[1] fd=%d open but appl->cpipe[0] not - close now\n",
+		       CAPIobjIDstr(&appl->cobj), appl->cpipe[1]);
+		close(appl->cpipe[1]);
+		appl->cpipe[1] = -1;
+	}
+	if (appl->cpipe[0] < 0) {
+		ret = pipe2(appl->cpipe, O_NONBLOCK);
+		if (ret)
+			eprint("%s: Cannot open control pipe - %s\n", CAPIobjIDstr(&appl->cobj), strerror(errno));
+		else
+			dprint(MIDEBUG_CONTROLLER, "%s: open application control pipe fds=(%d, %d)\n",
+			       CAPIobjIDstr(&appl->cobj), appl->cpipe[0], appl->cpipe [1]);
+	}
 	close(appl->fd);
 	appl->fd = -1;
 
