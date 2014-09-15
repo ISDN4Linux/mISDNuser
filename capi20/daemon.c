@@ -792,12 +792,13 @@ struct BInstance *ControllerSelChannel(struct pController *pc, int nr, int proto
 			/* for now only one user allowed - this is not sufficient for X25 */
 			wprint("Request for channel number %d on controller %d but channel already in use\n",
 				nr, pc->profile.ncontroller);
+			pthread_mutex_unlock(&bi->lock);
 			bi = NULL;
 		} else {
 			bi->usecnt++;
 			bi->proto = proto;
+			pthread_mutex_unlock(&bi->lock);
 		}
-		pthread_mutex_unlock(&bi->lock);
 	} else {
 		eprint("Controller%d lock for BI[%d] could not aquired - %s\n",
 			pc->profile.ncontroller, bi->nr, strerror(err));
