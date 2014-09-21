@@ -618,6 +618,7 @@ void clean_all(void)
 	for (i = 0; i < mainpoll_max; i++) {
 		switch (pollinfo[i].type) {
 		case PIT_Control:
+			dprint(MIDEBUG_CONTROLLER, "close mIControl(%d, %d)\n", mIControl[0], mIControl[1]);
 			if (mIControl[0] >= 0) {
 				close(mIControl[0]);
 				mIControl[0] = -1;
@@ -641,6 +642,7 @@ void clean_all(void)
 			ReleaseBchannel(pollinfo[i].data);
 			break;
 		case PIT_NewConn:
+			dprint(MIDEBUG_CONTROLLER, "close mainpoll[%d].fd %d\n", i, mainpoll[i].fd);
 			close(mainpoll[i].fd);
 			break;
 		case PIT_ReleasedApp:
@@ -832,15 +834,18 @@ static int Create_tty(struct BInstance *bi)
 		eprint("Cannot open terminal - %s\n", strerror(errno));
 	} else {
 		bi->tty = ret;
+		dprint(MIDEBUG_CONTROLLER, "create bi[%d]->tty %d\n", bi->nr, bi->tty);
 		ret = grantpt(bi->tty);
 		if (ret < 0) {
 			eprint("Error on grantpt - %s\n", strerror(errno));
+			dprint(MIDEBUG_CONTROLLER, "close bi[%d]->tty %d\n", bi->nr, bi->tty);
 			close(bi->tty);
 			bi->tty = -1;
 		} else {
 			ret = unlockpt(bi->tty);
 			if (ret < 0) {
 				eprint("Error on unlockpt - %s\n", strerror(errno));
+				dprint(MIDEBUG_CONTROLLER, "close bi[%d]->tty %d\n", bi->nr, bi->tty);
 				close(bi->tty);
 				bi->tty = -1;
 			} else {
@@ -849,6 +854,7 @@ static int Create_tty(struct BInstance *bi)
 				ret = ioctl(bi->tty, TIOCPKT, &pmod);
 				if (ret < 0) {
 					eprint("Cannot set packet mode - %s\n", strerror(errno));
+					dprint(MIDEBUG_CONTROLLER, "close bi[%d]->tty %d\n", bi->nr, bi->tty);
 					close(bi->tty);
 					bi->tty = -1;
 				}
@@ -989,21 +995,14 @@ static int CreateBchannelThread(struct BInstance *bi, int pcnt)
 {
 	int ret, i;
 
-	if (bi->cpipe[0] > -1) {
-		wprint("bi->cpipe[0] open (fd=%d) - close now\n", bi->cpipe[0]);
-		close(bi->cpipe[0]);
-		bi->cpipe[0] = -1;
-	}
-	if (bi->cpipe[1] > -1) {
-		wprint("bi->cpipe[1] open (fd=%d) - close now\n", bi->cpipe[1]);
-		close(bi->cpipe[1]);
-		bi->cpipe[1] = -1;
-	}
+	if (bi->cpipe[0] > -1 || bi->cpipe[1] > -1)
+		wprint("bi[%d]->cpipe(%d, %d) still open - may leaking fds\n", bi->nr, bi->cpipe[0], bi->cpipe[1]);
 	ret = pipe(bi->cpipe);
 	if (ret) {
 		eprint("error - %s\n", strerror(errno));
 		return ret;
-	}
+	} else
+		dprint(MIDEBUG_CONTROLLER, "create bi[%d]->cpipe(%d, %d)\n",  bi->nr, bi->cpipe[0], bi->cpipe[1]);
 	ret = fcntl(bi->cpipe[0], F_SETFL, O_NONBLOCK);
 	if (ret) {
 		eprint("error - %s\n", strerror(errno));
@@ -1024,6 +1023,7 @@ static int CreateBchannelThread(struct BInstance *bi, int pcnt)
 	if (ret) {
 		eprint("Cannot create thread error - %s\n", strerror(errno));
 		bi->detached = 1;
+		dprint(MIDEBUG_CONTROLLER, "close bi[%d]->cpipe(%d, %d)\n",  bi->nr, bi->cpipe[0], bi->cpipe[1]);
 		close(bi->cpipe[0]);
 		close(bi->cpipe[1]);
 		bi->cpipe[0] = -1;
@@ -1070,6 +1070,7 @@ static int StopBchannelThread(struct BInstance *bi)
 		} else {
 			wprint("Running but already joined in thread=%05d ???\n", bi->tid);
 		}
+		dprint(MIDEBUG_CONTROLLER, "close bi[%d]->cpipe(%d, %d)\n",  bi->nr, bi->cpipe[0], bi->cpipe[1]);
 		close(bi->cpipe[0]);
 		close(bi->cpipe[1]);
 		bi->pfd[0].fd = -1;
@@ -1128,12 +1129,14 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 		wprint("Cannot open socket for BInstance %d on controller %d protocol 0x%02x - %s\n",
 		       bi->nr, bi->pc->profile.ncontroller, bi->proto, strerror(errno));
 		return -errno;
-	}
+	} else
+		dprint(MIDEBUG_CONTROLLER, "create socket bi[%d]->fd %d\n", bi->nr, sk);
 
 	ret = fcntl(sk, F_SETFL, O_NONBLOCK);
 	if (ret < 0) {
 		ret = -errno;
 		wprint("fcntl error %s\n", strerror(errno));
+		dprint(MIDEBUG_CONTROLLER, "close socket bi[%d]->fd %d\n", bi->nr, sk);
 		close(sk);
 		return ret;
 	}
@@ -1155,6 +1158,7 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 		break;
 	default:
 		eprint("Error unnkown BType %d\n",  lp->btype);
+		dprint(MIDEBUG_CONTROLLER, "close socket bi[%d]->fd %d\n", bi->nr, sk);
 		close(sk);
 		return -EINVAL;
 	}
@@ -1172,6 +1176,7 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 		ret = -errno;
 		wprint("Cannot bind socket for BInstance %d on controller %d (mISDN nr %d) protocol 0x%02x - %s\n",
 		       bi->nr, bi->pc->profile.ncontroller, bi->pc->mNr, bi->proto, strerror(errno));
+		dprint(MIDEBUG_CONTROLLER, "close socket bi[%d]->fd %d\n", bi->nr, sk);
 		close(sk);
 		bi->from_down = dummy_btrans;
 		bi->from_up = dummy_btrans;
@@ -1235,6 +1240,7 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 			ret = add_mainpoll(sk, PIT_Bchannel);
 			if (ret < 0) {
 				eprint("Error while adding mIsock to mainpoll (mainpoll_max %d)\n", mainpoll_max);
+				dprint(MIDEBUG_CONTROLLER, "close socket bi[%d]->fd %d\n", bi->nr, sk);
 				close(sk);
 				bi->fd = -1;
 				put_cobj(&lp->cobj);
@@ -1251,6 +1257,7 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 			ret = CreateBchannelThread(bi, 2);
 			if (ret < 0) {
 				eprint("Error while creating B%d-channel thread\n", bi->nr);
+				dprint(MIDEBUG_CONTROLLER, "close socket bi[%d]->fd %d\n", bi->nr, sk);
 				close(sk);
 				bi->fd = -1;
 				put_cobj(&lp->cobj);
@@ -1264,6 +1271,7 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 			ret = Create_tty(bi);
 			if (ret < 0) {
 				eprint("Error while creating B%d-channel tty\n", bi->nr);
+				dprint(MIDEBUG_CONTROLLER, "close socket bi[%d]->fd %d\n", bi->nr, sk);
 				close(sk);
 				bi->fd = -1;
 				put_cobj(&lp->cobj);
@@ -1276,6 +1284,7 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 			}
 			if (ret < 0) {
 				eprint("Error while creating B%d-channel thread\n", bi->nr);
+				dprint(MIDEBUG_CONTROLLER, "close socket bi[%d]->fd %d\n", bi->nr, sk);
 				close(sk);
 				bi->fd = -1;
 				put_cobj(&lp->cobj);
@@ -1320,12 +1329,14 @@ int CloseBInstance(struct BInstance *bi)
 #endif
 					case BType_tty:
 						StopBchannelThread(bi);
+						dprint(MIDEBUG_CONTROLLER, "close bi[%d]->tty %d\n", bi->nr, bi->tty);
 						if (bi->tty > -1)
 							close(bi->tty);
 						bi->tty = -1;
 					default:
 						break;
 					}
+					dprint(MIDEBUG_CONTROLLER, "Closing fd=%d usecnt %d\n", bi->fd, bi->usecnt);
 					if (bi->fd >= 0)
 						close(bi->fd);
 					bi->fd = -1;
@@ -1451,10 +1462,12 @@ int ReleaseBchannel(struct BInstance *bi)
 		return -1;
 	if (bi->fd >= 0) {
 		del_mainpoll(bi->fd);
+		dprint(MIDEBUG_CONTROLLER, "close bi[%d]->fd %d\n", bi->nr, bi->fd);
 		close(bi->fd);
 		bi->fd = -1;
 	}
 	if (bi->tty >= 0) {
+		dprint(MIDEBUG_CONTROLLER, "close bi[%d]->tty %d\n", bi->nr, bi->tty);
 		close(bi->tty);
 		bi->tty = -1;
 	}
@@ -1603,23 +1616,14 @@ static void ShutdownAppl(int idx, int unregister)
 		eprint("Application not assigned\n");
 		return;
 	}
-	if (appl->cpipe[0] > -1) {
-		wprint("%s appl->cpipe[0] open (fd=%d) - close now\n", CAPIobjIDstr(&appl->cobj), appl->cpipe[0]);
-		close(appl->cpipe[0]);
-		appl->cpipe[0] = -1;
-	}
-	if (appl->cpipe[1] > -1) {
-		wprint("%s: appl->cpipe[1] open (fd=%d) - close now\n", CAPIobjIDstr(&appl->cobj), appl->cpipe[1]);
-		close(appl->cpipe[1]);
-		appl->cpipe[1] = -1;
-	}
+	if (appl->cpipe[0] > -1 || appl->cpipe[1] > -1)
+		wprint("%s appl->cpipe(%d, %d) still open - leaking fds\n", CAPIobjIDstr(&appl->cobj),  appl->cpipe[0], appl->cpipe[1]);
 	ret = pipe2(appl->cpipe, O_NONBLOCK);
 	if (ret) {
 		eprint("Cannot open application %d control pipe - %s\n", appl->cobj.id2, strerror(errno));
 		mainpoll[idx].fd = -1;
 	} else {
-		dprint(MIDEBUG_CONTROLLER, "%s: open application control pipe fds=(%d, %d)\n",
-		       CAPIobjIDstr(&appl->cobj), appl->cpipe[0], appl->cpipe [1]);
+		dprint(MIDEBUG_CONTROLLER, "create appl->cpipe(%d, %d)\n", appl->cpipe[0], appl->cpipe[1]);
 	}
 	ReleaseApplication(appl, unregister);
 	pollinfo[idx].type = PIT_ReleasedApp;
@@ -1721,8 +1725,10 @@ static void mIcapi_release(int fd, int idx, struct mc_buf *mc)
 	ret = send(fd, mc->rb, 10, 0);
 	if (ret != 10)
 		eprint("error send %d/%d  - %s\n", ret, 10, strerror(errno));
-	if (info == CapiNoError)
+	if (info == CapiNoError) {
 		close(fd);
+		dprint(MIDEBUG_CONTROLLER, "close mIcapi_release fd %d\n", fd);
+	}
 }
 
 static void get_serial_number(int fd, struct mc_buf *mc)
@@ -1940,14 +1946,12 @@ int main_loop(void)
 	socklen_t alen;
 	struct mApplication *appl;
 
-	if ((mIControl[0] > -1) || (mIControl[1] > -1)) {
-		eprint("Error restarting main_loop with open mIControl pipe(%d,%d)\n", mIControl[0], mIControl[1]);
-	}
 	ret = pipe(mIControl);
 	if (ret) {
 		eprint("error setup MasterControl pipe - %s\n", strerror(errno));
 		return errno;
-	}
+	} else
+		dprint(MIDEBUG_CONTROLLER, "create mIControl(%d, %d)\n", mIControl[0], mIControl[1]);
 	ret = add_mainpoll(mIControl[0], PIT_Control);
 	if (ret < 0) {
 		eprint("Error while adding mIControl to mainpoll (mainpoll_max %d)\n", mainpoll_max);
@@ -2294,6 +2298,8 @@ int main(int argc, char *argv[])
 			pc->BInstances[j].pc = pc;
 			pc->BInstances[j].fd = -1;
 			pc->BInstances[j].tty = -1;
+			pc->BInstances[j].cpipe[0] = -1;
+			pc->BInstances[j].cpipe[1] = -1;
 			pthread_mutex_init(&pc->BInstances[j].lock, NULL);
 			sem_init(&pc->BInstances[j].wait, 0, 0);
 		}
@@ -2343,6 +2349,7 @@ retry_Csock:
 		fprintf(stderr, "cannot create socket - %s\n", strerror(errno));
 		goto errout;
 	}
+		
 	mcaddr.sun_family = AF_UNIX;
 	sprintf(mcaddr.sun_path, MISDN_CAPI_SOCKET_PATH);
 	ret = bind(mCsock, (struct sockaddr *)&mcaddr, sizeof(mcaddr));

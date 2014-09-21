@@ -1300,7 +1300,8 @@ static int FaxWriteTiff(struct mFAX *fax, struct mc_buf *mc)
 			res = -errno;
 			wprint("%s: Cannot open TIFF %s for writing - %s\n", CAPIobjIDstr(&fax->cobj),
 				fax->file_name, strerror(errno));
-		}
+		} else
+			dprint(MIDEBUG_NCCI, "%s: open fax->file_d %d\n", CAPIobjIDstr(&fax->cobj), fax->file_d);
 	}
 	if (fax->file_d < 0) {
 		if (!res)
@@ -1431,6 +1432,7 @@ static int FaxDisconnectB3Req(struct mFAX *fax, struct mNCCI *ncci, struct mc_bu
 			break;
 		case FAX_B3_FORMAT_TIFF:
 			if (fax->file_d >= 0) {
+				dprint(MIDEBUG_NCCI, "%s: close fax->file_d %d\n", CAPIobjIDstr(&fax->cobj), fax->file_d);
 				close(fax->file_d);
 				fax->file_d = -1;
 			} else

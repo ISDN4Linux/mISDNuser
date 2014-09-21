@@ -135,30 +135,16 @@ void ReleaseApplication(struct mApplication *appl, int unregister)
 
 	appl->unregistered = unregister;
 
-	if (appl->cpipe[0] > -1) {
-		if (appl->cpipe[1] > -1) {
-			wprint("%s: appl->cpipe fds=(%d, %d)  already open - reuse pipe\n",
-			       CAPIobjIDstr(&appl->cobj), appl->cpipe[0], appl->cpipe[1]);
-		} else {
-			wprint("%s: appl->cpipe[0] fd=%d open but appl->cpipe[1] not - close now\n",
-			       CAPIobjIDstr(&appl->cobj), appl->cpipe[0]);
-			close(appl->cpipe[0]);
-			appl->cpipe[0] = -1;
-		}
-	} else if (appl->cpipe[1] > -1) {
-		wprint("%s: appl->cpipe[1] fd=%d open but appl->cpipe[0] not - close now\n",
-		       CAPIobjIDstr(&appl->cobj), appl->cpipe[1]);
-		close(appl->cpipe[1]);
-		appl->cpipe[1] = -1;
-	}
-	if (appl->cpipe[0] < 0) {
+	if (appl->cpipe[0] > -1 && appl->cpipe[1] > -1) {
+		wprint("%s appl->cpipe(%d, %d) still open - reuse fds\n", CAPIobjIDstr(&appl->cobj),  appl->cpipe[0], appl->cpipe[1]);
+	} else {
 		ret = pipe2(appl->cpipe, O_NONBLOCK);
 		if (ret)
 			eprint("%s: Cannot open control pipe - %s\n", CAPIobjIDstr(&appl->cobj), strerror(errno));
 		else
-			dprint(MIDEBUG_CONTROLLER, "%s: open application control pipe fds=(%d, %d)\n",
-			       CAPIobjIDstr(&appl->cobj), appl->cpipe[0], appl->cpipe [1]);
+			dprint(MIDEBUG_CONTROLLER, "create appl->cpipe(%d, %d)\n", appl->cpipe[0], appl->cpipe[1]);
 	}
+	dprint(MIDEBUG_CONTROLLER, "close appl->fd %d\n", appl->fd);
 	close(appl->fd);
 	appl->fd = -1;
 
@@ -214,9 +200,11 @@ void Free_Application(struct mCAPIobj *co)
 	}
 	if (!appl->unregistered) /* filedescriptor was closed */
 		capi_freeapplid(appl->cobj.id2);
+	dprint(MIDEBUG_CONTROLLER, "close appl->fd %d\n", appl->fd);
 	if (appl->fd > 0)
 		close(appl->fd);
 	appl->fd = -1;
+	dprint(MIDEBUG_CONTROLLER, "close appl->cpipe(%d, %d)\n", appl->cpipe[0], appl->cpipe[1]);
 	if (appl->cpipe[1] > 0)
 		close(appl->cpipe[1]);
 	appl->cpipe[1] = -1;
@@ -249,7 +237,7 @@ void dump_applications(void)
 		ap = container_of(co, struct mApplication, cobj);
 		iprint("%s: MaxB3Con:%d MaxB3Blk:%d MaxB3Size:%d\n", CAPIobjIDstr(&ap->cobj),
 			ap->MaxB3Con, ap->MaxB3Blk, ap->MaxB3Size);
-		iprint("%s: Refs:%d cleaned:%s unregistered:%s cpipe(%d,%d)\n", CAPIobjIDstr(&ap->cobj),
+		iprint("%s: Refs:%d cleaned:%s unregistered:%s cpipe(%d, %d)\n", CAPIobjIDstr(&ap->cobj),
 			ap->cobj.refcnt, ap->cobj.cleaned ? "yes" : "no", ap->unregistered ? "yes" : "no",
 			ap->cpipe[0], ap->cpipe[1]);
 		for (i = 0; i < mI_ControllerCount; i++) {
