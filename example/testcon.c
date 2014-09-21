@@ -536,6 +536,7 @@ del_hw_loop(devinfo_t *di)
 static int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 {
 	struct  mISDNhead	*hh = (struct  mISDNhead *)buf;
+	int ret;
 
 	if (len < MISDN_HEADER_LEN) {
 		if (VerifyOn)
@@ -548,7 +549,10 @@ static int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 			hh->prim, hh->id, len);
 	if (hh->prim == PH_DATA_IND) {
 		/* received data, save it */
-		write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
+		ret = write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
+		if (ret < 0)
+			fprintf(stderr,"got error on write %s\n", strerror(errno));
+		        
 	} else if (hh->prim == PH_DATA_CNF) {
 		/* get ACK of send data, so we can
 		 * send more
@@ -564,7 +568,9 @@ static int do_bchannel(devinfo_t *di, int len, unsigned char *buf)
 		}
 	} else if (hh->prim == DL_DATA_IND) {
 		/* received data, save it */
-		write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
+		ret = write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
+		if (ret < 0)
+			fprintf(stderr,"got error on write %s\n", strerror(errno));
 	} else if (hh->prim == (PH_CONTROL_IND)) {
 		if ((len == MISDN_HEADER_LEN) && ((hh->id & ~DTMF_TONE_MASK) == DTMF_TONE_VAL)) {
 			fprintf(stdout,"GOT TT %c\n", DTMF_TONE_MASK & hh->id);

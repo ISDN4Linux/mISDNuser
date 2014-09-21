@@ -1292,7 +1292,9 @@ static int bch_worker(devinfo_t *di)
 		case PH_DATA_IND:
 		case DL_DATA_IND:
 			/* received data, save it */
-			write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
+			ret = write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
+			if (ret < 0)
+				fprintf(stderr,"got error on write %s\n", strerror(errno));
 			break;
 		case PH_DATA_CNF:
 			/* get ACK of send data, so we can
