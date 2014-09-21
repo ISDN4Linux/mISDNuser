@@ -107,11 +107,14 @@ open_layer3(unsigned int dev, unsigned int proto, unsigned int prop, mlayer3_cb_
 	/* handle version backward compatibility specific  stuff here */
 
 	l3 = calloc(1, sizeof(struct _layer3));
-	if (!l3)
+	if (!l3) {
+		close(fd);
 		return NULL;
+	}
 	l3->ml3.devinfo = calloc(1, sizeof(*l3->ml3.devinfo));
 	if (!l3->ml3.devinfo) {
 		free(l3);
+		close(fd);
 		return NULL;
 	}
 	l3->ml3.options = prop;
