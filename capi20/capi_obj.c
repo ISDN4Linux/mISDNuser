@@ -364,6 +364,8 @@ struct mCAPIobj *get_cobj(struct mCAPIobj *co)
 				return NULL;
 			}
 		}
+		if (co->freeing)
+			cobj_err("Currently freeing %s refcnt: %d\n", CAPIobjIDstr(co), co->refcnt);
 		co->refcnt++;
 		coref_dbg("%s\n", CAPIobjIDstr(co));
 		if (co->parent)
@@ -383,6 +385,8 @@ int put_cobj(struct mCAPIobj *co)
 	int ret = -ENODEV;
 
 	if (co) {
+		if (co->freeing)
+			cobj_err("Currently freeing %s refcnt: %d\n", CAPIobjIDstr(co), co->refcnt);
 		p = co->parent;
 		if (p) {
 			pthread_rwlock_wrlock(&p->lock);
@@ -440,6 +444,8 @@ struct mCAPIobj *get_next_cobj(struct mCAPIobj *parent, struct mCAPIobj *cur)
 			coref_dbg("%s: next %s\n", CAPIobjIDstr(cur), CAPIobjIDstr(next));
 		}
 		pthread_rwlock_unlock(&parent->lock);
+		if (parent->freeing)
+			cobj_err("Currently freeing %s refcnt: %d Next: %s\n", CAPIobjIDstr(parent), parent->refcnt, CAPIobjIDstr(next));
 	} else
 		next = NULL;
 	if (cur) {
