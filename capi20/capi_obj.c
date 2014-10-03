@@ -26,6 +26,8 @@ static struct mCAPIobj *danglinglist;
 static pthread_mutex_t uniqLock = PTHREAD_MUTEX_INITIALIZER;
 static unsigned int uniqID = 1;
 
+static pthread_mutex_t rootLock = PTHREAD_MUTEX_INITIALIZER;
+
 #ifdef MISDN_CAPI_REFCOUNT_DEBUG
 #define cobj_dbg(fmt, ...)	do {\
 					if (file && (MIDEBUG_CAPIOBJ & mI_debug_mask))\
@@ -360,9 +362,10 @@ struct mCAPIobj *get_cobj(struct mCAPIobj *co)
 			pthread_rwlock_wrlock(&co->parent->lock);
 		} else {
 			if (co->type != Cot_Root) { /* has no parent */
-				cobj_warn("%s: parent not assigned\n", CAPIobjIDstr(co));
+				cobj_err("%s: parent not assigned\n", CAPIobjIDstr(co));
 				return NULL;
 			}
+			pthread_mutex_lock(&rootLock);
 		}
 		if (co->freeing)
 			cobj_err("Currently freeing %s refcnt: %d\n", CAPIobjIDstr(co), co->refcnt);
@@ -370,6 +373,8 @@ struct mCAPIobj *get_cobj(struct mCAPIobj *co)
 		coref_dbg("%s\n", CAPIobjIDstr(co));
 		if (co->parent)
 			pthread_rwlock_unlock(&co->parent->lock);
+		else
+			pthread_mutex_unlock(&rootLock);
 	} else
 		coref_dbg("No CAPIobj\n");
 	return co;
@@ -413,9 +418,11 @@ int put_cobj(struct mCAPIobj *co)
 			}
 		} else {
 			if (co->type == Cot_Root) { /* has no parent */
+				pthread_mutex_lock(&rootLock);
 				coref_dbg("%s\n", CAPIobjIDstr(co));
 				co->refcnt--;
 				ret = co->refcnt;
+				pthread_mutex_unlock(&rootLock);
 			} else
 				cobj_warn("%s: parent not assigned\n", CAPIobjIDstr(co));
 		}
@@ -536,6 +543,9 @@ int init_cobj_registered(struct mCAPIobj *co, struct mCAPIobj *parent, enum eCAP
 		parent->listhead = co;
 		parent->itemcnt++;
 		co->refcnt = 2;
+	} else {
+		eprint("%s: error %s on init lock\n", CAPIobjt2str(co), strerror(errno));
+		return ret;
 	}
 	pthread_rwlock_unlock(&parent->lock);
 	if (ret == 0)
