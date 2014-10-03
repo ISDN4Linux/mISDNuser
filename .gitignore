@@ -45,3 +45,4 @@ config.sub
 DEADJOE
 .dirstamp
 libtool
+ar-lib
