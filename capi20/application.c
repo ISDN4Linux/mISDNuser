@@ -103,8 +103,12 @@ int register_lController(struct mApplication *appl, struct lController *lc)
 		eprint("%s: controller idx %d ID:%d\already registered\n", CAPIobjIDstr(&appl->cobj), i, lc->cobj.id);
 		return -EBUSY;
 	}
-	appl->lcl[i] = lc;
-	get_cobj(&lc->cobj);
+	if (get_cobj(&lc->cobj)) {
+		appl->lcl[i] = lc;
+	} else {
+		eprint("%s: controller idx %d cannot get controller object %s\n", CAPIobjIDstr(&appl->cobj), i, CAPIobjIDstr(&lc->cobj));
+		return -EINVAL;
+	}
 	return 0;
 }
 
@@ -290,8 +294,12 @@ struct lController *get_lController(struct mApplication *appl, unsigned int cont
 		wprint("%s: wrong controller id %d (max %d)\n", CAPIobjIDstr(&appl->cobj), cont, mI_ControllerCount);
 		lc = NULL;
 	}
-	if (lc)
-		get_cobj(&lc->cobj);
+	if (lc) {
+		if (!get_cobj(&lc->cobj)) {
+			wprint("%s: cannot get controller object %s\n", CAPIobjIDstr(&appl->cobj), CAPIobjIDstr(&lc->cobj));
+			lc = NULL;
+		}
+	}
 	return lc;
 }
 

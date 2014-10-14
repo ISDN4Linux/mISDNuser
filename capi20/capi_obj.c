@@ -132,6 +132,7 @@ void CAPIobj_exit(void)
 	while (co) {
 		cn = co->nextD;
 		eprint("%s: uid=%i refcnt %d in dangling list - freeing now\n", CAPIobjIDstr(co), co->uid, co->refcnt);
+		co->cleaned = 1;
 		cobj_free(co);
 		co = cn;
 	}
@@ -357,9 +358,12 @@ struct mCAPIobj *__get_cobj(struct mCAPIobj *co, const char *file, int lineno)
 struct mCAPIobj *get_cobj(struct mCAPIobj *co)
 #endif
 {
+	struct mCAPIobj *p;
+
 	if (co) {
-		if (co->parent) {
-			pthread_rwlock_wrlock(&co->parent->lock);
+		p = co->parent;
+		if (p) {
+			pthread_rwlock_wrlock(&p->lock);
 		} else {
 			if (co->type != Cot_Root) { /* has no parent */
 				cobj_err("%s: parent not assigned\n", CAPIobjIDstr(co));
@@ -367,12 +371,17 @@ struct mCAPIobj *get_cobj(struct mCAPIobj *co)
 			}
 			pthread_mutex_lock(&rootLock);
 		}
-		if (co->freeing)
-			cobj_err("Currently freeing %s refcnt: %d\n", CAPIobjIDstr(co), co->refcnt);
-		co->refcnt++;
-		coref_dbg("%s\n", CAPIobjIDstr(co));
-		if (co->parent)
-			pthread_rwlock_unlock(&co->parent->lock);
+		if (co->cleaned) {
+			cobj_warn("%s: pending free detected - do not get object\n", CAPIobjIDstr(co));
+			co = NULL;
+		} else {
+			if (co->freeing)
+				cobj_err("Currently freeing %s refcnt: %d\n", CAPIobjIDstr(co), co->refcnt);
+			co->refcnt++;
+			coref_dbg("%s\n", CAPIobjIDstr(co));
+		}
+		if (p)
+			pthread_rwlock_unlock(&p->lock);
 		else
 			pthread_mutex_unlock(&rootLock);
 	} else
@@ -403,6 +412,10 @@ int put_cobj(struct mCAPIobj *co)
 			ret = co->refcnt;
 			if (co->cleaned && co->refcnt <= 0) { /* last ref */
 				pthread_rwlock_unlock(&p->lock);
+				/* OK not perfect but scheduling here should prevent us from access of freed memory, if a other thread
+				   still pending on the lock - a cleaned object is not longer listed and do not return success in get_obj()
+				   so getting a new reference should not happen after this point */
+				sched_yield();
 				cobj_free(co);
 			} else {
 				pthread_rwlock_unlock(&p->lock);
@@ -447,8 +460,13 @@ struct mCAPIobj *get_next_cobj(struct mCAPIobj *parent, struct mCAPIobj *cur)
 		else
 			next = parent->listhead;
 		if (next) {
-			next->refcnt++;
-			coref_dbg("%s: next %s\n", CAPIobjIDstr(cur), CAPIobjIDstr(next));
+			if (next->cleaned) {
+				cobj_warn("%s: pending free detected - do not get next\n", CAPIobjIDstr(next));
+				next = NULL;
+			} else {
+				next->refcnt++;
+				coref_dbg("%s: next %s\n", CAPIobjIDstr(cur), CAPIobjIDstr(next));
+			}
 		}
 		pthread_rwlock_unlock(&parent->lock);
 		if (parent->freeing)

@@ -133,19 +133,26 @@ struct mCAPIobj	{
 #endif
 };
 
+#if __GNUC_PREREQ (3,4)
+# define __WUR  __attribute__ ((__warn_unused_result__))
+#else
+# define __WUR
+#endif
+
+
 #ifdef MISDN_CAPI_REFCOUNT_DEBUG
-struct mCAPIobj *__get_cobj(struct mCAPIobj *, const char *, int);
+struct mCAPIobj *__get_cobj(struct mCAPIobj *, const char *, int) __WUR;
 int __put_cobj(struct mCAPIobj *, const char *, int);
-struct mCAPIobj *__get_next_cobj(struct mCAPIobj *, struct mCAPIobj *, const char *, int);
+struct mCAPIobj *__get_next_cobj(struct mCAPIobj *, struct mCAPIobj *, const char *, int) __WUR;
 int __delist_cobj(struct mCAPIobj *, const char *, int);
 #define get_cobj(co)		__get_cobj(co, __FILE__, __LINE__)
 #define put_cobj(co)		__put_cobj(co, __FILE__, __LINE__)
 #define get_next_cobj(pa, co)	__get_next_cobj(pa, co, __FILE__, __LINE__)
 #define delist_cobj(co)		__delist_cobj(co, __FILE__, __LINE__)
 #else
-struct mCAPIobj *get_cobj(struct mCAPIobj *);
+struct mCAPIobj *get_cobj(struct mCAPIobj *) __WUR;
 int put_cobj(struct mCAPIobj *);
-struct mCAPIobj *get_next_cobj(struct mCAPIobj *, struct mCAPIobj *);
+struct mCAPIobj *get_next_cobj(struct mCAPIobj *, struct mCAPIobj *) __WUR;
 int delist_cobj(struct mCAPIobj *);
 #endif
 

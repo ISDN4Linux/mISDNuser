@@ -1747,10 +1747,24 @@ int lPLCICreate(struct lPLCI **lpp, struct lController *lc, struct mPLCI *plci, 
 		return ret;
 	}
 	lp->cipmask = cipmask;
-	lp->lc = lc;
-	get_cobj(&lc->cobj);
-	lp->Appl = lc->Appl;
-	get_cobj(&lc->Appl->cobj);
+	if (get_cobj(&lc->cobj)) {
+		lp->lc = lc;
+	} else {
+		wprint("%s: Cannot get lController object\n", CAPIobjIDstr(&lc->cobj));
+		lp->cobj.cleaned = 1;
+		delist_cobj(&lp->cobj);
+		put_cobj(&lp->cobj); /* will cleanup and free too */
+		return -EINVAL;
+	}
+	if (get_cobj(&lc->Appl->cobj)) {
+		lp->Appl = lc->Appl;
+	} else {
+		wprint("%s: Cannot get application object\n", CAPIobjIDstr(&lc->Appl->cobj));
+		lp->cobj.cleaned = 1;
+		delist_cobj(&lp->cobj);
+		put_cobj(&lp->cobj); /* will cleanup and free too */
+		return -EINVAL;
+	}
 	if (plci->pc->profile.goptions & 0x0008) {
 		/* DTMF */
 		lp->l1dtmf = 1;
@@ -1762,8 +1776,15 @@ int lPLCICreate(struct lPLCI **lpp, struct lController *lc, struct mPLCI *plci, 
 	lp->plci_m.printdebug = lPLCI_debug;
 	lp->chid.nr = MI_CHAN_NONE;
 	lp->autohangup = 1;
-	init_timer(&lp->atimer, mICAPItimer_base, lp, atimer_timeout);
-	get_cobj(&lp->cobj); /* timer ref */
+	if (get_cobj(&lp->cobj)) { /* timer ref */
+		init_timer(&lp->atimer, mICAPItimer_base, lp, atimer_timeout);
+	} else {
+		wprint("%s: Cannot get lplci object for timer ref\n", CAPIobjIDstr(&lp->cobj));
+		lp->cobj.cleaned = 1;
+		delist_cobj(&lp->cobj);
+		put_cobj(&lp->cobj); /* will cleanup and free too */
+		return -EINVAL;
+	}
 	*lpp = lp;
 	return 0;
 }

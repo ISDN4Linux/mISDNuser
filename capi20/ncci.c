@@ -640,6 +640,7 @@ struct mNCCI *ncciCreate(struct lPLCI *lp)
 {
 	struct mNCCI *nc;
 	int err;
+	struct mApplication *appl = NULL;
 
 	nc = calloc(1, sizeof(*nc));
 	if (!nc) {
@@ -647,6 +648,15 @@ struct mNCCI *ncciCreate(struct lPLCI *lp)
 		return NULL;
 	}
 	nc->cobj.id2 = lp->cobj.id2;
+	if (lp->Appl) {
+		if (get_cobj(&lp->Appl->cobj)) {
+			appl = lp->Appl;
+		} else {
+			wprint("Cannot get application object\n");
+			free(nc);
+			return NULL;
+		}
+	}
 	err = init_cobj_registered(&nc->cobj, &lp->cobj, Cot_NCCI, 0x01ffff);
 	if (!err) {
 		dprint(MIDEBUG_NCCI, "NCCI%06x: will be created now\n", nc->cobj.id);
@@ -654,9 +664,7 @@ struct mNCCI *ncciCreate(struct lPLCI *lp)
 		nc->ncci_m.debug = MIDEBUG_NCCI & mI_debug_mask;
 		nc->ncci_m.userdata = nc;
 		nc->ncci_m.printdebug = ncci_debug;
-		nc->appl = lp->Appl;
-		if (nc->appl)
-			get_cobj(&nc->appl->cobj);
+		nc->appl = appl;
 		nc->BIlink = lp->BIlink;
 		nc->window = lp->Appl->MaxB3Blk;
 		pthread_mutex_init(&nc->lock, NULL);
@@ -710,6 +718,8 @@ struct mNCCI *ncciCreate(struct lPLCI *lp)
 		nc->osize = 256;
 		dprint(MIDEBUG_NCCI, "%s: created\n", CAPIobjIDstr(&nc->cobj));
 	} else {
+		if (appl)
+			put_cobj(&appl->cobj);
 		free(nc);
 		nc = NULL;
 	}

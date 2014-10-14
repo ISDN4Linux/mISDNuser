@@ -1141,6 +1141,16 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 		return ret;
 	}
 
+	if (get_cobj(&lp->cobj)) {
+		bi->lp = lp;
+	} else {
+		bi->lp = NULL;
+		ret = -EINVAL;
+		wprint("Cannot get logical controller object\n");
+		close(sk);
+		return ret;
+	}
+
 	switch (lp->btype) {
 	case BType_Direct:
 		bi->from_down = recvBdirect;
@@ -1160,6 +1170,8 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 		eprint("Error unnkown BType %d\n",  lp->btype);
 		dprint(MIDEBUG_CONTROLLER, "close socket bi[%d]->fd %d\n", bi->nr, sk);
 		close(sk);
+		bi->lp = NULL;
+		put_cobj(&lp->cobj);
 		return -EINVAL;
 	}
 	bi->type = lp->btype;
@@ -1181,11 +1193,11 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 		bi->from_down = dummy_btrans;
 		bi->from_up = dummy_btrans;
 		bi->type = BType_None;
+		bi->lp = NULL;
+		put_cobj(&lp->cobj);
 	} else {
 		bi->closed = 0;
 		bi->fd = sk;
-		bi->lp = lp;
-		get_cobj(&lp->cobj);
 		bi->org_rx_min = MISDN_CTRL_RX_SIZE_IGNORE;
 		bi->rx_min = MISDN_CTRL_RX_SIZE_IGNORE;
 		bi->org_rx_max = MISDN_CTRL_RX_SIZE_IGNORE;
@@ -1243,8 +1255,8 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 				dprint(MIDEBUG_CONTROLLER, "close socket bi[%d]->fd %d\n", bi->nr, sk);
 				close(sk);
 				bi->fd = -1;
-				put_cobj(&lp->cobj);
 				bi->lp = NULL;
+				put_cobj(&lp->cobj);
 			} else {
 				dprint(MIDEBUG_CONTROLLER, "Controller%d: Bchannel %d socket %d added to poll idx %d\n",
 				       bi->pc->profile.ncontroller, bi->nr, sk, ret);
@@ -1260,8 +1272,8 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 				dprint(MIDEBUG_CONTROLLER, "close socket bi[%d]->fd %d\n", bi->nr, sk);
 				close(sk);
 				bi->fd = -1;
-				put_cobj(&lp->cobj);
 				bi->lp = NULL;
+				put_cobj(&lp->cobj);
 			} else {
 				ret = 0;
 				bi->UpId = 0;
@@ -1274,8 +1286,8 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 				dprint(MIDEBUG_CONTROLLER, "close socket bi[%d]->fd %d\n", bi->nr, sk);
 				close(sk);
 				bi->fd = -1;
-				put_cobj(&lp->cobj);
 				bi->lp = NULL;
+				put_cobj(&lp->cobj);
 				return ret;
 			} else {
 				bi->pfd[2].fd = bi->tty;
@@ -1287,8 +1299,8 @@ int OpenBInstance(struct BInstance *bi, struct lPLCI *lp)
 				dprint(MIDEBUG_CONTROLLER, "close socket bi[%d]->fd %d\n", bi->nr, sk);
 				close(sk);
 				bi->fd = -1;
-				put_cobj(&lp->cobj);
 				bi->lp = NULL;
+				put_cobj(&lp->cobj);
 			} else {
 				ret = 0;
 				bi->UpId = 0;

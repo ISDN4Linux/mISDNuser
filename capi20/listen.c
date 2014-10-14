@@ -128,14 +128,19 @@ struct lController *addlController(struct mApplication *app, struct pController 
 	lc = calloc(1, sizeof(*lc));
 	if (lc) {
 		lc->cobj.id2 = app->cobj.id2;
+		if (!get_cobj(&app->cobj)) {
+			eprint("Cannot get application object\n");
+			free(lc);
+			return NULL;
+		}
 		ret = init_cobj_registered(&lc->cobj, &pc->cobjLC, Cot_lController, 0x0000ff);
 		if (ret) {
 			eprint("Controller%d: Application %d - cannot init\n", pc->profile.ncontroller, app->cobj.id2);
+			put_cobj(&app->cobj);
 			free(lc);
 			lc = NULL;
 		} else {
 			lc->Appl = app;
-			get_cobj(&app->cobj);
 			lc->listen_m.fsm = &listen_fsm;
 			lc->listen_m.state = ST_LISTEN_L_0;
 			lc->listen_m.debug = MIDEBUG_CONTROLLER & mI_debug_mask;
@@ -146,10 +151,13 @@ struct lController *addlController(struct mApplication *app, struct pController 
 			lc->CIPmask2 = 0;
 			ret = register_lController(app, lc);
 			if (ret) {
+				lc->Appl = NULL;
 				put_cobj(&app->cobj);
 				eprint("Controller%d: - cannot register LC on Application %d - %s\n", pc->profile.ncontroller,
 					app->cobj.id2, strerror(-ret));
-				free(lc);
+				lc->cobj.cleaned = 1;
+				delist_cobj(&lc->cobj);
+				put_cobj(&lc->cobj);
 				lc = NULL;
 			}
 		}
