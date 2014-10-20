@@ -2072,9 +2072,10 @@ int main_loop(void)
 							break;
 						}
 						fd = mainpoll[i].fd;
-						dprint(MIDEBUG_POLL, "read 0 socket %d type %d closed\n", fd, pollinfo[i].type);
-						close(mainpoll[i].fd);
-						res = del_mainpoll(mainpoll[i].fd);
+						dprint(MIDEBUG_POLL, "socket connection %s - fd %d idx %d type %d closed\n",
+							res == -ECONNABORTED ? "abort" : "reset", fd, i, pollinfo[i].type);
+						close(fd);
+						res = del_mainpoll(fd);
 						if (res < 0) {
 							eprint("Cannot delete fd=%d from mainpoll result %d\n", fd, res);
 						} else
@@ -2113,11 +2114,11 @@ int main_loop(void)
 					}
 					break;
 				case PIT_mISDNtimer:
-					ret = read(mainpoll[i].fd, &timerId, sizeof(timerId));
-					if (ret < 0) {
+					res = read(mainpoll[i].fd, &timerId, sizeof(timerId));
+					if (res < 0) {
 						eprint("mISDN read timer error %s\n", strerror(errno));
 					} else {
-						if (ret == sizeof(timerId) && timerId) {
+						if (res == sizeof(timerId) && timerId) {
 							expire_timer(pollinfo[i].data, timerId);
 						}
 					}

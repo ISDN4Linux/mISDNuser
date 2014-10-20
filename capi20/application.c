@@ -378,7 +378,8 @@ void SendCmsg2Application(struct mApplication *appl, struct mc_buf *mc)
 			mCapi_message2str(mc);
 		ret = send(appl->fd, mc->rb, mc->len, 0);
 		if (ret != mc->len)
-			eprint("Message send error len=%d ret=%d - %s\n", mc->len, ret, strerror(errno));
+			eprint("%s: Message send error fd=%d len=%d ret=%d - %s\n",
+				CAPIobjIDstr(&appl->cobj), appl->fd, mc->len, ret, strerror(errno));
 	}
 }
 
