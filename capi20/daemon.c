@@ -576,6 +576,7 @@ static int main_control(int idx)
 			else
 				event = -errno;
 			eprint("Event for MasterControl read error read on parameter return %d (%d) - %s\n", ret, len, strerror(-event));
+			free(para);
 			return event;
 		}
 	}
