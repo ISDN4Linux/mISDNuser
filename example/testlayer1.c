@@ -87,7 +87,7 @@ void usage(void) {
 	printf("\nvalid options are:\n");
 	printf("\n");
 	printf("  --card=<n>         use card number n (default 0)\n");
-	printf("  --d                enable D channel stream with <n> packet sz\n");
+	printf("  --d,  --d=<n>      enable D channel stream with <n> packet sz\n");
 	printf("  --b1, --b1=<n>     enable B channel stream with <n> packet sz\n");
 	printf("  --b2, --b2=<n>     enable B channel stream with <n> packet sz\n");
 	printf("  --te               use TA in TE mode (default is NT)\n");
