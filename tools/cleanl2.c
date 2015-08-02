@@ -1,5 +1,6 @@
 /*
  *
+ * Copyright 2015 Karsten Keil <keil@b1-systems.de>
  * Copyright 2008 Karsten Keil <kkeil@suse.de>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -38,63 +39,61 @@
 #include <mISDN/mISDNif.h>
 #include <mISDN/af_isdn.h>
 
-void usage(pname) 
+void usage(pname)
 char *pname;
 {
-	fprintf(stderr,"Call with %s [options]\n",pname);
-	fprintf(stderr,"\n");
-	fprintf(stderr,"\n     Valid options are:\n");
-	fprintf(stderr,"\n");
-	fprintf(stderr,"  -?              Usage ; printout this information\n");
-	fprintf(stderr,"  -c<n>           use card number n (default 1)\n"); 
-	fprintf(stderr,"\n");
+	fprintf(stderr, "Call with %s [options]\n", pname);
+	fprintf(stderr, "\n");
+	fprintf(stderr, "\n     Valid options are:\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "  -?              Usage ; printout this information\n");
+	fprintf(stderr, "  -c<n>           use card number n (default 1)\n");
+	fprintf(stderr, "\n");
 }
 
-
-int
-main(argc, argv)
+int main(argc, argv)
 int argc;
 char *argv[];
 {
-	int aidx=1;
+	int aidx = 1;
 	int cardnr = 0;
 	int sock;
-	struct sockaddr_mISDN  addr;
+	struct sockaddr_mISDN addr;
 	int result;
 	int clean;
 	char sw;
 	u_int cnt, protocol;
-	struct mISDN_devinfo	di;
-
+	struct mISDN_devinfo di;
 
 	while (aidx < argc) {
-		if (argv[aidx] && argv[aidx][0]=='-') {
-			sw=argv[aidx][1];
+		if (argv[aidx] && argv[aidx][0] == '-') {
+			sw = argv[aidx][1];
 			switch (sw) {
-				case 'c':
-					if (argv[aidx][2]) {
-						cardnr=atol(&argv[aidx][2]);
-					}
-					break;
-				case '?' :
-					usage(argv[0]);
-					exit(1);
-					break;
-				default  : fprintf(stderr,"Unknown Switch %c\n",sw);
-					usage(argv[0]);
-					exit(1);
-					break;
+			case 'c':
+				if (argv[aidx][2]) {
+					cardnr = atol(&argv[aidx][2]);
+				}
+				break;
+			case '?':
+				usage(argv[0]);
+				exit(1);
+				break;
+			default:
+				fprintf(stderr, "Unknown Switch %c\n", sw);
+				usage(argv[0]);
+				exit(1);
+				break;
 			}
-		}  else {
-			fprintf(stderr,"Undefined argument %s\n",argv[aidx]);
+		} else {
+			fprintf(stderr, "Undefined argument %s\n", argv[aidx]);
 			usage(argv[0]);
 			exit(1);
 		}
 		aidx++;
-	} 
+	}
 
 	if (cardnr < 0) {
-		fprintf(stderr,"card nr cannot be negative\n");
+		fprintf(stderr, "card nr cannot be negative\n");
 		exit(1);
 	}
 	if ((sock = socket(PF_ISDN, SOCK_RAW, 0)) < 0) {
@@ -106,7 +105,7 @@ char *argv[];
 		printf("ioctl error %s\n", strerror(errno));
 		exit(1);
 	} else
-		printf("%d controller%s found\n", cnt, (cnt==1)?"":"s");
+		printf("%d controller%s found\n", cnt, (cnt == 1) ? "" : "s");
 
 	di.id = cardnr;
 	result = ioctl(sock, IMGETDEVINFO, &di);
@@ -144,8 +143,7 @@ char *argv[];
 	addr.channel = 0;
 	addr.sapi = 0;
 	addr.tei = 127;
-	result = bind(sock, (struct sockaddr *) &addr,
-		 sizeof(addr));
+	result = bind(sock, (struct sockaddr *)&addr, sizeof(addr));
 	printf("bind return %d\n", result);
 
 	if (result < 0) {

@@ -1,5 +1,6 @@
 /*
  *
+ * Copyright 2015 Karsten Keil <keil@b1-systems.de>
  * Copyright 2008 Karsten Keil <kkeil@suse.de>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -44,23 +45,22 @@ static int dch_echo = 0;
 static void usage(pname)
 char *pname;
 {
-	fprintf(stderr,"Call with %s [options]\n",pname);
-	fprintf(stderr,"\n");
-	fprintf(stderr,"\n     Valid options are:\n");
-	fprintf(stderr,"\n");
-	fprintf(stderr,"  -?              Usage ; printout this information\n");
-	fprintf(stderr,"  -c<n>           use card number n (default 0)\n");
-	fprintf(stderr,"  -e              try using echo channel for TX data\n");
-	fprintf(stderr,"  -w <file>       write wiresharkdump <file>\n");
-	fprintf(stderr,"\n");
+	fprintf(stderr, "Call with %s [options]\n", pname);
+	fprintf(stderr, "\n");
+	fprintf(stderr, "\n     Valid options are:\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "  -?              Usage ; printout this information\n");
+	fprintf(stderr, "  -c<n>           use card number n (default 0)\n");
+	fprintf(stderr, "  -e              try using echo channel for TX data\n");
+	fprintf(stderr, "  -w <file>       write wiresharkdump <file>\n");
+	fprintf(stderr, "\n");
 }
 
-
-static void write_esc (FILE *file, unsigned char *buf, int len)
+static void write_esc(FILE * file, unsigned char *buf, int len)
 {
-    int i, byte;
+	int i, byte;
 
-    for (i = 0; i < len; ++i) {
+	for (i = 0; i < len; ++i) {
 		byte = buf[i];
 		if (byte == 0xff || byte == 0xfe) {
 			fputc(0xfe, file);
@@ -75,10 +75,10 @@ static void write_esc (FILE *file, unsigned char *buf, int len)
 	}
 }
 
-static void write_wfile(FILE *f, unsigned char *buf, int len, struct timeval *tv, int protocol)
+static void write_wfile(FILE * f, unsigned char *buf, int len, struct timeval *tv, int protocol)
 {
-	struct mISDNhead	*hh = (struct mISDNhead *)buf;
-	u_char			head[12], origin;
+	struct mISDNhead *hh = (struct mISDNhead *)buf;
+	u_char head[12], origin;
 
 	/* skip PH_DATA_REQ if PH_DATA_E_IND are expected */
 	if (dch_echo && (hh->prim == PH_DATA_REQ))
@@ -87,15 +87,13 @@ static void write_wfile(FILE *f, unsigned char *buf, int len, struct timeval *tv
 	if (!dch_echo && (hh->prim == PH_DATA_E_IND))
 		return;
 	/* skip all none data */
-	if ((hh->prim != PH_DATA_REQ) && (hh->prim != PH_DATA_IND) &&
-		    (hh->prim != PH_DATA_E_IND))
+	if ((hh->prim != PH_DATA_REQ) && (hh->prim != PH_DATA_IND) && (hh->prim != PH_DATA_E_IND))
 		return;
 
 	if (protocol == ISDN_P_NT_S0 || protocol == ISDN_P_NT_E1)
 		origin = hh->prim == PH_DATA_REQ ? 0 : 1;
 	else
-		origin = ((hh->prim == PH_DATA_REQ) ||
-				(hh->prim == PH_DATA_E_IND)) ? 1 : 0;
+		origin = ((hh->prim == PH_DATA_REQ) || (hh->prim == PH_DATA_E_IND)) ? 1 : 0;
 
 	len -= MISDN_HEADER_LEN;
 
@@ -109,26 +107,25 @@ static void write_wfile(FILE *f, unsigned char *buf, int len, struct timeval *tv
 	head[5] = (unsigned char)(0xff & (tv->tv_sec >> 16));
 	head[6] = (unsigned char)(0xff & (tv->tv_sec >> 8));
 	head[7] = (unsigned char)(0xff & tv->tv_sec);
-	head[8] = (unsigned char) 0;
-	head[9] = (unsigned char) origin;
-	head[10]= (unsigned char)(0xff & (len >> 8));
-	head[11]= (unsigned char)(0xff & len);
+	head[8] = (unsigned char)0;
+	head[9] = (unsigned char)origin;
+	head[10] = (unsigned char)(0xff & (len >> 8));
+	head[11] = (unsigned char)(0xff & len);
 
 	write_esc(f, head, 12);
 	write_esc(f, &buf[MISDN_HEADER_LEN], len);
 	fflush(f);
 }
 
-
 static void printhex(unsigned char *p, int len, int head)
 {
-	int	i,j;
+	int i, j;
 
 	for (i = 1; i <= len; i++) {
 		printf(" %02x", *p++);
-		if ((i!=len) && !(i % 4) && (i % 16))
+		if ((i != len) && !(i % 4) && (i % 16))
 			printf(" ");
-		if ((i!=len) && !(i % 16)) {
+		if ((i != len) && !(i % 16)) {
 			printf("\n");
 			for (j = 0; j < head; j++)
 				printf(" ");
@@ -138,81 +135,81 @@ static void printhex(unsigned char *p, int len, int head)
 }
 
 struct ctstamp {
-	size_t		cmsg_len;
-	int		cmsg_level;
-	int		cmsg_type;
-	struct timeval	tv;
+	size_t cmsg_len;
+	int cmsg_level;
+	int cmsg_type;
+	struct timeval tv;
 };
 
-int
-main(argc, argv)
+int main(argc, argv)
 int argc;
 char *argv[];
 {
-	int	aidx=1, idx, i, channel;
-	int	cardnr = 0;
-	int	log_socket;
-	struct sockaddr_mISDN  log_addr;
-	int	buflen = 512;
-	char	sw;
-	char	wfilename[512];
-	int	head = 0;
-	char	*pn, pns[32];
-	u_char	buffer[buflen];
-	struct msghdr	mh;
-	struct iovec	iov[1];
-	struct ctstamp	cts;
-	struct tm	*mt;
-	int	result;
-	int	opt;
-	u_int	cnt;
-	struct mISDN_devinfo	di;
-	struct mISDNhead 	*hh;
-	struct mISDNversion	ver;
-	FILE	*wfile = NULL;
+	int aidx = 1, idx, i, channel;
+	int cardnr = 0;
+	int log_socket;
+	struct sockaddr_mISDN log_addr;
+	int buflen = 512;
+	char sw;
+	char wfilename[512];
+	int head = 0;
+	char *pn, pns[32];
+	u_char buffer[buflen];
+	struct msghdr mh;
+	struct iovec iov[1];
+	struct ctstamp cts;
+	struct tm *mt;
+	int result;
+	int opt;
+	u_int cnt;
+	struct mISDN_devinfo di;
+	struct mISDNhead *hh;
+	struct mISDNversion ver;
+	FILE *wfile = NULL;
 
 	*wfilename = 0;
 	while (aidx < argc) {
-		if (argv[aidx] && argv[aidx][0]=='-') {
-			sw=argv[aidx][1];
+		if (argv[aidx] && argv[aidx][0] == '-') {
+			sw = argv[aidx][1];
 			switch (sw) {
-				case 'c':
-					if (argv[aidx][2]) {
-						cardnr=atol(&argv[aidx][2]);
-					}
-					break;
-				case 'w':
-					if (!argv[aidx][2]) {
-						idx = 0;
-						aidx++;
-					} else {
-						idx=2;
-					}
-					if (aidx<=argc) {
-						if (512 <= strlen(&argv[aidx][idx])) {
-							fprintf(stderr," -w filename too long\n");
-							exit(1);
-						}
-						strcpy(wfilename, &argv[aidx][idx]);
-					} else {
-						fprintf(stderr," Switch %c without value\n",sw);
+			case 'c':
+				if (argv[aidx][2]) {
+					cardnr = atol(&argv[aidx][2]);
+				}
+				break;
+			case 'w':
+				if (!argv[aidx][2]) {
+					idx = 0;
+					aidx++;
+				} else {
+					idx = 2;
+				}
+				if (aidx <= argc) {
+					if (512 <= strlen(&argv[aidx][idx])) {
+						fprintf(stderr, " -w filename too long\n");
 						exit(1);
 					}
-					break;
-				case 'e':
-					dch_echo = 1;
-					break;
-				case '?' :
-					usage(argv[0]);
+					strcpy(wfilename, &argv[aidx][idx]);
+				} else {
+					fprintf(stderr, " Switch %c without value\n", sw);
 					exit(1);
-					break;
-				default  : fprintf(stderr,"Unknown Switch %c\n",sw);
-					usage(argv[0]);
-					exit(1);
-					break;
+				}
+				break;
+			case 'e':
+				dch_echo = 1;
+				break;
+			case '?':
+				usage(argv[0]);
+				exit(1);
+				break;
+			default:
+				fprintf(stderr, "Unknown Switch %c\n", sw);
+				usage(argv[0]);
+				exit(1);
+				break;
 			}
-		}  else {
-			fprintf(stderr,"Undefined argument %s\n",argv[aidx]);
+		} else {
+			fprintf(stderr, "Undefined argument %s\n", argv[aidx]);
 			usage(argv[0]);
 			exit(1);
 		}
@@ -220,7 +217,7 @@ char *argv[];
 	}
 
 	if (cardnr < 0) {
-		fprintf(stderr,"card nr may not be negative\n");
+		fprintf(stderr, "card nr may not be negative\n");
 		exit(1);
 	}
 
@@ -235,7 +232,8 @@ char *argv[];
 		exit(1);
 	}
 	if (ver.release & MISDN_GIT_RELEASE)
-		printf("mISDN kernel version %d.%02d.%d (git.misdn.eu) found\n", ver.major, ver.minor, ver.release & ~MISDN_GIT_RELEASE);
+		printf("mISDN kernel version %d.%02d.%d (git.misdn.eu) found\n", ver.major, ver.minor,
+		       ver.release & ~MISDN_GIT_RELEASE);
 	else
 		printf("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
 
@@ -251,7 +249,7 @@ char *argv[];
 		printf("ioctl error %s\n", strerror(errno));
 		exit(1);
 	} else
-		printf("%d controller%s found\n", cnt, (cnt==1)?"":"s");
+		printf("%d controller%s found\n", cnt, (cnt == 1) ? "" : "s");
 
 	di.id = cardnr;
 	result = ioctl(log_socket, IMGETDEVINFO, &di);
@@ -272,7 +270,7 @@ char *argv[];
 
 	close(log_socket);
 
-	if (di.protocol == ISDN_P_NONE) /* default TE */
+	if (di.protocol == ISDN_P_NONE)	/* default TE */
 		di.protocol = ISDN_P_TE_S0;
 
 	if ((log_socket = socket(PF_ISDN, SOCK_DGRAM, di.protocol)) < 0) {
@@ -289,8 +287,7 @@ char *argv[];
 
 	while ((result < 0) && (channel >= 0)) {
 		log_addr.channel = (unsigned char)channel;
-		result = bind(log_socket, (struct sockaddr *) &log_addr,
-			sizeof(log_addr));
+		result = bind(log_socket, (struct sockaddr *)&log_addr, sizeof(log_addr));
 		printf("log bind ch(%i) return %d\n", log_addr.channel, result);
 		if (result < 0) {
 			printf("log bind error %s\n", strerror(errno));
@@ -345,75 +342,76 @@ char *argv[];
 				printf("received message with msg_flags(%x)\n", mh.msg_flags);
 			}
 			if (cts.cmsg_type == MISDN_TIME_STAMP) {
-				mt = localtime((time_t *)&cts.tv.tv_sec);
-				head = printf("%02d.%02d.%04d %02d:%02d:%02d.%06ld", mt->tm_mday, mt->tm_mon + 1, mt->tm_year + 1900,
-					mt->tm_hour, mt->tm_min, mt->tm_sec, cts.tv.tv_usec);
+				mt = localtime((time_t *) & cts.tv.tv_sec);
+				head =
+				    printf("%02d.%02d.%04d %02d:%02d:%02d.%06ld", mt->tm_mday, mt->tm_mon + 1, mt->tm_year + 1900,
+					   mt->tm_hour, mt->tm_min, mt->tm_sec, cts.tv.tv_usec);
 			} else {
 				cts.tv.tv_sec = 0;
 				cts.tv.tv_usec = 0;
 			}
 			switch (hh->prim) {
-				case PH_DATA_E_IND:
-					pn = "ECHO IND";
-					break;
-				case PH_DATA_IND:
-					pn = "DATA IND";
-					break;
-				case PH_DATA_REQ:
-					pn = "DATA REQ";
-					break;
-				case PH_DATA_CNF:
-					pn = "DATA CNF";
-					break;
-				case PH_ACTIVATE_IND:
-					pn = "ACTIVATE IND";
-					break;
-				case PH_ACTIVATE_REQ:
-					pn = "ACTIVATE REQ";
-					break;
-				case PH_ACTIVATE_CNF:
-					pn = "ACTIVATE CNF";
-					break;
-				case PH_DEACTIVATE_IND:
-					pn = "DEACTIVATE IND";
-					break;
-				case PH_DEACTIVATE_REQ:
-					pn = "DEACTIVATE REQ";
-					break;
-				case PH_DEACTIVATE_CNF:
-					pn = "DEACTIVATE CNF";
-					break;
-				case MPH_ACTIVATE_IND:
-					pn = "MPH ACTIVATE IND";
-					break;
-				case MPH_ACTIVATE_REQ:
-					pn = "MPH ACTIVATE REQ";
-					break;
-				case MPH_INFORMATION_REQ:
-					pn = "MPH INFORMATION REQ";
-					break;
-				case MPH_DEACTIVATE_IND:
-					pn = "MPH DEACTIVATE IND";
-					break;
-				case MPH_DEACTIVATE_REQ:
-					pn = "MPH DEACTIVATE REQ";
-					break;
-				case MPH_INFORMATION_IND:
-					pn = "MPH INFORMATION IND";
-					break;
-				case PH_CONTROL_REQ:
-					pn = "PH CONTROL REQ";
-					break;
-				case PH_CONTROL_IND:
-					pn = "PH CONTROL IND";
-					break;
-				case PH_CONTROL_CNF:
-					pn = "PH CONTROL CNF";
-					break;
-				default:
-					sprintf(pns,"Unknown %04x", hh->prim);
-					pn = pns;
-					break;
+			case PH_DATA_E_IND:
+				pn = "ECHO IND";
+				break;
+			case PH_DATA_IND:
+				pn = "DATA IND";
+				break;
+			case PH_DATA_REQ:
+				pn = "DATA REQ";
+				break;
+			case PH_DATA_CNF:
+				pn = "DATA CNF";
+				break;
+			case PH_ACTIVATE_IND:
+				pn = "ACTIVATE IND";
+				break;
+			case PH_ACTIVATE_REQ:
+				pn = "ACTIVATE REQ";
+				break;
+			case PH_ACTIVATE_CNF:
+				pn = "ACTIVATE CNF";
+				break;
+			case PH_DEACTIVATE_IND:
+				pn = "DEACTIVATE IND";
+				break;
+			case PH_DEACTIVATE_REQ:
+				pn = "DEACTIVATE REQ";
+				break;
+			case PH_DEACTIVATE_CNF:
+				pn = "DEACTIVATE CNF";
+				break;
+			case MPH_ACTIVATE_IND:
+				pn = "MPH ACTIVATE IND";
+				break;
+			case MPH_ACTIVATE_REQ:
+				pn = "MPH ACTIVATE REQ";
+				break;
+			case MPH_INFORMATION_REQ:
+				pn = "MPH INFORMATION REQ";
+				break;
+			case MPH_DEACTIVATE_IND:
+				pn = "MPH DEACTIVATE IND";
+				break;
+			case MPH_DEACTIVATE_REQ:
+				pn = "MPH DEACTIVATE REQ";
+				break;
+			case MPH_INFORMATION_IND:
+				pn = "MPH INFORMATION IND";
+				break;
+			case PH_CONTROL_REQ:
+				pn = "PH CONTROL REQ";
+				break;
+			case PH_CONTROL_IND:
+				pn = "PH CONTROL IND";
+				break;
+			case PH_CONTROL_CNF:
+				pn = "PH CONTROL CNF";
+				break;
+			default:
+				sprintf(pns, "Unknown %04x", hh->prim);
+				pn = pns;
+				break;
 			}
 			head += printf(" %s id=%08x", pn, hh->id);
 			if (wfile && (result > MISDN_HEADER_LEN))

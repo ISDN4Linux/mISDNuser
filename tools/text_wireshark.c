@@ -1,5 +1,6 @@
 /*
  *
+ * Copyright 2015 Karsten Keil <keil@b1-systems.de>
  * Copyright 2012 Karsten Keil <kkeil@suse.de>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -21,7 +22,6 @@
  *
  */
 
-
 /*
  * This tool is not specific to mISDN it does read a D-channel trace from a hex/text
  * file into binary wireshark format
@@ -31,8 +31,7 @@
  * > FCFF030F01FF01FF     05.06. 13:23:33
  * < FEFF030F01FF0285     05.06. 13:23:33
  *
- */ 
-
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,24 +46,22 @@
 #include <malloc.h>
 #include <time.h>
 
-
 static void usage(pname)
 char *pname;
 {
-	fprintf(stderr,"\n\nCall with %s [options] <infile> <outfile>\n",pname);
-	fprintf(stderr,"\n");
-	fprintf(stderr,"\n     Valid options are:\n");
-	fprintf(stderr,"\n");
-	fprintf(stderr,"  -?              Usage ; printout this information\n");
-	fprintf(stderr,"\n");
+	fprintf(stderr, "\n\nCall with %s [options] <infile> <outfile>\n", pname);
+	fprintf(stderr, "\n");
+	fprintf(stderr, "\n     Valid options are:\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "  -?              Usage ; printout this information\n");
+	fprintf(stderr, "\n");
 }
 
-
-static void write_esc (FILE *file, unsigned char *buf, int len)
+static void write_esc(FILE * file, unsigned char *buf, int len)
 {
-    int i, byte;
+	int i, byte;
 
-    for (i = 0; i < len; ++i) {
+	for (i = 0; i < len; ++i) {
 		byte = buf[i];
 		if (byte == 0xff || byte == 0xfe) {
 			fputc(0xfe, file);
@@ -79,9 +76,9 @@ static void write_esc (FILE *file, unsigned char *buf, int len)
 	}
 }
 
-static void write_wfile(FILE *f, unsigned char *buf, int len, struct timeval *tv, int origin)
+static void write_wfile(FILE * f, unsigned char *buf, int len, struct timeval *tv, int origin)
 {
-	u_char			head[12];
+	u_char head[12];
 
 	fputc(0xff, f);
 	head[0] = (unsigned char)(0xff & (tv->tv_usec >> 16));
@@ -92,17 +89,18 @@ static void write_wfile(FILE *f, unsigned char *buf, int len, struct timeval *tv
 	head[5] = (unsigned char)(0xff & (tv->tv_sec >> 16));
 	head[6] = (unsigned char)(0xff & (tv->tv_sec >> 8));
 	head[7] = (unsigned char)(0xff & tv->tv_sec);
-	head[8] = (unsigned char) 0;
-	head[9] = (unsigned char) origin & 0xff;
-	head[10]= (unsigned char)(0xff & (len >> 8));
-	head[11]= (unsigned char)(0xff & len);
+	head[8] = (unsigned char)0;
+	head[9] = (unsigned char)origin & 0xff;
+	head[10] = (unsigned char)(0xff & (len >> 8));
+	head[11] = (unsigned char)(0xff & len);
 
 	write_esc(f, head, 12);
 	write_esc(f, buf, len);
 	fflush(f);
 }
 
-static char *skip_space(char *buf) {
+static char *skip_space(char *buf)
+{
 	while (*buf) {
 		switch (*buf) {
 		case ' ':
@@ -132,7 +130,7 @@ static int getvalue(char *p)
 	return v;
 }
 
-static int analyse_line(char *line, u_char *buf, int *org, struct tm *tm)
+static int analyse_line(char *line, u_char * buf, int *org, struct tm *tm)
 {
 	char *p = line;
 	int len = 0, val;
@@ -148,7 +146,7 @@ static int analyse_line(char *line, u_char *buf, int *org, struct tm *tm)
 	p = skip_space(p);
 	if (*p == 0)
 		return len;
-	while(*p) {
+	while (*p) {
 		if (isspace(*p))
 			break;
 		val = getvalue(p);
@@ -173,41 +171,40 @@ static void normalize_tv(struct timeval *tv)
 	}
 }
 
-int
-main(argc, argv)
+int main(argc, argv)
 int argc;
 char *argv[];
 {
-	char	*infilename = NULL;
-	char	*outfilename = NULL;
+	char *infilename = NULL;
+	char *outfilename = NULL;
 	char sw;
-	char	line[4096];
-	u_char  buffer[512];
+	char line[4096];
+	u_char buffer[512];
 	struct timeval main_tv, cur_tv;
 	struct tm main_tm, cur_tm;
 	time_t sec, last_sec;
 	suseconds_t usec;
-	int	len, org, aidx = 1;
-	int	param = 0;
-	FILE	*ifile, *ofile;
+	int len, org, aidx = 1;
+	int param = 0;
+	FILE *ifile, *ofile;
 
 	while (aidx < argc) {
-		if (argv[aidx] && argv[aidx][0]=='-') {
-			sw=argv[aidx][1];
+		if (argv[aidx] && argv[aidx][0] == '-') {
+			sw = argv[aidx][1];
 			switch (sw) {
 			case '?':
 				usage(argv[0]);
 				exit(1);
 				break;
 			default:
-				fprintf(stderr,"Unknown Switch %c\n",sw);
+				fprintf(stderr, "Unknown Switch %c\n", sw);
 				usage(argv[0]);
 				exit(1);
 				break;
 			}
-		}  else {
+		} else {
 			if (strlen(argv[aidx]) >= 512) {
-				fprintf(stderr,"%s filename too long\n", param ? "out" : "in");
+				fprintf(stderr, "%s filename too long\n", param ? "out" : "in");
 				exit(1);
 			}
 			if (param == 0) {
@@ -215,7 +212,7 @@ char *argv[];
 			} else if (param == 1) {
 				outfilename = argv[aidx];
 			} else {
-				fprintf(stderr,"Too many parameter (%d)  item (%s)\n", argc - 1,  argv[aidx]);
+				fprintf(stderr, "Too many parameter (%d)  item (%s)\n", argc - 1, argv[aidx]);
 				usage(argv[0]);
 				exit(1);
 			}
@@ -225,22 +222,22 @@ char *argv[];
 	}
 
 	if (param < 2) {
-		fprintf(stderr,"Only %d parameter given but need <infile> and <outfile>\n", param);
+		fprintf(stderr, "Only %d parameter given but need <infile> and <outfile>\n", param);
 		exit(1);
 	}
 
 	ifile = fopen(infilename, "rt");
 	if (!ifile) {
-		fprintf(stderr,"cannot open %s for input - %s\n", infilename, strerror(errno));
+		fprintf(stderr, "cannot open %s for input - %s\n", infilename, strerror(errno));
 		exit(1);
-	} 
+	}
 
 	ofile = fopen(outfilename, "w");
 	if (!ofile) {
-		fprintf(stderr,"cannot open %s for output - %s\n", outfilename, strerror(errno));
+		fprintf(stderr, "cannot open %s for output - %s\n", outfilename, strerror(errno));
 		fclose(ifile);
 		exit(1);
-	} 
+	}
 	fprintf(ofile, "EyeSDN");
 	fflush(ofile);
 
@@ -251,7 +248,7 @@ char *argv[];
 	usec = 0;
 	while (1) {
 		if (!fgets(line, 4096, ifile)) {
-			fprintf(stderr,"EOF or error reading file %s\n", infilename);
+			fprintf(stderr, "EOF or error reading file %s\n", infilename);
 			break;
 		}
 		org = 0;

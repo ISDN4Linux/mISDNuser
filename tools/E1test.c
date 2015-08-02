@@ -1,5 +1,6 @@
 /*
  *
+ * Copyright 2015 Karsten Keil <keil@b1-systems.de>
  * Copyright 2011 Karsten Keil <kkeil@linux-pingi.de>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -42,7 +43,6 @@
 #include <mISDN/mISDNif.h>
 #include <mISDN/af_isdn.h>
 
-
 /* We do not have the all the ioctl controls mainstream yet so define it here.
  * It should still work then with the old standalone driver
  */
@@ -55,14 +55,12 @@
 #define MISDN_CTRL_L1_GET_SYNC_INFO	0x00010004
 #endif
 
-
 #define	FRAME_SIZE	32
 #define	SMFR_SIZE	(8 * FRAME_SIZE)
 #define MFR_SIZE	(2 * SMFR_SIZE)
 #define DATA_SIZE_125US	32
 #define DATA_SIZE_1MS	(8 * 32)
 #define DATA_SIZE_1S	(8000 * 32)
-
 
 #define MFR_SYNC_VALUE	0x2c
 #define MFR_SYNC_MASK	0xfc
@@ -103,18 +101,18 @@ enum FrameTypes {
 
 struct fr_cdesc {
 	enum FrameTypes type;
-	uint8_t		prop;
-	uint8_t		subcnt;
-	uint16_t	count;
+	uint8_t prop;
+	uint8_t subcnt;
+	uint16_t count;
 };
 
 struct fr_flatdesc {
 	enum FrameTypes type;	/* only basic frame types */
-	uint8_t		prop;
+	uint8_t prop;
 	enum FrameTypes otype;	/* original type from generation */
-	uint8_t		mf_pos;	/* 0 - 15 */
-	uint32_t	pos;
-	uint8_t		*data;
+	uint8_t mf_pos;		/* 0 - 15 */
+	uint32_t pos;
+	uint8_t *data;
 };
 
 #define ftPROP_NONE	0x00
@@ -126,10 +124,10 @@ struct fr_flatdesc {
 #define ftPROP_AIS	0x80	/* AIS */
 
 struct fr_data {
-	int			count;
-	struct fr_flatdesc	*desc;
-	size_t			data_size;
-	uint8_t			*data;
+	int count;
+	struct fr_flatdesc *desc;
+	size_t data_size;
+	uint8_t *data;
 };
 
 static struct fr_data *TestData;
@@ -234,7 +232,7 @@ struct fr_cdesc test2[] = {
 	{ftBIT2, ftPROP_FAIL, 1, 1},
 	{ftFAS, ftPROP_NONE, 1, 1},
 	{ftCtrl_End, ftPROP_NONE, 0, 0},
-	
+
 	{ftCtrl_Repeat, ftPROP_NONE, 0, 20},
 	{ftBIT2, ftPROP_NONE, 1, 1},
 	{ftFAS, ftPROP_NONE, 1, 1},
@@ -271,8 +269,8 @@ struct fr_cdesc test2[] = {
 	{ftBIT2, ftPROP_NONE, 1, 1},
 	{ftFAS, ftPROP_NONE, 1, 1},
 	{ftCtrl_End, ftPROP_NONE, 0, 0},
-	
-	{ftBIT2,ftPROP_NONE, 1, 1},
+
+	{ftBIT2, ftPROP_NONE, 1, 1},
 	{ftFRAME_B, ftPROP_TS31, 2, 16000},
 	{ftFRAME_C, ftPROP_TS31, 2, 6},
 	{ftFRAME_B, ftPROP_TS31, 2, 16000},
@@ -313,7 +311,7 @@ struct fr_cdesc test3[] = {
 	{ftFAS, ftPROP_FAIL, 1, 1},
 	{ftBIT2, ftPROP_NONE, 1, 1},
 	{ftMFB, ftPROP_NONE, 16, 250},
-	
+
 	{ftMFB, ftPROP_NONE, 16, 1},
 	{ftMFA, ftPROP_NONE, 16, 1},
 	{ftMFB, ftPROP_NONE, 16, 4},
@@ -323,11 +321,11 @@ struct fr_cdesc test3[] = {
 	{ftMFA, ftPROP_NONE, 16, 1},
 	{ftMFB, ftPROP_NONE, 16, 2},
 	{ftMFA, ftPROP_NONE, 16, 1},
-	
+
 	{ftMFA, ftPROP_NONE, 16, 1},
 	{ftMFB, ftPROP_NONE, 16, 2},
 	{ftMFA, ftPROP_NONE, 16, 2},
-	
+
 	{ftCtrl_Repeat, ftPROP_NONE, 0, 500},
 	{ftMFB, ftPROP_NONE, 16, 1},
 	{ftMFA, ftPROP_NONE, 16, 1},
@@ -335,7 +333,6 @@ struct fr_cdesc test3[] = {
 
 	{ftCtrl_Stop, ftPROP_NONE, 0, 0}
 };
-
 
 struct fr_cdesc test4[] = {
 	{ftFRAME_B, ftPROP_TS31, 2, 16000},
@@ -366,7 +363,7 @@ struct fr_cdesc test4[] = {
 	{ftFAS, ftPROP_FAIL, 1, 1},
 	{ftBIT2, ftPROP_NONE, 1, 1},
 	{ftMFB, ftPROP_NONE, 16, 250},
-	
+
 	{ftMFB, ftPROP_NONE, 16, 1},
 	{ftMFA, ftPROP_NONE, 16, 1},
 	{ftMFB, ftPROP_NONE, 16, 4},
@@ -376,11 +373,11 @@ struct fr_cdesc test4[] = {
 	{ftMFA, ftPROP_NONE, 16, 1},
 	{ftMFB, ftPROP_NONE, 16, 2},
 	{ftMFA, ftPROP_NONE, 16, 1},
-	
+
 	{ftMFA, ftPROP_NONE, 16, 1},
 	{ftMFB, ftPROP_NONE, 16, 2},
 	{ftMFA, ftPROP_NONE, 16, 2},
-	
+
 	{ftCtrl_Repeat, ftPROP_NONE, 0, 500},
 	{ftMFB, ftPROP_NONE, 16, 1},
 	{ftMFA, ftPROP_NONE, 16, 1},
@@ -389,15 +386,13 @@ struct fr_cdesc test4[] = {
 	{ftCtrl_Stop, ftPROP_NONE, 0, 0}
 };
 
-
 static uint8_t mfr_sync;
 static uint8_t startcnt = MFR_SYNC_BITS;
 
-static uint8_t	*inbuf, *ib_p, *ib_end;
-static int	ib_size, ib_pos;
-static uint8_t	*outbuf, *ob_p, *ob_end;
-static int	ob_size, ob_pos;
-
+static uint8_t *inbuf, *ib_p, *ib_end;
+static int ib_size, ib_pos;
+static uint8_t *outbuf, *ob_p, *ob_end;
+static int ob_size, ob_pos;
 
 enum FSyncState {
 	FSync_None,
@@ -411,42 +406,40 @@ enum MFRSyncState {
 	MFR_State_Sync
 };
 
-
 static enum FSyncState fsync_state = FSync_None;
 static enum MFRSyncState mfr_state = MFR_State_NotSync;
 
-static uint8_t	*last_mfrs;
+static uint8_t *last_mfrs;
 
 static int good_mfr, bad_mfr;
-
 
 static int debuglevel = 0;
 static int RawReadMode = 0;
 static int cardnr = 0;
-static char * WriteFileName = NULL;
+static char *WriteFileName = NULL;
 static int ListMode = 0;
 struct fr_cdesc *Test = test0;
 static void usage(char *pname)
 {
-	fprintf(stderr,"Call with %s [options]\n", pname);
-	fprintf(stderr,"\n");
-	fprintf(stderr,"\n     Valid options are:\n");
-	fprintf(stderr,"\n");
-	fprintf(stderr,"  --help    -?              Usage ; printout this information\n");
-	fprintf(stderr,"  --card   -c <number>      use card number # (default 0)\n");
-	fprintf(stderr,"  --flat   -f               list flat test frame description\n");
-	fprintf(stderr,"  --list   -l               list test frame description\n");
-	fprintf(stderr,"  --raw    -r               rawread only mode\n");
-	fprintf(stderr,"  --debug  -d <level>       debuglevel\n");
-	fprintf(stderr,"  --test   -t <test #>      generate data for test # (default 0)\n");
-	fprintf(stderr,"  --write  -w <file>        write <file>\n");
-	fprintf(stderr,"\n");
-	fprintf(stderr,"Tests:\n");
-	fprintf(stderr,"      0  - 10 seconds normal CRC4 framing\n");
-	fprintf(stderr,"      1  - TBR4 B.4.2 (table B.1)\n");
-	fprintf(stderr,"      2  - TBR4 B.5.2 (table B.2)\n");
-	fprintf(stderr,"      3  - TBR4 B.5.3 (table B.3)\n");
-	fprintf(stderr,"\n");
+	fprintf(stderr, "Call with %s [options]\n", pname);
+	fprintf(stderr, "\n");
+	fprintf(stderr, "\n     Valid options are:\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "  --help    -?              Usage ; printout this information\n");
+	fprintf(stderr, "  --card   -c <number>      use card number # (default 0)\n");
+	fprintf(stderr, "  --flat   -f               list flat test frame description\n");
+	fprintf(stderr, "  --list   -l               list test frame description\n");
+	fprintf(stderr, "  --raw    -r               rawread only mode\n");
+	fprintf(stderr, "  --debug  -d <level>       debuglevel\n");
+	fprintf(stderr, "  --test   -t <test #>      generate data for test # (default 0)\n");
+	fprintf(stderr, "  --write  -w <file>        write <file>\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "Tests:\n");
+	fprintf(stderr, "      0  - 10 seconds normal CRC4 framing\n");
+	fprintf(stderr, "      1  - TBR4 B.4.2 (table B.1)\n");
+	fprintf(stderr, "      2  - TBR4 B.5.2 (table B.2)\n");
+	fprintf(stderr, "      3  - TBR4 B.5.3 (table B.3)\n");
+	fprintf(stderr, "\n");
 }
 
 static int opt_parse(int ac, char *av[])
@@ -512,7 +505,7 @@ static int opt_parse(int ac, char *av[])
 			break;
 		case 't':
 			if (optarg) {
-				switch(*optarg) {
+				switch (*optarg) {
 				case '0':
 					Test = test0;
 					break;
@@ -547,9 +540,6 @@ static int opt_parse(int ac, char *av[])
 	return 0;
 }
 
-
-
-
 static void printbinary(char *name, uint32_t val, uint8_t bits)
 {
 	uint32_t m;
@@ -559,7 +549,7 @@ static void printbinary(char *name, uint32_t val, uint8_t bits)
 
 	printf("%s: ", name);
 
-	m = 1 << (bits -1);
+	m = 1 << (bits - 1);
 	while (m) {
 		printf("%c", val & m ? '1' : '0');
 		m >>= 1;
@@ -572,9 +562,9 @@ static void printhex(unsigned char *p, uint16_t idx, int len, int head)
 
 	for (i = 1; i <= len; i++) {
 		printf(" %02x", p[idx++]);
-		if ((i!=len) && !(i % 4) && (i % 16))
+		if ((i != len) && !(i % 4) && (i % 16))
 			printf(" ");
-		if ((i!=len) && !(i % 16)) {
+		if ((i != len) && !(i % 16)) {
 			printf("\n");
 			for (j = 0; j < head; j++)
 				printf(" ");
@@ -594,16 +584,16 @@ void calc_bitswap_table(void)
 	uint8_t v = 0;
 
 	do {
-		bitswap_tbl[v] =  (((v & 0x01) << 7) | ((v & 0x02) << 5) | ((v & 0x04) << 3) | ((v & 0x08) << 1) |
-			((v & 0x10) >> 1) | ((v & 0x20) >> 3) | ((v & 0x40) >> 5) | ((v & 0x80) >> 7));
+		bitswap_tbl[v] = (((v & 0x01) << 7) | ((v & 0x02) << 5) | ((v & 0x04) << 3) | ((v & 0x08) << 1) |
+				  ((v & 0x10) >> 1) | ((v & 0x20) >> 3) | ((v & 0x40) >> 5) | ((v & 0x80) >> 7));
 		v++;
 	} while (v != 0);
 }
 
-static uint8_t calc_crc4(uint8_t *data, uint16_t start, int len)
+static uint8_t calc_crc4(uint8_t * data, uint16_t start, int len)
 {
 	uint16_t i, idx = start;
-	uint8_t  b, crc4 = 0;
+	uint8_t b, crc4 = 0;
 
 	for (i = 0; i < len; i++) {
 		b = bitswap_tbl[data[idx]];
@@ -616,17 +606,17 @@ static uint8_t calc_crc4(uint8_t *data, uint16_t start, int len)
 	return crc4;
 };
 
-static uint8_t calc_and_set_crc4_smf(uint8_t *smf, uint8_t crc)
+static uint8_t calc_and_set_crc4_smf(uint8_t * smf, uint8_t crc)
 {
 	uint16_t i;
-	uint8_t  d, b, crc4 = 0;
+	uint8_t d, b, crc4 = 0;
 
 	for (i = 0; i < SMFR_SIZE; i++) {
 		d = smf[i];
-		if (!(i % 64)) { /* Cx bit */
+		if (!(i % 64)) {	/* Cx bit */
 			d &= 0xfe;
 			b = bitswap_tbl[d];
-			if (crc != 0xff) { /* no set if ff */
+			if (crc != 0xff) {	/* no set if ff */
 				if (crc & 8)
 					d |= 1;
 				crc <<= 1;
@@ -643,7 +633,7 @@ static uint8_t calc_and_set_crc4_smf(uint8_t *smf, uint8_t crc)
 }
 
 #ifdef NOT_USED_YET
-static uint8_t get_crc4_smf(uint8_t *smf)
+static uint8_t get_crc4_smf(uint8_t * smf)
 {
 	uint16_t i;
 	uint8_t crc4 = 0;
@@ -656,8 +646,8 @@ static uint8_t get_crc4_smf(uint8_t *smf)
 }
 #endif
 
-static int cur_Err = 0;// cur_RAI = 0;
-static int analyse_mfr(uint8_t *p)
+static int cur_Err = 0;		// cur_RAI = 0;
+static int analyse_mfr(uint8_t * p)
 {
 	uint16_t i, t0idx;
 	uint8_t d, crcfr[16];
@@ -682,7 +672,7 @@ static int analyse_mfr(uint8_t *p)
 		case ftAIS:
 			stim = "AIS";
 			break;
-		/* Basic Frames */
+			/* Basic Frames */
 		case ftFAS:
 			if (dsc->prop & ftPROP_FAIL)
 				stim = "/FAS";
@@ -695,21 +685,21 @@ static int analyse_mfr(uint8_t *p)
 			else
 				stim = "BIT 2";
 			break;
-		/* Sub multi frames */
+			/* Sub multi frames */
 		case ftSMFA:
 			stim = "SMF A";
 			break;
 		case ftSMFB:
 			stim = "SMF B";
 			break;
-		/* Multi frames */
+			/* Multi frames */
 		case ftMFA:
 			stim = "MF A";
 			break;
 		case ftMFB:
 			stim = "MF B";
 			break;
-		/* Frames */
+			/* Frames */
 		case ftFRAME_A:
 			stim = "FRAME A";
 			break;
@@ -724,8 +714,8 @@ static int analyse_mfr(uint8_t *p)
 			break;
 		}
 	}
-	
-	printf("Time:%6d ms {TX: %-7s} MFR %5d Error %3d ", ob_pos/DATA_SIZE_1MS, stim, good_mfr, bad_mfr);
+
+	printf("Time:%6d ms {TX: %-7s} MFR %5d Error %3d ", ob_pos / DATA_SIZE_1MS, stim, good_mfr, bad_mfr);
 	last_mfrs = p;
 	p -= MFR_SYNC_OFFSET * FRAME_SIZE;
 	for (i = 0; i < 16; i++) {
@@ -743,7 +733,7 @@ static int analyse_mfr(uint8_t *p)
 			}
 		} else {
 			C <<= 1;
-			C |= ( 0x1 & d);
+			C |= (0x1 & d);
 		}
 	}
 	cr0 = calc_and_set_crc4_smf(p, 0xff);
@@ -776,12 +766,12 @@ static int analyse_mfr(uint8_t *p)
 	return 0;
 }
 
-
 /*
  * Write one multiframe 16 * 2048 bit ; 512 bytes
  * returns the CRC4 for the next sub multiframe
  */
-uint8_t fill_outframe(uint8_t *of, uint8_t A, uint8_t E, uint8_t S, uint8_t F, uint8_t cr0, uint8_t MFRSW, uint8_t *dch, uint8_t def)
+uint8_t fill_outframe(uint8_t * of, uint8_t A, uint8_t E, uint8_t S, uint8_t F, uint8_t cr0, uint8_t MFRSW, uint8_t * dch,
+		      uint8_t def)
 {
 	uint16_t i, tidx;
 	static unsigned char p;
@@ -789,7 +779,7 @@ uint8_t fill_outframe(uint8_t *of, uint8_t A, uint8_t E, uint8_t S, uint8_t F, u
 
 	tidx = 0;
 	for (i = 0; i < 16; i++) {
-		if (i & 1) { /* NFAS */
+		if (i & 1) {	/* NFAS */
 			p = 0xf8 & S;
 			if (A & 0x80)
 				p |= 4;
@@ -810,7 +800,7 @@ uint8_t fill_outframe(uint8_t *of, uint8_t A, uint8_t E, uint8_t S, uint8_t F, u
 		of[tidx] = p;
 		tidx++;
 		for (j = 1; j < 32; j++) {
-			if (j == 16) { /* D channel */
+			if (j == 16) {	/* D channel */
 				of[tidx] = *dch;
 				dch++;
 			} else
@@ -987,7 +977,7 @@ static int process_data(int cnt)
 				break;
 			}
 			break;
-		default: /* not possible here */
+		default:	/* not possible here */
 			fprintf(stderr, "Line %d: Wrong state %d\n", __LINE__, frT[0]);
 			exit(1);
 			break;
@@ -1008,7 +998,7 @@ static int process_data(int cnt)
 						mfr_state = MFR_State_Sync;
 						good_mfr = 1;
 						analyse_mfr(ib_cp);
-					} else  if (dist == 16 * 32) {
+					} else if (dist == 16 * 32) {
 						good_mfr++;
 						analyse_mfr(ib_cp);
 					}
@@ -1050,7 +1040,7 @@ static int fill_buffer(unsigned char *p, int len)
 }
 
 /* returns next start frame */
-static uint8_t *fill_timeslot(uint8_t *p0, int ts, uint8_t *data, int datalen, int repeat)
+static uint8_t *fill_timeslot(uint8_t * p0, int ts, uint8_t * data, int datalen, int repeat)
 {
 	uint8_t *p = p0;
 	int i, cnt = repeat;
@@ -1065,8 +1055,8 @@ static uint8_t *fill_timeslot(uint8_t *p0, int ts, uint8_t *data, int datalen, i
 	return p;
 }
 
-uint8_t *fill_timeslot_ts0_smf(uint8_t *p0, int ts, int smf, uint8_t fas_err, uint8_t nfas_err, uint8_t mfsw,
-	uint8_t S, uint8_t A, uint8_t C, uint8_t E, int repeat)
+uint8_t *fill_timeslot_ts0_smf(uint8_t * p0, int ts, int smf, uint8_t fas_err, uint8_t nfas_err, uint8_t mfsw,
+			       uint8_t S, uint8_t A, uint8_t C, uint8_t E, int repeat)
 {
 	uint8_t *p = p0;
 	uint8_t i, d[8], a, c, e, n, f, m;
@@ -1087,8 +1077,8 @@ uint8_t *fill_timeslot_ts0_smf(uint8_t *p0, int ts, int smf, uint8_t fas_err, ui
 			m = mfsw >> 4;
 		}
 		for (i = 0; i < 8; i++) {
-			if (i & 1) { /* NFAS */
-				if (n & 8) /* nfas error */
+			if (i & 1) {	/* NFAS */
+				if (n & 8)	/* nfas error */
 					d[i] = 0;
 				else
 					d[i] = 2;
@@ -1106,8 +1096,8 @@ uint8_t *fill_timeslot_ts0_smf(uint8_t *p0, int ts, int smf, uint8_t fas_err, ui
 				if (a & 8)
 					d[i] |= 4;
 				a <<= 1;
-			} else { /* FAS */
-				if (f & 8) /* FAS error */
+			} else {	/* FAS */
+				if (f & 8)	/* FAS error */
 					d[i] = 0xc8;
 				else
 					d[i] = FR_FAS_VAL;
@@ -1124,7 +1114,7 @@ uint8_t *fill_timeslot_ts0_smf(uint8_t *p0, int ts, int smf, uint8_t fas_err, ui
 	return p;
 }
 
-static uint8_t *calc_and_set_crc4_ts(uint8_t *start, uint8_t ts, uint8_t *first_last_crc, int smf_count)
+static uint8_t *calc_and_set_crc4_ts(uint8_t * start, uint8_t ts, uint8_t * first_last_crc, int smf_count)
 {
 	uint8_t crc = *first_last_crc & 0xf;
 	uint8_t wrong_crc = *first_last_crc & 0xf0;
@@ -1141,12 +1131,12 @@ static uint8_t *calc_and_set_crc4_ts(uint8_t *start, uint8_t ts, uint8_t *first_
 	return p;
 }
 
-static int transmit(int sock, uint8_t *ob, uint16_t len)
+static int transmit(int sock, uint8_t * ob, uint16_t len)
 {
-	struct msghdr	mh;
-	struct iovec	iov[2];
+	struct msghdr mh;
+	struct iovec iov[2];
 	int ret;
-	struct mISDNhead hh = {PH_DATA_REQ, 1};
+	struct mISDNhead hh = { PH_DATA_REQ, 1 };
 
 	mh.msg_name = NULL;
 	mh.msg_namelen = 0;
@@ -1161,8 +1151,7 @@ static int transmit(int sock, uint8_t *ob, uint16_t len)
 	iov[1].iov_len = len;
 	ret = sendmsg(sock, &mh, 0);
 	if (ret != (len + MISDN_HEADER_LEN)) {
-		fprintf(stderr, "Send error %d (%d + %d) - %s\n", ret,
-			(int)MISDN_HEADER_LEN, len, strerror(errno));
+		fprintf(stderr, "Send error %d (%d + %d) - %s\n", ret, (int)MISDN_HEADER_LEN, len, strerror(errno));
 		ret = 0;
 	} else
 		ret = len;
@@ -1176,7 +1165,7 @@ static int last_dlen = 64;
 static int receive_ts0dch(int socket)
 {
 	int ret, cnt, head;
-	uint8_t	buffer[MAX_RECV_BUFFER_SIZE];
+	uint8_t buffer[MAX_RECV_BUFFER_SIZE];
 	struct mISDNhead *hh = (struct mISDNhead *)buffer;
 
 	ret = recv(socket, buffer, MAX_RECV_BUFFER_SIZE, 0);
@@ -1186,9 +1175,9 @@ static int receive_ts0dch(int socket)
 	}
 #if 0
 	if (cts.cmsg_type == MISDN_TIME_STAMP) {
-		mt = localtime((time_t *)&cts.tv.tv_sec);
+		mt = localtime((time_t *) & cts.tv.tv_sec);
 		head = printf("%02d.%02d.%04d %02d:%02d:%02d.%06ld", mt->tm_mday, mt->tm_mon + 1, mt->tm_year + 1900,
-			mt->tm_hour, mt->tm_min, mt->tm_sec, cts.tv.tv_usec);
+			      mt->tm_hour, mt->tm_min, mt->tm_sec, cts.tv.tv_usec);
 	} else {
 		cts.tv.tv_sec = 0;
 		cts.tv.tv_usec = 0;
@@ -1218,7 +1207,7 @@ static int receive_ts0dch(int socket)
 		if (!RawReadMode) {
 			ob_pos = ob_p - outbuf;
 			if ((ob_pos + last_dlen) >= ob_size) {
-				ret = -1; /* stop */
+				ret = -1;	/* stop */
 				last_dlen = ob_size - ob_pos;
 			}
 			if (debuglevel == 5) {
@@ -1271,7 +1260,7 @@ static void print_testdescription(struct fr_cdesc *arg)
 			case ftAIS:
 				fprintf(stdout, "%-8s", "AIS");
 				break;
-			/* Basic Frames */
+				/* Basic Frames */
 			case ftFAS:
 				if (dsc->prop & ftPROP_FAIL)
 					fprintf(stdout, "%-8s", "/FAS");
@@ -1284,21 +1273,21 @@ static void print_testdescription(struct fr_cdesc *arg)
 				else
 					fprintf(stdout, "%-8s", "BIT 2");
 				break;
-			/* Sub multi frames */
+				/* Sub multi frames */
 			case ftSMFA:
 				fprintf(stdout, "%-8s", "SMF A");
 				break;
 			case ftSMFB:
 				fprintf(stdout, "%-8s", "SMF B");
 				break;
-			/* Multi frames */
+				/* Multi frames */
 			case ftMFA:
 				fprintf(stdout, "%-8s", "MF A");
 				break;
 			case ftMFB:
 				fprintf(stdout, "%-8s", "MF B");
 				break;
-			/* Frames */
+				/* Frames */
 			case ftFRAME_A:
 				fprintf(stdout, "%-8s", "FRAME A");
 				break;
@@ -1336,8 +1325,8 @@ static void print_flatdescription(struct fr_flatdesc *dsc)
 		} else if (dsc->type == ftCtrl_Stop) {
 			fprintf(stdout, "End of test\n");
 			break;
-		} else if (dsc->type ==  ftAIS) {
-				fprintf(stdout, "%7d %2d %-6s", dsc->pos, dsc->mf_pos, "AIS");
+		} else if (dsc->type == ftAIS) {
+			fprintf(stdout, "%7d %2d %-6s", dsc->pos, dsc->mf_pos, "AIS");
 		} else if (dsc->type == ftFAS) {
 			if (dsc->prop & ftPROP_FAIL)
 				fprintf(stdout, "%7d %2d %-6s", dsc->pos, dsc->mf_pos, "/FAS");
@@ -1353,7 +1342,7 @@ static void print_flatdescription(struct fr_flatdesc *dsc)
 		case ftAIS:
 			fprintf(stdout, "[%-7s]", "AIS");
 			break;
-		/* Basic Frames */
+			/* Basic Frames */
 		case ftFAS:
 			if (dsc->prop & ftPROP_FAIL)
 				fprintf(stdout, "[%-7s]", "/FAS");
@@ -1366,21 +1355,21 @@ static void print_flatdescription(struct fr_flatdesc *dsc)
 			else
 				fprintf(stdout, "[%-7s]", "BIT 2");
 			break;
-		/* Sub multi frames */
+			/* Sub multi frames */
 		case ftSMFA:
 			fprintf(stdout, "[%-7s]", "SMF A");
 			break;
 		case ftSMFB:
 			fprintf(stdout, "[%-7s]", "SMF B");
 			break;
-		/* Multi frames */
+			/* Multi frames */
 		case ftMFA:
 			fprintf(stdout, "[%-7s]", "MF A");
 			break;
 		case ftMFB:
 			fprintf(stdout, "[%-7s]", "MF B");
 			break;
-		/* Frames */
+			/* Frames */
 		case ftFRAME_A:
 			fprintf(stdout, "[%-7s]", "FRAME A");
 			break;
@@ -1399,7 +1388,7 @@ static void print_flatdescription(struct fr_flatdesc *dsc)
 		if (dsc->prop & ftPROP_MFAS)
 			fprintf(stdout, " (MFAS Error)");
 		if (dsc->prop & ftPROP_TS31)
-				fprintf(stdout, " (TS 31)");
+			fprintf(stdout, " (TS 31)");
 		if (dsc->prop & ftPROP_START)
 			fprintf(stdout, " (Start Test)");
 		fprintf(stdout, "\n");
@@ -1499,7 +1488,7 @@ static struct fr_flatdesc *make_flat_description(struct fr_cdesc *test, struct f
 				break;
 			}
 			end = flat;
-			repeat[csp]--; /* one already done */
+			repeat[csp]--;	/* one already done */
 			while (repeat[csp]) {
 				seq = start[csp];
 				while (seq != end) {
@@ -1509,7 +1498,7 @@ static struct fr_flatdesc *make_flat_description(struct fr_cdesc *test, struct f
 					seq++;
 					flat++;
 					pos++;
-				} 
+				}
 				--repeat[csp];
 			}
 			csp--;
@@ -1517,7 +1506,7 @@ static struct fr_flatdesc *make_flat_description(struct fr_cdesc *test, struct f
 			for (cnt = 0; cnt < dsc->count; cnt++) {
 				switch (dsc->type) {
 				case ftAIS:
-				/* Basic Frames */
+					/* Basic Frames */
 				case ftFAS:
 				case ftBIT2:
 					flat->pos = pos;
@@ -1527,7 +1516,7 @@ static struct fr_flatdesc *make_flat_description(struct fr_cdesc *test, struct f
 					flat++;
 					pos++;
 					break;
-				/* Sub multi frames */
+					/* Sub multi frames */
 				case ftSMFA:
 					for (i = 0; i < 8; i++) {
 						flat->pos = pos;
@@ -1555,7 +1544,7 @@ static struct fr_flatdesc *make_flat_description(struct fr_cdesc *test, struct f
 						pos++;
 					}
 					break;
-				/* Multi frames */
+					/* Multi frames */
 				case ftMFA:
 					for (i = 0; i < 16; i++) {
 						flat->pos = pos;
@@ -1583,7 +1572,7 @@ static struct fr_flatdesc *make_flat_description(struct fr_cdesc *test, struct f
 						pos++;
 					}
 					break;
-				/* Frames */
+					/* Frames */
 				case ftFRAME_A:
 					flat->pos = pos;
 					flat->otype = dsc->type;
@@ -1649,11 +1638,11 @@ static struct fr_flatdesc *make_flat_description(struct fr_cdesc *test, struct f
 			flat->mf_pos = 0xff;
 			flat->mf_pos = 14;
 		} else if (flat->type == ftFAS) {
-			if (mfpos & 1) /* reset */
+			if (mfpos & 1)	/* reset */
 				mfpos = 0;
 		} else if (flat->type == ftBIT2) {
-			 if (!(mfpos & 1))
-			 	mfpos = 1;
+			if (!(mfpos & 1))
+				mfpos = 1;
 		}
 		flat->mf_pos = mfpos;
 		mfpos++;
@@ -1666,15 +1655,15 @@ static struct fr_flatdesc *make_flat_description(struct fr_cdesc *test, struct f
 
 static struct fr_data *gen_flat_frame_desc(struct fr_cdesc *dsc)
 {
-	struct fr_data		loc_frd, *frd;
-	struct fr_flatdesc	*flat_dsc;
-	int			cnt, sum, pre;
+	struct fr_data loc_frd, *frd;
+	struct fr_flatdesc *flat_dsc;
+	int cnt, sum, pre;
 
 	pre = calc_flatcount(preamble);
 	cnt = calc_flatcount(dsc);
 	sum = pre + cnt;
 	loc_frd.count = sum;
-	flat_dsc = calloc(sum + 2, sizeof(*flat_dsc)); /* reserve for stop */
+	flat_dsc = calloc(sum + 2, sizeof(*flat_dsc));	/* reserve for stop */
 	if (!flat_dsc) {
 		fprintf(stderr, "No memory to allocate %d * %zd bytes for flat description\n", loc_frd.count, sizeof(*flat_dsc));
 		return NULL;
@@ -1702,7 +1691,8 @@ static struct fr_data *gen_flat_frame_desc(struct fr_cdesc *dsc)
 	return frd;
 }
 
-static int gen_flat_frame_data(struct fr_data *frd) {
+static int gen_flat_frame_data(struct fr_data *frd)
+{
 	struct fr_flatdesc *flat;
 	size_t size;
 	int ret = 0;
@@ -1712,7 +1702,7 @@ static int gen_flat_frame_data(struct fr_data *frd) {
 	size = frd->count;
 	size *= FRAME_SIZE;
 	frd->data_size = size;
-	frd->data = malloc(size + 100 * FRAME_SIZE); /* Reserve to avoid crash when manipulate frames on the end */
+	frd->data = malloc(size + 100 * FRAME_SIZE);	/* Reserve to avoid crash when manipulate frames on the end */
 	if (!frd->data) {
 		fprintf(stderr, "No memory to allocate %zd + %d bytes\n", size, 100 * FRAME_SIZE);
 		flat = NULL;
@@ -1759,7 +1749,7 @@ static int gen_flat_frame_data(struct fr_data *frd) {
 		flat++;
 	}
 	p = frd->data;
-	crc = 0; /* start value */
+	crc = 0;		/* start value */
 	flat = frd->desc;
 	while (flat) {
 		if (flat->type == ftNone) {
@@ -1785,28 +1775,27 @@ static int gen_flat_frame_data(struct fr_data *frd) {
 			}
 		}
 		flat++;
-	}	
-	return ret;		
+	}
+	return ret;
 }
 
-int
-main(argc, argv)
+int main(argc, argv)
 int argc;
 char *argv[];
 {
-	int	i, channel;
-	int	log_socket;
-	struct sockaddr_mISDN  log_addr;
-	int	buflen = 4104;
-	u_char	buffer[buflen];
-	int	result;
-	int	cnt, dlen;
-	struct mISDN_devinfo	di;
-	struct mISDNhead 	*hh;
-	struct mISDNversion	ver;
+	int i, channel;
+	int log_socket;
+	struct sockaddr_mISDN log_addr;
+	int buflen = 4104;
+	u_char buffer[buflen];
+	int result;
+	int cnt, dlen;
+	struct mISDN_devinfo di;
+	struct mISDNhead *hh;
+	struct mISDNversion ver;
 	struct pollfd pfd[8];
 	int pfd_nr;
-	struct mISDN_ctrl_req	 creq;
+	struct mISDN_ctrl_req creq;
 
 	result = opt_parse(argc, argv);
 	if (result) {
@@ -1832,12 +1821,12 @@ char *argv[];
 	}
 	result = gen_flat_frame_data(TestData);
 	if (result) {
-		fprintf(stderr,"Error generating test data\n");
+		fprintf(stderr, "Error generating test data\n");
 		exit(1);
 	}
 
 	if (cardnr < 0) {
-		fprintf(stderr,"card nr may not be negative\n");
+		fprintf(stderr, "card nr may not be negative\n");
 		exit(1);
 	}
 
@@ -1852,7 +1841,8 @@ char *argv[];
 		exit(1);
 	}
 	if (ver.release & MISDN_GIT_RELEASE)
-		printf("mISDN kernel version %d.%02d.%d (git.misdn.eu) found\n", ver.major, ver.minor, ver.release & ~MISDN_GIT_RELEASE);
+		printf("mISDN kernel version %d.%02d.%d (git.misdn.eu) found\n", ver.major, ver.minor,
+		       ver.release & ~MISDN_GIT_RELEASE);
 	else
 		printf("mISDN kernel version %d.%02d.%d found\n", ver.major, ver.minor, ver.release);
 
@@ -1868,7 +1858,7 @@ char *argv[];
 		printf("ioctl error %s\n", strerror(errno));
 		exit(1);
 	} else
-		printf("%d controller%s found\n", cnt, (cnt==1)?"":"s");
+		printf("%d controller%s found\n", cnt, (cnt == 1) ? "" : "s");
 
 	di.id = cardnr;
 	result = ioctl(log_socket, IMGETDEVINFO, &di);
@@ -1903,10 +1893,10 @@ char *argv[];
 	ib_p = inbuf;
 	ib_cp = inbuf;
 	ib_end = outbuf + ib_size;
-	
+
 	/* Ready for transmit */
 	ob_p = outbuf;
-	
+
 	if ((log_socket = socket(PF_ISDN, SOCK_DGRAM, ISDN_P_B_RAW)) < 0) {
 		printf("could not open log socket %s\n", strerror(errno));
 		exit(1);
@@ -1919,7 +1909,7 @@ char *argv[];
 	channel = 0;
 
 	log_addr.channel = (unsigned char)channel;
-	result = bind(log_socket, (struct sockaddr *) &log_addr, sizeof(log_addr));
+	result = bind(log_socket, (struct sockaddr *)&log_addr, sizeof(log_addr));
 	printf("log bind ch(%i) return %d\n", log_addr.channel, result);
 	if (result < 0) {
 		printf("log bind error %s\n", strerror(errno));
@@ -1958,10 +1948,8 @@ char *argv[];
 		exit(1);
 	}
 
-
 	if (debuglevel)
-		fprintf(stdout,"MISDN_CTRL_GETOP ioctl supported operations %x\n", creq.op);
-
+		fprintf(stdout, "MISDN_CTRL_GETOP ioctl supported operations %x\n", creq.op);
 
 	/* This set the register values in the card so, that the TS0  is not in full transparent mode,
 	 * so the receiver can syncronize - this allows to get the TS0 data on byte boundaries, so bit shifting all
@@ -1970,14 +1958,14 @@ char *argv[];
 
 	creq.op = MISDN_CTRL_L1_TS0_MODE;
 	creq.channel = 0;
-	creq.p1 = 0x06; /* R_RX_SL0_CFG0 =  (V_AUTOSYNC | V_AUTO_RECO) */
-	creq.p2 = 0x31; /* R_TX_SL0_CFG1 = (V_TX_MF | V_TX_E | V_INV_E) */
+	creq.p1 = 0x06;		/* R_RX_SL0_CFG0 =  (V_AUTOSYNC | V_AUTO_RECO) */
+	creq.p2 = 0x31;		/* R_TX_SL0_CFG1 = (V_TX_MF | V_TX_E | V_INV_E) */
 	creq.unused = 0;
 	if (debuglevel)
-		fprintf(stdout,"L1 TS0  ioctl R_RX_SL0_CFG0=%02x R_TX_SL0_CFG1=%02x\n", creq.p1, creq.p2);
+		fprintf(stdout, "L1 TS0  ioctl R_RX_SL0_CFG0=%02x R_TX_SL0_CFG1=%02x\n", creq.p1, creq.p2);
 	result = ioctl(log_socket, IMCTRLREQ, &creq);
 	if (debuglevel)
-		fprintf(stdout,"L1 TS0  ioctl old register values R_RX_SL0_CFG0=%02x R_TX_SL0_CFG1=%02x\n", creq.p1, creq.p2);
+		fprintf(stdout, "L1 TS0  ioctl old register values R_RX_SL0_CFG0=%02x R_TX_SL0_CFG1=%02x\n", creq.p1, creq.p2);
 	if (result < 0) {
 		fprintf(stdout, "Error on MISDN_CTRL_L1_TS0_MODE ioctl - %s\n", strerror(errno));
 		close(log_socket);
@@ -1985,7 +1973,7 @@ char *argv[];
 	}
 
 	hh->prim = PH_ACTIVATE_REQ;
-	hh->id   = MISDN_ID_ANY;
+	hh->id = MISDN_ID_ANY;
 	result = sendto(log_socket, buffer, MISDN_HEADER_LEN, 0, NULL, 0);
 
 	if (result < 0) {
@@ -2007,13 +1995,12 @@ char *argv[];
 		exit(1);
 	}
 	if (debuglevel)
-		fprintf(stdout,"RX_OFF  result %d ioctl p1=%02x p2=%02x p3=%02x\n",
-			result, creq.p1, creq.p2, creq.unused);
+		fprintf(stdout, "RX_OFF  result %d ioctl p1=%02x p2=%02x p3=%02x\n", result, creq.p1, creq.p2, creq.unused);
 
 	creq.op = MISDN_CTRL_L1_GET_SYNC_INFO;
 	creq.channel = 0;
 	cnt = 0;
-	/* Wait for sync - this will make sure that we do not need bit shifting incomming data */ 
+	/* Wait for sync - this will make sure that we do not need bit shifting incomming data */
 	for (i = 0; i < 5000; i++) {
 		result = ioctl(log_socket, IMCTRLREQ, &creq);
 		if (result < 0) {
@@ -2022,8 +2009,7 @@ char *argv[];
 			exit(1);
 		}
 		if (debuglevel)
-			fprintf(stdout,"L1 GET_SYNC_INFO ioctl p1=%02x p2=%02x p3=%02x\n",
-				creq.p1, creq.p2, creq.unused);
+			fprintf(stdout, "L1 GET_SYNC_INFO ioctl p1=%02x p2=%02x p3=%02x\n", creq.p1, creq.p2, creq.unused);
 		if ((creq.p1 & 0xff07) == 0x2701) {
 			cnt++;
 			if (cnt == 3)
@@ -2035,11 +2021,11 @@ char *argv[];
 	};
 
 	if (cnt != 3) {
-		fprintf(stdout,"L1 ts0 sync state not reached\n");
+		fprintf(stdout, "L1 ts0 sync state not reached\n");
 		close(log_socket);
 		exit(1);
 	} else
-		fprintf(stdout,"L1 ts0 sync state reached (need %d iterations)\n", i);
+		fprintf(stdout, "L1 ts0 sync state reached (need %d iterations)\n", i);
 
 	/* reenable receive */
 	creq.op = MISDN_CTRL_RX_OFF;
@@ -2054,18 +2040,18 @@ char *argv[];
 		exit(1);
 	}
 	if (debuglevel)
-		fprintf(stdout,"RX_OFF  ioctl p1=%02x p2=%02x p3=%02x\n", creq.p1, creq.p2, creq.unused);
+		fprintf(stdout, "RX_OFF  ioctl p1=%02x p2=%02x p3=%02x\n", creq.p1, creq.p2, creq.unused);
 
 	creq.op = MISDN_CTRL_L1_TS0_MODE;
 	creq.channel = 0;
-	creq.p1 = 0x01; /* R_RX_SL0_CFG0 = (V_NO_INSYNC)  */
-	creq.p2 = 0x03; /* R_TX_SL0_CFG1 = (V_TX_MF | V_TRP_SL0) */
+	creq.p1 = 0x01;		/* R_RX_SL0_CFG0 = (V_NO_INSYNC)  */
+	creq.p2 = 0x03;		/* R_TX_SL0_CFG1 = (V_TX_MF | V_TRP_SL0) */
 	creq.unused = 0;
 	if (debuglevel)
-		fprintf(stdout,"L1 TS0  ioctl R_RX_SL0_CFG0=%02x R_TX_SL0_CFG1=%02x\n", creq.p1, creq.p2);
+		fprintf(stdout, "L1 TS0  ioctl R_RX_SL0_CFG0=%02x R_TX_SL0_CFG1=%02x\n", creq.p1, creq.p2);
 	result = ioctl(log_socket, IMCTRLREQ, &creq);
 	if (debuglevel)
-		fprintf(stdout,"L1 TS0  ioctl old register values R_RX_SL0_CFG0=%02x R_TX_SL0_CFG1=%02x\n", creq.p1, creq.p2);
+		fprintf(stdout, "L1 TS0  ioctl old register values R_RX_SL0_CFG0=%02x R_TX_SL0_CFG1=%02x\n", creq.p1, creq.p2);
 	if (result < 0) {
 		fprintf(stdout, "Error on MISDN_CTRL_L1_TS0_MODE ioctl - %s\n", strerror(errno));
 		close(log_socket);
@@ -2084,7 +2070,7 @@ char *argv[];
 		}
 		if (pfd[0].revents) {
 			dlen = receive_ts0dch(log_socket);
-			if (dlen < 1) /* end of data */
+			if (dlen < 1)	/* end of data */
 				break;
 		}
 	}
