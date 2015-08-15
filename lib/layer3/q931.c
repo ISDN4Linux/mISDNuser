@@ -711,22 +711,21 @@ mi_decode_progress(struct l3_msg *l3m, struct misdn_progress_info *progress)
 
 int
 mi_decode_bearer_capability(struct l3_msg *l3m, int *coding, int *capability, int *mode, int *rate,
-	int *oct_4a, int *oct_4b, int *oct_5, int *oct_5a, int *oct_5b1,
-	int *oct_5b2, int *oct_5c, int *oct_5d, int *oct_6, int *oct_7)
+	int *oct_4a, int *oct_4b, int *oct_5, int *oct_5a, int *oct_5b,
+	int *oct_5c, int *oct_5d, int *oct_6, int *oct_7)
 {
-	int opt[10];
+	int opt[9];
 	int i,j;
 	enum {
 		octet_4a  = 0,
 		octet_4b  = 1,
 		octet_5   = 2,
 		octet_5a  = 3,
-		octet_5b1 = 4,
-		octet_5b2 = 5,
-		octet_5c  = 6,
-		octet_5d  = 7,
-		octet_6   = 8,
-		octet_7   = 9
+		octet_5b  = 4,
+		octet_5c  = 5,
+		octet_5d  = 6,
+		octet_6   = 7,
+		octet_7   = 8
 	};
 
 	if (!l3m->bearer_capability || *l3m->bearer_capability < 2)
@@ -737,7 +736,7 @@ mi_decode_bearer_capability(struct l3_msg *l3m, int *coding, int *capability, in
 	_ASSIGN_PVAL(rate, l3m->bearer_capability[2] & 0x1f);
 
 	/* Now the optional octets */
-	for (j = 0; j < 10; j++)
+	for (j = 0; j < 9; j++)
 		opt[j] = -1;
 	i = 2;
 	if (*l3m->bearer_capability <= i)
@@ -781,8 +780,7 @@ done:
 	_ASSIGN_PVAL(oct_4b, opt[octet_4b]);
 	_ASSIGN_PVAL(oct_5, opt[octet_5]);
 	_ASSIGN_PVAL(oct_5a, opt[octet_5a]);
-	_ASSIGN_PVAL(oct_5b1, opt[octet_5b1]);
-	_ASSIGN_PVAL(oct_5b2, opt[octet_5b2]);
+	_ASSIGN_PVAL(oct_5b, opt[octet_5b]);
 	_ASSIGN_PVAL(oct_5c, opt[octet_5c]);
 	_ASSIGN_PVAL(oct_5d, opt[octet_5d]);
 	_ASSIGN_PVAL(oct_6, opt[octet_6]);

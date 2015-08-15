@@ -381,7 +381,7 @@ uint32_t q931CIPMask(struct mc_buf * mc)
 	 */
 
 	ret = mi_decode_bearer_capability(mc->l3m, NULL, &capability, &mode, &rate,
-					  NULL, NULL, &oct5, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+					  NULL, NULL, &oct5, NULL, NULL, NULL, NULL, NULL, NULL);
 
 	l = *mc->l3m->bearer_capability;
 	if (l > 13)

@@ -335,7 +335,7 @@ extern int mi_encode_notification_ind(struct l3_msg *, int);
 /* Common IE decode helpers */
 extern int mi_decode_progress(struct l3_msg *, struct misdn_progress_info *);
 extern int mi_decode_bearer_capability(struct l3_msg *, int *, int *, int *, int *, int *,
-	int *, int *, int *, int *, int *, int *, int *, int *, int *);
+	int *, int *, int *, int *, int *, int *, int *, int *);
 extern int mi_decode_hlc(struct l3_msg *l3m, int *, int *);
 extern int mi_decode_cause(struct l3_msg *, int *, int *, int *, int *, int *, unsigned char *);
 extern int mi_decode_channel_id(struct l3_msg *, struct misdn_channel_info *);
