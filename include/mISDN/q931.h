@@ -335,6 +335,8 @@ extern int mi_encode_notification_ind(struct l3_msg *, int);
 /* Common IE decode helpers */
 struct mbuffer;
 extern int parseQ931(struct mbuffer *);
+extern int l3_ie2pos(u_char);
+extern unsigned char l3_pos2ie(int);
 
 extern int mi_decode_progress(struct l3_msg *, struct misdn_progress_info *);
 extern int mi_decode_bearer_capability(struct l3_msg *, int *, int *, int *, int *, int *,
