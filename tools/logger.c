@@ -238,9 +238,9 @@ static int my_lib_debug(const char *file, int line, const char *func, int level,
 			ll = LOG_DEBUG;
 			break;
 		}
-		syslog(ll, "%20s:%3d %s\n", file, line, log);
+		syslog(ll, "%s:%d %s\n", file, line, log);
 	} else {
-		fprintf(stderr, "%20s:%3d %s\n", file, line, log);
+		fprintf(stderr, "%s:%d %s\n", file, line, log);
 	}
 	return ret;
 }
@@ -354,10 +354,19 @@ static int logprint(struct mController *mc, const char *fmt, ...)
  * fmt 1 log each octet with one space before
  * fmt n log each octet with one space before and a extra space every n octets
  */
-static void loghex(struct mController *mc, unsigned char *p, int len, int fmt)
+static void loghex(struct mController *mc, char *head, unsigned char *p, int len, int fmt, int ie_idx)
 {
 	int i, rest, n = 1;
 
+	if (head)
+		if (0 > logprint(mc, "%s", head))
+			return;
+
+	if ((ie_idx >= 0) && (mc->layer3[ie_idx] & l3vHEX)) {
+		/* do not dump if hexdump was reqeusted too */
+		mc->lp--; /* remove ':' */
+		return;
+	}
 	rest = LOGTXT_SIZE - (mc->lp - mc->logtxt);
 	while (rest > 3 && len) {
 		if (fmt)
@@ -485,16 +494,16 @@ static const char MTidx[] = {
 };
 
 
-static int log_coding(struct mController *mc, char *ie, int cstd, int loc)
+static int log_coding(struct mController *mc, char *head, int cstd, int loc, int typ, int plan)
 {
 	int ret = 0;
-	if (ie) {
-		ret = logprint(mc, " %s:", ie);
+	if (head) {
+		ret = logprint(mc, " %s:", head);
 		 if (ret < 0)
 		 	return -1;
 	}
 	if (cstd >= 0) {
-		switch(cstd) {
+		switch(cstd & 3) {
 		case 0:
 			ret = logprint(mc, " Std:CCITT");
 			break;
@@ -504,7 +513,7 @@ static int log_coding(struct mController *mc, char *ie, int cstd, int loc)
 		case 2:
 			ret = logprint(mc, " Std:national");
 			break;
-		default:
+		case 3:
 			ret = logprint(mc, " Std:other");
 			break;
 		}
@@ -537,27 +546,57 @@ static int log_coding(struct mController *mc, char *ie, int cstd, int loc)
 		ret = logprint(mc, " Loc:network beyond interworking point,");
 		break;
 	default:
-		ret = logprint(mc, " Loc:reserved,");
+		ret = logprint(mc, " Loc:reserved(%d),", loc);
+		break;
+	}
+	switch(typ) {
+	case -1: /* skip */
+		break;
+	case 0:
+		ret = logprint(mc, " Type:user");
+		break;
+	case 2:
+		ret = logprint(mc, " Type:national");
+		break;
+	case 3:
+		ret = logprint(mc, " Type:international");
+		break;
+	default:
+		ret = logprint(mc, " Type:reserved(%d),", typ);
+		break;
+	}
+	switch(plan) {
+	case -1: /* skip */
+		break;
+	case 0:
+		ret = logprint(mc, " Plan:unknown,");
+		break;
+	case 2:
+		ret = logprint(mc, " Plan:Carrier identification code");
+		break;
+	case 3:
+		ret = logprint(mc, " Plan:Data network identification code(X.121)");
+		break;
+	default:
+		ret = logprint(mc, " Plan:reserved(%d),", plan);
 		break;
 	}
 	return ret;
 }
 
-static int log_bearer_capability(struct mController *mc, struct l3_msg *l3m)
+static void log_bearer_capability(struct mController *mc, unsigned char *p)
 {
 	int ret, r, m, l, i, o;
-	unsigned char *p = l3m->bearer_capability ;
 
 	l = *p++;
-	if (0 > log_coding(mc, "bearerCap", (*p & 0x60) >> 5, -1))
-		return -1;
+	if (0 > log_coding(mc, "bearerCap", (*p & 0x60) >> 5, -1, -1, -1))
+		return;
 	if (0 > logprint(mc, " %s", mi_bearer2str(*p & 0x1f)))
-		return -1;
+		return;
 
 	if (l < 2) {
-		if (0 > logprint(mc, " bearerCap too short")) 
-			return -1;
-		return 0;
+		logprint(mc, " bearerCap too short");
+		return;
 	}
 	l -= 2;
 	/* octet 4 */
@@ -566,10 +605,10 @@ static int log_bearer_capability(struct mController *mc, struct l3_msg *l3m)
 	r = *p & 0x1f;
 	if (m == 0x40) {
 		if (0 > logprint(mc, " packet mode"))
-			return -1;
+			return;
 	} else if (m == 0) {
 		if (0 > logprint(mc, " circuit mode rate:"))
-			return -1;
+			return;
 		switch(r) {
 		case 0x10:
 			ret = logprint(mc, "64Kbit/s");
@@ -591,23 +630,23 @@ static int log_bearer_capability(struct mController *mc, struct l3_msg *l3m)
 			break;
 		}
 		if (ret < 0)
-			return -1;
+			return;
 	} else {
 		if (0 > logprint(mc, " undefined mode"))
-			return -1;
+			return;
 	}
 	if (l && !(*p & 0x80)) {
 		/* octet 4a */
 		l--;
 		p++;
 		if (0 > logprint(mc, " octet4a=0x%02x"))
-			return -1;
+			return;
 		if (l && !(*p & 0x80)) {
 			/* octet 4b */
 			l--;
 			p++;
 			if (0 > logprint(mc, " octet4a=0x%02x"))
-				return -1;
+				return;
 		}
 	}
 	/* octet 5 */
@@ -617,7 +656,7 @@ static int log_bearer_capability(struct mController *mc, struct l3_msg *l3m)
 		i = (*p & 0x60) >> 5;
 		m = *p & 0x1f;
 		if (0 > logprint(mc, " L%d ", i))
-			return -1;
+			return;
 		if (i == 1) {
 			switch(m) {
 			case 1:
@@ -646,65 +685,57 @@ static int log_bearer_capability(struct mController *mc, struct l3_msg *l3m)
 				break;
 			}
 			if (ret < 0)
-				return -1;
+				return;
 			o = 'a';
 			while((l > 0) && !(*p & 0x80)) {
 				l--;
 				p++;
 				if (0 > logprint(mc, " octet5%c=0x%02x", o, *p))
-					return -1;
+					return;
 				o++;
 			}
 		} else if (i == 2) {
 			switch(m) {
 			case 2:
-				ret = logprint(mc, "protocol Q.921");
+				logprint(mc, "protocol Q.921");
 				break;
 			case 6:
-				ret = logprint(mc, "protocol X.25");
+				logprint(mc, "protocol X.25");
 				break;
 			default:
-				ret = logprint(mc, "protocol reserved (%d)", m);
+				logprint(mc, "protocol reserved (%d)", m);
 				break;
 			}
-			if (ret < 0)
-				return -1;
 		} else if (i == 3) {
 			switch(m) {
 			case 2:
-				ret = logprint(mc, "protocol Q.931");
+				logprint(mc, "protocol Q.931");
 				break;
 			case 6:
-				ret = logprint(mc, "protocol X.25");
+				logprint(mc, "protocol X.25");
 				break;
 			default:
-				ret = logprint(mc, "protocol reserved (%d)", m);
+				logprint(mc, "protocol reserved (%d)", m);
 				break;
 			}
-			if (ret < 0)
-				return -1;
 		} else {
-			if (0 > logprint(mc, "invalid"))
-				return -1;
-			break;
+			logprint(mc, "invalid");
 		}
 	}
-	return 0;
 }
 
-static int log_cause(struct mController *mc, struct l3_msg *l3m)
+static void log_cause(struct mController *mc, unsigned char *p)
 {
-	unsigned char *p = l3m->cause;
 	int ret, c, loc, l = *p++;
 
 	c = (*p & 0x60) >> 5;
 	loc = *p & 0xf;
 	l--;
-	ret = log_coding(mc, "cause", c, loc);
+	ret = log_coding(mc, "cause", c, loc, -1, -1);
 	if (ret < 0)
-		return -1;
+		return;
 	if (ret < 0)
-		return -1;
+		return;
 	if (l && !(*p & 0x80)) {
 		/* octet 3a */
 		l--;
@@ -725,7 +756,7 @@ static int log_cause(struct mController *mc, struct l3_msg *l3m)
 			break;
 		}
 		if (ret < 0)
-			return -1;
+			return;
 	}
 	if (l) {
 		p++;
@@ -789,63 +820,48 @@ static int log_cause(struct mController *mc, struct l3_msg *l3m)
 			break;
 		}
 		if (ret < 0)
-			return -1;
+			return;
 	} else {
-		if (0 > logprint(mc, " no Value"))
-			return -1;
-		return 0;
+		logprint(mc, " no Value");
+		return;
 	}
-	if (l) {
-		if (0 > logprint(mc, " diagnostic:"))
-			return -1;
-		loghex(mc, p, l, 0);
-	}
-	return 0;
+	if (l)
+		loghex(mc, " diagnostic:", p, l, 0, -1);
 }
 
-static int log_inhex(struct mController *mc, char *head, unsigned char *p, int len)
+static void log_call_state(struct mController *mc, unsigned char *p, struct l3_msg *l3m)
 {
-	if (head)
-		if (0 > logprint(mc, "%s", head))
-			return -1;
-	loghex(mc, p, len, 0);
-	return 0;
-}
-
-static int log_call_state(struct mController *mc, struct l3_msg *l3m)
-{
-	unsigned char s, *p = l3m->call_state;
+	char s;
 	int ret, c, st;
 
 	p++;
 	c = (*p & 0x60) >> 5;
 	st = *p & 0x1f;
-	ret = log_coding(mc, "callState", c, -1);
+	ret = log_coding(mc, "callState", c, -1, -1, -1);
 	if (ret < 0)
-		return -1;
+		return;
 	if (mc->protocol == ISDN_P_NT_S0 || mc->protocol == ISDN_P_NT_E1)
 		s = 'N';
 	else
 		s = 'U';
 	if (st > 0 && st < 26)
-		ret = logprint(mc, " %c%d", s, st);
+		logprint(mc, " %c%d", s, st);
 	else if (st == 0) {
 		if (l3m->pid == MISDN_PID_GLOBAL)
-			ret = logprint(mc, " REST 0");
+			logprint(mc, " REST 0");
 		else
-			ret = logprint(mc, " %c0", s);
+			logprint(mc, " %c0", s);
 	} else if (l3m->pid != MISDN_PID_GLOBAL)
-		ret = logprint(mc, " unknown state %c%d", s, st);
+		logprint(mc, " unknown state %c%d", s, st);
 	else if (st == 0x1d || st == 0x1e)
-		ret = logprint(mc, " REST %d", st & 3);
+		logprint(mc, " REST %d", st & 3);
 	else
-		ret = logprint(mc, " unknown state REST %d", st);
-	return ret;
+		logprint(mc, " unknown state REST %d", st);
 }
 
-static int log_channel_id(struct mController *mc, struct l3_msg *l3m)
+static void log_channel_id(struct mController *mc, unsigned char *p)
 {
-	unsigned char ift, excl, dch, *p = l3m->channel_id;
+	unsigned char ift, excl, dch;
 	char *cu;
 	int ret, ch, st, l = *p++;
 
@@ -854,12 +870,12 @@ static int log_channel_id(struct mController *mc, struct l3_msg *l3m)
 	dch = *p & 0x04;
 	ch = *p & 0x3;
 	l--;
-	ret = log_coding(mc, "channelID", -1, -1);
+	ret = log_coding(mc, "channelID", -1, -1, -1, -1);
 	if (ret < 0)
-		return -1;
+		return;
 	ret = logprint(mc, " %s,%s", ift ? "primary" : "basic", excl ? "exclusiv" : "prefered");
 	if (ret < 0)
-		return -1;
+		return;
 	if (dch) {
 		ret = logprint(mc, ",D channel");
 	} else if (!ift) {
@@ -880,9 +896,9 @@ static int log_channel_id(struct mController *mc, struct l3_msg *l3m)
 		l--;
 		st = *p++;
 		ch = *p;
-		ret = log_coding(mc, NULL, (*p & 0x60) >> 5, -1);
+		ret = log_coding(mc, NULL, (*p & 0x60) >> 5, -1, -1, -1);
 		if (ret < 0)
-			return -1;
+			return;
 		switch(st & 0xf) {
 		case 3:
 			cu = ",B";
@@ -900,10 +916,9 @@ static int log_channel_id(struct mController *mc, struct l3_msg *l3m)
 			cu = ",unknown channel units";
 			 break;
 		}
-		ret = logprint(mc, " %s %d", cu, ch & 0x7f);
+		logprint(mc, " %s %d", cu, ch & 0x7f);
 	} else
-		ret = logprint(mc, " channelIE too short");
-	return ret;
+		logprint(mc, " channelIE too short");
 }
 
 struct _lookup_table {
@@ -911,7 +926,7 @@ struct _lookup_table {
 	const char *s;
 };
 
-static struct _lookup_table _asn1_operations[] = {
+static struct _lookup_table ets_asn1_operations[] = {
 	{Fac_MaliciousCallId, "MaliciousCallId"},
 	{Fac_Begin3PTY, "Begin3PTY"},
 	{Fac_End3PTY, "End3PTY"},
@@ -965,9 +980,10 @@ static struct _lookup_table _asn1_operations[] = {
 	{-1, "unknown operation"}
 };
 
-static const char *get_asn1_operation_string(int val)
+static const char *get_lookup_str(int val, struct _lookup_table *tab)
 {
-	struct _lookup_table *item = _asn1_operations;
+	struct _lookup_table *item = tab;
+
 	while(item->v != -1) {
 		if (item->v == val)
 			break;
@@ -976,28 +992,28 @@ static const char *get_asn1_operation_string(int val)
 	return item->s;
 }
 
-static int log_facility(struct mController *mc, struct l3_msg *l3m, int idx)
+static void log_facility(struct mController *mc, unsigned char *p, int idx)
 {
-	unsigned char *p = l3m->facility;
 	char *cp, *ops;
 	const char *opstr;
-	int id, op, ret = 0, l = *p++;
+	int id, op, ret = 0, l = *p;
 	struct asn1_parm ap;
 
-	if (0 > logprint(mc, " facilityIE:"))
-		return -1;
-	ret = decodeFac(l3m->facility, &ap);
+	if (0 > logprint(mc, " facility:"))
+		return;
+	ret = decodeFac(p, &ap);
+	p++;
 	if (ret < 0) {
 		if (0 > logprint(mc, " error %d on decode", ret))
-			return -1;
+			return;
 		if (mc->layer3[idx] & l3vHEX)
-			ret = logprint(mc, " not dumped ");
+			ret = logprint(mc, " not dumped");
 		else
-			loghex(mc, p, l, 4);
+			loghex(mc, "hex:", p, l, 4, -1);
 	} else {
 		ret = logprint(mc, " decode OK %s", ap.Valid ? "and valid": "but invalid");
 		if (ret < 0)
-			return -1;
+			return;
 		if (ap.Valid) {
 			cp = "unknown";
 			ops = cp;
@@ -1010,13 +1026,13 @@ static int log_facility(struct mController *mc, struct l3_msg *l3m, int idx)
 				id = ap.u.inv.invokeId;
 				op = ap.u.inv.operationValue;
 				ops = "operation";
-				opstr = get_asn1_operation_string(op);
+				opstr = get_lookup_str(op, ets_asn1_operations);
 				break;
 			case CompReturnResult:
 				cp = "ReturnResult";
 				id = ap.u.retResult.invokeId;
 				op = ap.u.retResult.operationValue;
-				opstr = get_asn1_operation_string(op);
+				opstr = get_lookup_str(op, ets_asn1_operations);
 				ops = "operation";
 				break;
 			case CompReturnError:
@@ -1032,139 +1048,183 @@ static int log_facility(struct mController *mc, struct l3_msg *l3m, int idx)
 				ops = "problem";
 				break;
 			}
-			ret = logprint(mc, " %s id=%d %s %x %s", cp, id, ops, op, opstr);
+			logprint(mc, " %s id=%d %s %x %s", cp, id, ops, op, opstr);
 		}
 	}
-	return ret;
 }
 
-static int log_progress(struct mController *mc, struct l3_msg *l3m)
+static void log_progress(struct mController *mc, unsigned char *p)
 {
-	unsigned char *p = l3m->progress;
 	int ret, c, loc, l = *p++;
 
 	c = (*p & 0x60) >> 5;
 	loc = *p & 0xf;
-	ret = log_coding(mc, "progress", c, loc);
+	ret = log_coding(mc, "progress", c, loc, -1, -1);
 	if (ret < 0)
-		return -1;
+		return;
 	if (!l)
-		ret = logprint(mc, " too short");
+		logprint(mc, " too short");
 	else {
 		p++;
 		switch(*p & 0x7f) {
 		case 1:
-			ret = logprint(mc, "'Call is not end-to-end ISDN: further progress information may be available in-band'");
+			logprint(mc, "'Call is not end-to-end ISDN: further progress information may be available in-band'");
 			break;
 		case 2:
-			ret = logprint(mc, "'Destination address is non-ISDN'");
+			logprint(mc, "'Destination address is non-ISDN'");
 			break;
 		case 3:
-			ret = logprint(mc, "'Origination address is non-ISDN'");
+			logprint(mc, "'Origination address is non-ISDN'");
 			break;
 		case 4:
-			ret = logprint(mc, "'Call has returned to the ISDN'");
+			logprint(mc, "'Call has returned to the ISDN'");
 			break;
 		case 5:
-			ret = logprint(mc, "'Interworking has occurred and has resulted in a telecommunication service change'");
+			logprint(mc, "'Interworking has occurred and has resulted in a telecommunication service change'");
 			break;
 		case 8:
-			ret = logprint(mc, "'In-band information or appropriate pattern now available'");
+			logprint(mc, "'In-band information or appropriate pattern now available'");
 			break;
 		default:
-			ret = logprint(mc, "'unknown progress description: %02x'", *p & 0x7f);
+			logprint(mc, "'unknown progress description: %02x'", *p & 0x7f);
 			break;
 		}
 	}
-	return ret;
 }
 
-static int log_net_fac(struct mController *mc, struct l3_msg *l3m)
+static void log_net_fac(struct mController *mc, unsigned char *p)
 {
-	unsigned char *p = l3m->net_fac;
 	int ret = 0, t, pl, il, l = *p++;
 
 	il = *p++;
 	l--;
-	ret = logprint(mc, " networkSpecificFacility: ");
-	if (ret < 0)
-		return -1;
 	if (il) {
 		t = (*p & 70) >> 4;
 		pl = *p & 0xf;
 		il--;
 		l--;
-		ret = logprint(mc, "networkidentification:%d plan:%d id:", t, pl);
+		ret = log_coding(mc, "networkSpecificFacility", -1, -1, t, pl);
 		if (ret < 0)
-			return -1;
+			return;
 		p++;
 		while (il && l) {
 			ret = logprint(mc, "%c", *p++ & 0x7f);
 			if (ret < 0)
-				return -1;
+				return;
 			il--;
 			l--;
 		}
+	} else {
+		ret = logprint(mc, " networkSpecificFacility: ");
+		if (ret < 0)
+			return;
 	}
 	if (l)
-		loghex(mc, p, l, 0);
-	return ret;
+		loghex(mc, "content:", p, l, 0, -1);
 }
 
-static int log_notify(struct mController *mc, struct l3_msg *l3m)
+static void log_notify(struct mController *mc, unsigned char *p)
 {
-	unsigned char *p = l3m->notify;
-	int ret = 0;
-	
 	p++;
 	switch(*p & 0x7f) {
 	case 0:
-		ret = logprint(mc, " notify:'user suspended'");
+		logprint(mc, " notify:'user suspended'");
 		break;
 	case 1:
-		ret = logprint(mc, " notify:'user resumed'");
+		logprint(mc, " notify:'user resumed'");
 		break;
 	case 2:
-		ret = logprint(mc, " notify:'bearer service changed'");
+		logprint(mc, " notify:'bearer service changed'");
+		break;
+	case 3:
+		logprint(mc, " notify:'BER encoded extension'");
+		break;
+	case 4:
+		logprint(mc, " notify:'Call completion delay'");
+		break;
+	case 0x42:
+		logprint(mc, " notify:'Conference established'");
+		break;
+	case 0x43:
+		logprint(mc, " notify:'Conference disconnected'");
+		break;
+	case 0x44:
+		logprint(mc, " notify:'Other party added'");
+		break;
+	case 0x45:
+		logprint(mc, " notify:'Isolated'");
+		break;
+	case 0x46:
+		logprint(mc, " notify:'Reattached'");
+		break;
+	case 0x47:
+		logprint(mc, " notify:'Other party isolated'");
+		break;
+	case 0x48:
+		logprint(mc, " notify:'Other party reattached'");
+		break;
+	case 0x49:
+		logprint(mc, " notify:'Other party split'");
+		break;
+	case 0x4a:
+		logprint(mc, " notify:'Other party disconnected'");
+		break;
+	case 0x60:
+		logprint(mc, " notify:'Call is a waiting call'");
+		break;
+	case 0x68:
+		logprint(mc, " notify:'Diversion activated'");
+		break;
+	case 0x69:
+		logprint(mc, " notify:'Call transferred, alerting'");
+		break;
+	case 0x6a:
+		logprint(mc, " notify:'Call transferred, active'");
+		break;
+	case 0x79:
+		logprint(mc, " notify:'Remote hold'");
+		break;
+	case 0x7a:
+		logprint(mc, " notify:'Remote retrieval'");
+		break;
+	case 0x7b:
+		logprint(mc, " notify:'Call is diverting'");
 		break;
 	default:
-		ret = logprint(mc, " notify:'unknown description: %02x'", *p & 0x7f);
+		logprint(mc, " notify:'unknown description: %02x'", *p & 0x7f);
 		break;
 	}
-	return ret;
 }
 
-static int log_ia5_chars(struct mController *mc, char *head, unsigned char *p, int len)
+static void log_ia5_chars(struct mController *mc, char *head, unsigned char *p, int len)
 {
-	int ret = 0;
+	int ret;
 
 	if (head) {
 		ret = logprint(mc, "%s", head);
-			if (ret < 0)
-				return -1;
+		if (ret < 0)
+			return;
 	}
 	while (len) {
 		ret = logprint(mc, "%c", *p++ & 0x7f);
 		if (ret < 0)
-			return -1;
+			return;
 		len--;
 	}
-	return ret;
 }
 
-static int log_date(struct mController *mc, struct l3_msg *l3m)
+static void log_date(struct mController *mc, unsigned char *p)
 {
-	unsigned char *p = l3m->date;
-	int ret = 0, l = *p++;
+	int l = *p++;
 
 	if  (l > 5)
-		ret = logprint(mc, " date:'%02d.%02d.%02d %02d:%02d:%02d'", p[0], p[1], p[2], p[3], p[4], p[5]);
+		logprint(mc, " date:'%02d.%02d.%02d %02d:%02d:%02d'", p[0], p[1], p[2], p[3], p[4], p[5]);
 	else
-		ret = logprint(mc, " date:'%02d.%02d.%02d %02d:%02d'", p[0], p[1], p[2], p[3], p[4]);
-	return ret;
+		logprint(mc, " date:'%02d.%02d.%02d %02d:%02d'", p[0], p[1], p[2], p[3], p[4]);
+	return;
 }
 
-static int log_number(struct mController *mc, char *head, unsigned char *p)
+static void log_number(struct mController *mc, int ie, char *head, unsigned char *p)
 {
 	char *ts, *ps;
 	int ret = 0, t, pl, len = *p++;
@@ -1172,7 +1232,7 @@ static int log_number(struct mController *mc, char *head, unsigned char *p)
 	if (head) {
 		ret = logprint(mc, "%s", head);
 		if (ret < 0)
-			return -1;
+			return;
 	}
 	t = (*p & 0x70) >> 4;
 	pl = *p & 0x0f;
@@ -1231,10 +1291,9 @@ static int log_number(struct mController *mc, char *head, unsigned char *p)
 	}
 	ret = logprint(mc, "Type:%s Plan:%s ", ts, ps);
 	if (ret < 0)
-		return -1;
+		return;
 	len--;
 	if (len && !(*p & 0x80)) {
-		/* TODO handle reason with IE_REDIRECTING_NR */
 		len--;
 		p++;
 		t = (*p & 0x60) >> 5;
@@ -1253,111 +1312,508 @@ static int log_number(struct mController *mc, char *head, unsigned char *p)
 			ts = "reserved";
 			break;
 		}
-		switch(pl) {
-		case 0:
-			ps = "user provided,not screened";
-			break;
-		case 1:
-			ps = "user provided,verified and passed";
-			break;
-		case 2:
-			ps = "user provided,verified and failed";
-			break;
-		case 3:
-			ps = "network provided";
-			break;
+		if ((ie == IE_REDIRECTION_NR) || (ie == IE_REDIRECTING_NR)) /* no screening */
+			ret = logprint(mc, "%s ", ts);
+		else {
+			switch(pl) {
+			case 0:
+				ps = "user provided,not screened";
+				break;
+			case 1:
+				ps = "user provided,verified and passed";
+				break;
+			case 2:
+				ps = "user provided,verified and failed";
+				break;
+			case 3:
+				ps = "network provided";
+				break;
+			}
+			ret = logprint(mc, "%s,%s ", ts, ps);
 		}
-		ret = logprint(mc, "%s,%s ", ts, ps);
 		if (ret < 0)
-			return -1;
+			return;
+		if (len && !(*p & 0x80)) {
+			/* reason in IE_REDIRECTING_NR */
+			len--;
+			p++;
+			switch(*p & 0xf){
+			case 0:
+				ps = "Unknown";
+				break;
+			case 1:
+				ps = "Call forwarding busy";
+				break;
+			case 2:
+				ps = "Call forwarding no reply";
+				break;
+			case 10:
+				ps = "Call deflection";
+				break;
+			case 15:
+				ps = "Call forwarding unconditional";
+				break;
+			default:
+				ps = "reserved";
+			}
+			ret = logprint(mc, "reason:%s ", ps);
+			if (ret < 0)
+				return;
+		}
 	}
 	p++;
 	while (len > 0) {
 		ret = logprint(mc, "%c", *p++ & 0x7f);
 		if (ret < 0)
-			return -1;
+			return;
 		len--;
 	}
-	return ret;
 }
 
-static int log_signal(struct mController *mc, struct l3_msg *l3m)
+static void log_subaddress(struct mController *mc, char *head, unsigned char *p)
 {
-	unsigned char *p = l3m->signal;
-	int ret = 0;
-	
+	int ret = 0, t, odd, len = *p++;
+
+	if (head) {
+		ret = logprint(mc, "%s", head);
+		if (ret < 0)
+			return;
+	}
+	t = (*p & 0x70) >> 4;
+	odd = *p & 0x08;
+	switch(t) {
+	case 0:
+		ret = logprint(mc, "Type:NSAP ");
+		break;
+	case 2:
+		ret = logprint(mc, "Type:user specified, %s ", odd ? "odd" : "even");
+		break;
+	default:
+		ret = logprint(mc, "Type:reserved(%d) ", t);
+		break;
+	}
+	if (ret < 0)
+		return;
+	len--;
+	p++;
+	if (len) {
+		ret = logprint(mc, "%c", *p++ & 0x7f);
+		if (ret < 0)
+			return;
+		len--;
+	}
+}
+
+static void log_signal(struct mController *mc, unsigned char *p)
+{
 	p++;
 	switch(*p) {
 	case 0:
-		ret = logprint(mc, " signal:'dial tone on'");
+		logprint(mc, " signal:'dial tone on'");
 		break;
 	case 1:
-		ret = logprint(mc, " signal:'ringback tone on'");
+		logprint(mc, " signal:'ringback tone on'");
 		break;
 	case 2:
-		ret = logprint(mc, " signal:'intercept tone on'");
+		logprint(mc, " signal:'intercept tone on'");
 		break;
 	case 3:
-		ret = logprint(mc, " signal:'network congestion tone on'");
+		logprint(mc, " signal:'network congestion tone on'");
 		break;
 	case 4:
-		ret = logprint(mc, " signal:'busy tone on'");
+		logprint(mc, " signal:'busy tone on'");
 		break;
 	case 5:
-		ret = logprint(mc, " signal:'confirm tone on'");
+		logprint(mc, " signal:'confirm tone on'");
 		break;
 	case 6:
-		ret = logprint(mc, " signal:'answer tone on'");
+		logprint(mc, " signal:'answer tone on'");
 		break;
 	case 7:
-		ret = logprint(mc, " signal:'call waiting tone on'");
+		logprint(mc, " signal:'call waiting tone on'");
 		break;
 	case 8:
-		ret = logprint(mc, " signal:'off-hook warning tone on'");
+		logprint(mc, " signal:'off-hook warning tone on'");
 		break;
 	case 0x3f:
-		ret = logprint(mc, " signal:'tones off'");
+		logprint(mc, " signal:'tones off'");
 		break;
 	case 0x40:
-		ret = logprint(mc, " signal:'alerting on - pattern 0'");
+		logprint(mc, " signal:'alerting on - pattern 0'");
 		break;
 	case 0x41:
-		ret = logprint(mc, " signal:'alerting on - pattern 1'");
+		logprint(mc, " signal:'alerting on - pattern 1'");
 		break;
 	case 0x42:
-		ret = logprint(mc, " signal:'alerting on - pattern 2'");
+		logprint(mc, " signal:'alerting on - pattern 2'");
 		break;
 	case 0x43:
-		ret = logprint(mc, " signal:'alerting on - pattern 3'");
+		logprint(mc, " signal:'alerting on - pattern 3'");
 		break;
 	case 0x44:
-		ret = logprint(mc, " signal:'alerting on - pattern 4'");
+		logprint(mc, " signal:'alerting on - pattern 4'");
 		break;
 	case 0x45:
-		ret = logprint(mc, " signal:'alerting on - pattern 5'");
+		logprint(mc, " signal:'alerting on - pattern 5'");
 		break;
 	case 0x46:
-		ret = logprint(mc, " signal:'alerting on - pattern 6'");
+		logprint(mc, " signal:'alerting on - pattern 6'");
 		break;
 	case 0x47:
-		ret = logprint(mc, " signal:'alerting on - pattern 7'");
+		logprint(mc, " signal:'alerting on - pattern 7'");
 		break;
 	case 0x4f:
-		ret = logprint(mc, " signal:'alerting off'");
+		logprint(mc, " signal:'alerting off'");
 		break;
 	default:
-		ret = logprint(mc, " signal:'unknown codse: %02x'", *p);
+		logprint(mc, " signal:'unknown code: %02x'", *p);
 		break;
 	}
-	return ret;
 }
 
-static void logIE(struct mController *mc, struct mbuffer *mb, int mtIndex)
+static void log_transit_net_sel(struct mController *mc, unsigned char *p)
+{
+	int ret = 0, t, pl, l = *p++;
+
+	t = (*p & 70) >> 4;
+	pl = *p & 0xf;
+	l--;
+	ret = log_coding(mc, "transitNetworkSelection", -1, -1, t, pl);
+	if (ret < 0)
+		return;
+	p++;
+	while (l) {
+		ret = logprint(mc, "%c", *p++ & 0x7f);
+		if (ret < 0)
+			return;
+		l--;
+	}
+}
+
+static void log_restart_ind(struct mController *mc, unsigned char *p)
+{
+	p++;
+	switch(*p & 0x7f) {
+	case 0:
+		logprint(mc, " Restart: indicated interfaces");
+		break;
+	case 1:
+		logprint(mc, " Restart: single interface");
+		break;
+	case 2:
+		logprint(mc, " Restart: all interfaces");
+		break;
+	default:
+		logprint(mc, " Restart:'reserved class( %02x)", *p & 0x7f);
+		break;
+	}
+}
+
+static struct _lookup_table hlc_ids[] = {
+	{0x001, "Telephony"},
+	{0x004, "Facsimile Group 2/3"},
+	{0x021, "Facsimile Group 4 Class 1"},
+	{0x024, "Teletex service, basic and mixed mode of operation"},
+	{0x028, "Teletex service, basic and processable mode of operation"},
+	{0x031, "Teletex service, basic mode of operation"},
+	{0x032, "Syntax based Videotex"},
+	{0x033, "International Videotex interworking"},
+	{0x035, "Telex service"},
+	{0x038, "Message Handling Systems"},
+	{0x041, "OSI application"},
+	{0x05e, "Reserved for Maintenance"},
+	{0x05f, "Reserved for Management"},
+	{0x060, "Videotelephony"},
+	{0x101, "capability set of initial channel of H.221"},
+	{0x102, "capability set of subsequent channel of  H.221"},
+	{-1, "reserved"}
+};
+
+static void log_hlc(struct mController *mc, unsigned char *p)
+{
+	int ret, cod, ecod, l;
+	const char *cs;
+
+	l = *p++;
+	if (0 > log_coding(mc, "HLC", (*p & 0x60) >> 5, -1, -1, -1))
+		return;
+
+	l--;
+	p++;
+	cod = *p & 0x7f;
+	cs = get_lookup_str(cod, hlc_ids);
+	ret = logprint(mc, " HL characteristics:%s", cs);
+	if (ret < 0)
+		return;
+	if (l && !(*p & 0x80)) {
+		p++;
+		ecod = *p & 0x7f;
+		if (cod == 0x060)
+			ecod |= 0x100;
+		cs = get_lookup_str(ecod, hlc_ids);
+		logprint(mc, ",%s", cs);
+	}
+}
+
+#if 0
+static void log_llc(struct mController *mc, unsigned char *p)
+{
+	int ret, r, m, l, i, o;
+
+	l = *p++;
+	if (0 > log_coding(mc, "bearerCap", (*p & 0x60) >> 5, -1, -1, -1))
+		return;
+	if (0 > logprint(mc, " %s", mi_bearer2str(*p & 0x1f)))
+		return;
+
+	if (l < 2) {
+		logprint(mc, " bearerCap too short");
+		return;
+	}
+	l -= 2;
+	/* octet 4 */
+	p++;
+	m = *p & 0x60;
+	r = *p & 0x1f;
+	if (m == 0x40) {
+		if (0 > logprint(mc, " packet mode"))
+			return;
+	} else if (m == 0) {
+		if (0 > logprint(mc, " circuit mode rate:"))
+			return;
+		switch(r) {
+		case 0x10:
+			ret = logprint(mc, "64Kbit/s");
+			break;
+		case 0x11:
+			ret = logprint(mc, "2x64Kbit/s");
+			break;
+		case 0x13:
+			ret = logprint(mc, "384Kbit/s");
+			break;
+		case 0x15:
+			ret = logprint(mc, "1536Kbit/s");
+			break;
+		case 0x17:
+			ret = logprint(mc, "1920Kbit/s");
+			break;
+		default:
+			ret = logprint(mc, "reserved");
+			break;
+		}
+		if (ret < 0)
+			return;
+	} else {
+		if (0 > logprint(mc, " undefined mode"))
+			return;
+	}
+	if (l && !(*p & 0x80)) {
+		/* octet 4a */
+		l--;
+		p++;
+		if (0 > logprint(mc, " octet4a=0x%02x"))
+			return;
+		if (l && !(*p & 0x80)) {
+			/* octet 4b */
+			l--;
+			p++;
+			if (0 > logprint(mc, " octet4a=0x%02x"))
+				return;
+		}
+	}
+	/* octet 5 */
+	while (l > 0) {
+		l--;
+		p++;
+		i = (*p & 0x60) >> 5;
+		m = *p & 0x1f;
+		if (0 > logprint(mc, " L%d ", i))
+			return;
+		if (i == 1) {
+			switch(m) {
+			case 1:
+				ret = logprint(mc, "protocol V.110/X.30");
+				break;
+			case 3:
+				ret = logprint(mc, "protocol G.711 Alaw");
+				break;
+			case 4:
+				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
+				break;
+			case 5:
+				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
+				break;
+			case 6:
+				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
+				break;
+			case 7:
+				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
+				break;
+			case 9:
+				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
+				break;
+			default:
+				ret = logprint(mc, "protocol reserved (%d)", m);
+				break;
+			}
+			if (ret < 0)
+				return;
+			o = 'a';
+			while((l > 0) && !(*p & 0x80)) {
+				l--;
+				p++;
+				if (0 > logprint(mc, " octet5%c=0x%02x", o, *p))
+					return;
+				o++;
+			}
+		} else if (i == 2) {
+			switch(m) {
+			case 2:
+				logprint(mc, "protocol Q.921");
+				break;
+			case 6:
+				logprint(mc, "protocol X.25");
+				break;
+			default:
+				logprint(mc, "protocol reserved (%d)", m);
+				break;
+			}
+		} else if (i == 3) {
+			switch(m) {
+			case 2:
+				logprint(mc, "protocol Q.931");
+				break;
+			case 6:
+				logprint(mc, "protocol X.25");
+				break;
+			default:
+				logprint(mc, "protocol reserved (%d)", m);
+				break;
+			}
+		} else {
+			logprint(mc, "invalid");
+		}
+	}
+}
+#endif
+
+static void logIE(struct mController *mc, struct l3_msg *l3m, int ie, unsigned char *iep, int mtIndex)
+{
+	switch(ie) {
+	case IE_BEARER:
+		log_bearer_capability(mc, iep);
+		break;
+	case IE_CAUSE:
+		log_cause(mc, iep);
+		break;
+	case IE_CALL_ID:
+		loghex(mc, " callID: ", iep + 1, *iep, 0, -1);
+		break;
+	case IE_CALL_STATE:
+		log_call_state(mc, iep, l3m);
+		break;
+	case IE_CHANNEL_ID:
+		log_channel_id(mc, iep);
+		break;
+	case IE_FACILITY:
+		log_facility(mc, iep, mtIndex);
+		break;
+	case IE_PROGRESS:
+		log_progress(mc, iep);
+		break;
+	case IE_NET_FAC:
+		log_net_fac(mc, iep);
+		break;
+	case IE_NOTIFY:
+		log_notify(mc, iep);
+		break;
+	case IE_DISPLAY:
+		log_ia5_chars(mc, " display:", iep + 1, *iep);
+		break;
+	case IE_DATE:
+		log_date(mc, iep);
+		break;
+	case IE_KEYPAD:
+		log_ia5_chars(mc, " keypad:", iep + 1, *iep);
+		break;
+	case IE_SIGNAL:
+		log_signal(mc, iep);
+		break;
+	case IE_INFORATE:
+		loghex(mc, " infoRate:", iep + 1, *iep, 0, mtIndex);
+		break;
+	case IE_E2E_TDELAY:
+		loghex(mc, " end2endTransitDelay:", iep + 1, *iep, 0, mtIndex);
+		break;
+	case IE_TDELAY_SEL:
+		loghex(mc, " transiDelaySelection:", iep + 1, *iep, 0, mtIndex);
+		break;
+	case IE_PACK_BINPARA:
+		loghex(mc, " pktBinPara:", iep + 1, *iep, 0, mtIndex);
+		break;
+	case IE_PACK_WINSIZE:
+		loghex(mc, " pktWindowSize:", iep + 1, *iep, 0, mtIndex);
+		break;
+	case IE_PACK_SIZE:
+		loghex(mc, " pktSize:", iep + 1, *iep, 0, mtIndex);
+		break;
+	case IE_CUG:
+		loghex(mc, " closedUsergroup:", iep + 1, *iep, 0, mtIndex);
+		break;
+	case IE_REV_CHARGE:
+		loghex(mc, " reverse_charge:", iep + 1, *iep, 0, mtIndex);
+		break;
+	case IE_CONNECT_PN:
+		log_number(mc, IE_CONNECT_PN, " connected number:", iep);
+		break;
+	case IE_CONNECT_SUB:
+		log_subaddress(mc, " connected subaddress:", iep);
+		break;
+	case IE_CALLING_PN:
+		log_number(mc, IE_CALLING_PN, " calling number:",  iep);
+		break;
+	case IE_CALLING_SUB:
+		log_subaddress(mc, " calling subaddress:", iep);
+		break;
+	case IE_CALLED_PN:
+		log_number(mc, IE_CALLED_PN, " called number:", iep);
+		break;
+	case IE_CALLED_SUB:
+		log_subaddress(mc, " called subaddress:", iep);
+		break;
+	case IE_REDIRECTING_NR:
+		log_number(mc, IE_REDIRECTING_NR, " redirecting number:", iep);
+		break;
+	case IE_REDIRECTION_NR:
+		log_number(mc, IE_REDIRECTION_NR, " redirection number:", iep);
+		break;
+	case IE_TRANS_SEL:
+		log_transit_net_sel(mc, iep);
+		break;
+	case IE_RESTART_IND:
+		log_restart_ind(mc, iep);
+		break;
+	case IE_LLC:
+		/* todo */
+		loghex(mc, " LLC:" , iep + 1, *iep, 0, mtIndex);
+		break;
+	case IE_HLC:
+		log_hlc(mc, iep);
+		break;
+	case IE_USER_USER:
+		loghex(mc, " useruser:", iep + 1, *iep, 4, mtIndex);
+		break;
+	}
+}
+
+static void logIEs(struct mController *mc, struct mbuffer *mb, int mtIndex)
 {
 	struct l3_msg *l3m = &mb->l3;
+	unsigned char *iep, **v_ie = &l3m->bearer_capability;
+	int pos = 0, ie;
 
 	if (l3m->comprehension_req)
-		if (0 > logprint(mc, " comprehensionRequired"))
+		if (0 > logprint(mc, " comprehension Required detected ie=%02x", l3m->comprehension_req))
 			return;
 	if (l3m->more_data)
 		if (0 > logprint(mc, " moreData"))
@@ -1368,96 +1824,28 @@ static void logIE(struct mController *mc, struct mbuffer *mb, int mtIndex)
 	if (l3m->congestion_level)
 		if (0 > logprint(mc, " congestionLevel=%d", l3m->congestion_level & 0xf))
 			return;
-	if (l3m->bearer_capability && *l3m->bearer_capability)
-		if (0 > log_bearer_capability(mc, l3m))
-			return;
-	if (l3m->cause && *l3m->cause)
-		if (0 > log_cause(mc, l3m))
-			 return;
-	if (l3m->call_id && *l3m->call_id)
-		if (0 > log_inhex(mc, " callID:", l3m->call_id + 1, *l3m->call_id))
-			 return;
-	if (l3m->call_state && *l3m->call_state)
-		if (0 > log_call_state(mc, l3m))
-			 return;
-	if (l3m->channel_id && *l3m->channel_id)
-		if (0 > log_channel_id(mc, l3m))
-			 return;
-	if (l3m->facility && *l3m->facility)
-		if (0 > log_facility(mc, l3m, mtIndex))
-			 return;
-	if (l3m->progress && *l3m->progress)
-		if (0 > log_progress(mc, l3m))
-			 return;
-	if (l3m->net_fac && *l3m->net_fac)
-		if (0 > log_net_fac(mc, l3m))
-			 return;
-	if (l3m->notify && *l3m->notify)
-		if (0 > log_notify(mc, l3m))
-			 return;
-	if (l3m->display && *l3m->display)
-		if (0 > log_ia5_chars(mc, " display:", l3m->display + 1, *l3m->display))
-			 return;
-	if (l3m->date && *l3m->date)
-		if (0 > log_date(mc, l3m))
-			 return;
-	if (l3m->keypad && *l3m->keypad)
-		if (0 > log_ia5_chars(mc, " keypad:", l3m->keypad + 1, *l3m->keypad))
-			 return;
-	if (l3m->signal && *l3m->signal)
-		if (0 > log_signal(mc, l3m))
-			 return;
-	if (l3m->info_rate && *l3m->info_rate)
-		if (0 > log_inhex(mc, " info_rate:", l3m->info_rate + 1, *l3m->info_rate))
-			 return;
-	if (l3m->end2end_transit && *l3m->end2end_transit)
-		if (0 > log_inhex(mc, " end2end_transit:", l3m->end2end_transit + 1, *l3m->end2end_transit))
-			 return;
-	if (l3m->transit_delay_sel && *l3m->transit_delay_sel)
-		if (0 > log_inhex(mc, " transit_delay_sel:", l3m->transit_delay_sel + 1, *l3m->transit_delay_sel))
-			 return;
-	if (l3m->pktl_bin_para && *l3m->pktl_bin_para)
-		if (0 > log_inhex(mc, " pktl_bin_para:", l3m->pktl_bin_para + 1, *l3m->pktl_bin_para))
-			 return;
-	if (l3m->pktl_window && *l3m->pktl_window)
-		if (0 > log_inhex(mc, " pktl_window:", l3m->pktl_window + 1, *l3m->pktl_window))
-			 return;
-	if (l3m->pkt_size && *l3m->pkt_size)
-		if (0 > log_inhex(mc, " pkt_size:", l3m->pkt_size + 1, *l3m->pkt_size))
-			 return;
-	if (l3m->closed_userg && *l3m->closed_userg)
-		if (0 > log_inhex(mc, " closed_userg:", l3m->closed_userg + 1, *l3m->closed_userg))
-			 return;
-	if (l3m->reverse_charge && *l3m->reverse_charge)
-		if (0 > log_inhex(mc, " reverse_charge:", l3m->reverse_charge + 1, *l3m->reverse_charge))
-			 return;
-	if (l3m->connected_nr && *l3m->connected_nr)
-		if (0 > log_number(mc, " connected number:", l3m->connected_nr))
-			 return;
-	if (l3m->calling_nr && *l3m->calling_nr)
-		if (0 > log_number(mc, " calling number:", l3m->calling_nr))
-			 return;
-	if (l3m->called_nr && *l3m->called_nr)
-		if (0 > log_number(mc, " called number:", l3m->called_nr))
-			 return;
-	if (l3m->redirecting_nr && *l3m->redirecting_nr)
-		if (0 > log_number(mc, " redirecting number:", l3m->redirecting_nr))
-			 return;
-	if (l3m->redirection_nr && *l3m->redirection_nr)
-		if (0 > log_number(mc, " redirection number:", l3m->redirection_nr))
-			 return;
-#if 0
-	/* TODO implement verbose logging */		
-	unsigned char	*connected_sub;		/* ie 0x4d pos 22 */
-	unsigned char	*calling_sub;		/* ie 0x6d pos 24 */
-	unsigned char	*called_sub;		/* ie 0x71 pos 26 */
-	unsigned char	*transit_net_sel;	/* ie 0x78 pos 29 */
-	unsigned char	*restart_ind;		/* ie 0x79 pos 30 */
-	unsigned char	*llc;			/* ie 0x7c pos 31 */
-	unsigned char	*hlc;			/* ie 0x7d pos 32 */
-	unsigned char	*useruser;		/* ie 0x7e pos 33 */
-	struct m_extie	extra[8];
-#endif	
+
+	while(1) {
+		iep = *v_ie;
+		ie = l3_pos2ie(pos);
+		if (iep && *iep)
+			logIE(mc, l3m, ie, iep, mtIndex);
+		if (v_ie == &l3m->useruser)
+			break;
+		pos++;
+		v_ie++;
+	}
+	/* handle repeated IEs and different codset parts */
+	for (pos = 0; pos < 8; pos++) {
+		if (l3m->extra[pos].val) {
+			if (l3m->extra[pos].codeset != 0) {
+				logprint(mc, " codeSet(%d)", l3m->extra[pos].codeset);
+				loghex(mc, " items:", l3m->extra[pos].val, l3m->extra[pos].len, 4, mtIndex);
+			} else if (*l3m->extra[pos].val) {
+				logIE(mc, l3m, l3m->extra[pos].ie, l3m->extra[pos].val, mtIndex);
+			}
+		}
+	}
 }
 
 
@@ -1495,9 +1883,9 @@ static int log_layer3(struct mController *mc, struct mbuffer *mb)
 		else
 			logprint(mc, " %s(%02x)", mTypesStr[idx], mb->l3.type);
 		if (mc->layer3[idx] & l3vVERBOSE)
-			logIE(mc, mb, idx);
+			logIEs(mc, mb, idx);
 		if (mc->layer3[idx] & l3vHEX)
-			loghex(mc, dp, len, 4);
+			loghex(mc, "L3hex:", dp, len, 4, -1);
 	} else {
 		mc->lp = sp;
 		*sp = 0;
@@ -1824,7 +2212,7 @@ static int main_loop(int enabled)
 		polls[idx].fd = pc->socket;
 		polls[idx].events = POLLIN | POLLPRI;
 		pollContr[idx] = pc;
-		wprint("poll setup %d fd %d events %x\n", idx, polls[idx].fd, polls[idx].events);
+		dprint(mlDEBUG_POLL, "poll setup %d fd %d events %x\n", idx, polls[idx].fd, polls[idx].events);
 		idx++;
 		if (idx >= enabled)
 			break;
@@ -2007,7 +2395,7 @@ char *argv[];
 	}
 	init_layer3(2 * (1 + mI_ControllerCount), &myfn);
 	_L3init = 1;
-	iprint("mISDNv2 logger enabled %d/%d controller\n", nrEnabled, mI_ControllerCount);
+	iprint("mISDNv2 logger enabled %d/%d controller", nrEnabled, mI_ControllerCount);
 
 	if (!nrEnabled) {
 		fprintf(stderr, "No controllers are enabled for logging - abort\n");
@@ -2050,11 +2438,10 @@ char *argv[];
 	if (result) {
 		wprint("Error to setup signal handler for SIGUSR2 - %s\n", strerror(errno));
 	}
-	iprint("started for for %d/%d controller\n", nrEnabled, mI_ControllerCount);
 
 	exitcode = main_loop(nrEnabled);
 
-	iprint("logger mainloop ended");
+	iprint("logger mainloop ended exitcode %d", exitcode);
 errout:
 	if (mIsock > 0)
 		close(mIsock);
