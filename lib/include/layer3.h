@@ -149,7 +149,6 @@ extern void		L3AddTimer(struct L3Timer *, int, unsigned int);
 extern void		L3DelTimer(struct L3Timer *);
 extern void		l3_manager(struct l2l3if *, unsigned int);
 
-extern int		parseQ931(struct mbuffer *);
 extern int		assembleQ931(struct _l3_process *, struct l3_msg *);
 extern int		l3_ie2pos(u_char);
 extern unsigned char	l3_pos2ie(int);
