@@ -13,3 +13,10 @@ isdn_text2wireshark_SOURCES = text_wireshark.c
 AM_CPPFLAGS = -Wall -Werror -I$(top_srcdir)/include $(_MEMLEAKDEBUG)
 
 CLEANFILES = *~
+
+install-data-local:
+	install -d $(DESTDIR)$(sysconfdir)
+	install -m 644 misdnlogger.conf.sample $(DESTDIR)$(sysconfdir)/misdnlogger.conf
+
+distuninstallcheck_listfiles = \
+	find . -type f -print | grep -v 'misdnlogger.conf'
