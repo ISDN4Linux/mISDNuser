@@ -4,3 +4,5 @@
 /misdn_rename
 /misdn_E1test
 /isdn_text2wireshark
+/logger_config_parser.c
+/misdnlogger
