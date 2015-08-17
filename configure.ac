@@ -14,6 +14,7 @@ AC_PROG_CC
 AC_PROG_CXX
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
+AM_PROG_LEX
 
 AC_CHECK_LIB([pthread], [pthread_create])
 
