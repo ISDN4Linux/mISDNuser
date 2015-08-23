@@ -1555,147 +1555,30 @@ static void log_hlc(struct mController *mc, unsigned char *p)
 	}
 }
 
-#if 0
 static void log_llc(struct mController *mc, unsigned char *p)
 {
-	int ret, r, m, l, i, o;
+	int l = *p++;
 
-	l = *p++;
-	if (0 > log_coding(mc, "bearerCap", (*p & 0x60) >> 5, -1, -1, -1))
+	if (0 > log_coding(mc, "LLC", (*p & 0x60) >> 5, -1, -1, -1))
 		return;
 	if (0 > logprint(mc, " %s", mi_bearer2str(*p & 0x1f)))
 		return;
 
-	if (l < 2) {
-		logprint(mc, " bearerCap too short");
-		return;
+	if (!(*p & 0x80)) { /* 3a present */
+		if ( l < 2) {
+			logprint(mc, " LLC too short");
+			return;
+		}
+		l--;
+		p++;
+		logprint(mc, " out-band negotiation%spossible", (*p & 0x40) ? " " : " not ");
 	}
-	l -= 2;
-	/* octet 4 */
+	l--;
 	p++;
-	m = *p & 0x60;
-	r = *p & 0x1f;
-	if (m == 0x40) {
-		if (0 > logprint(mc, " packet mode"))
-			return;
-	} else if (m == 0) {
-		if (0 > logprint(mc, " circuit mode rate:"))
-			return;
-		switch(r) {
-		case 0x10:
-			ret = logprint(mc, "64Kbit/s");
-			break;
-		case 0x11:
-			ret = logprint(mc, "2x64Kbit/s");
-			break;
-		case 0x13:
-			ret = logprint(mc, "384Kbit/s");
-			break;
-		case 0x15:
-			ret = logprint(mc, "1536Kbit/s");
-			break;
-		case 0x17:
-			ret = logprint(mc, "1920Kbit/s");
-			break;
-		default:
-			ret = logprint(mc, "reserved");
-			break;
-		}
-		if (ret < 0)
-			return;
-	} else {
-		if (0 > logprint(mc, " undefined mode"))
-			return;
-	}
-	if (l && !(*p & 0x80)) {
-		/* octet 4a */
-		l--;
-		p++;
-		if (0 > logprint(mc, " octet4a=0x%02x"))
-			return;
-		if (l && !(*p & 0x80)) {
-			/* octet 4b */
-			l--;
-			p++;
-			if (0 > logprint(mc, " octet4a=0x%02x"))
-				return;
-		}
-	}
-	/* octet 5 */
-	while (l > 0) {
-		l--;
-		p++;
-		i = (*p & 0x60) >> 5;
-		m = *p & 0x1f;
-		if (0 > logprint(mc, " L%d ", i))
-			return;
-		if (i == 1) {
-			switch(m) {
-			case 1:
-				ret = logprint(mc, "protocol V.110/X.30");
-				break;
-			case 3:
-				ret = logprint(mc, "protocol G.711 Alaw");
-				break;
-			case 4:
-				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
-				break;
-			case 5:
-				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
-				break;
-			case 6:
-				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
-				break;
-			case 7:
-				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
-				break;
-			case 9:
-				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
-				break;
-			default:
-				ret = logprint(mc, "protocol reserved (%d)", m);
-				break;
-			}
-			if (ret < 0)
-				return;
-			o = 'a';
-			while((l > 0) && !(*p & 0x80)) {
-				l--;
-				p++;
-				if (0 > logprint(mc, " octet5%c=0x%02x", o, *p))
-					return;
-				o++;
-			}
-		} else if (i == 2) {
-			switch(m) {
-			case 2:
-				logprint(mc, "protocol Q.921");
-				break;
-			case 6:
-				logprint(mc, "protocol X.25");
-				break;
-			default:
-				logprint(mc, "protocol reserved (%d)", m);
-				break;
-			}
-		} else if (i == 3) {
-			switch(m) {
-			case 2:
-				logprint(mc, "protocol Q.931");
-				break;
-			case 6:
-				logprint(mc, "protocol X.25");
-				break;
-			default:
-				logprint(mc, "protocol reserved (%d)", m);
-				break;
-			}
-		} else {
-			logprint(mc, "invalid");
-		}
-	}
+	/* rest will be printed as hex, because decoding is very complex and I never saw this IE in a log */
+	if (l)
+		loghex(mc, "content octet4...:", p, l, 0, -1);
 }
-#endif
 
 static void logIE(struct mController *mc, struct l3_msg *l3m, int ie, unsigned char *iep, int mtIndex)
 {
@@ -1794,8 +1677,7 @@ static void logIE(struct mController *mc, struct l3_msg *l3m, int ie, unsigned c
 		log_restart_ind(mc, iep);
 		break;
 	case IE_LLC:
-		/* todo */
-		loghex(mc, " LLC:" , iep + 1, *iep, 0, mtIndex);
+		log_llc(mc, iep);
 		break;
 	case IE_HLC:
 		log_hlc(mc, iep);
@@ -1830,7 +1712,7 @@ static void logIEs(struct mController *mc, struct mbuffer *mb, int mtIndex)
 		ie = l3_pos2ie(pos);
 		if (iep && *iep)
 			logIE(mc, l3m, ie, iep, mtIndex);
-		if (v_ie == &l3m->useruser)
+		if (v_ie == &l3m->useruser) /* last one */
 			break;
 		pos++;
 		v_ie++;
