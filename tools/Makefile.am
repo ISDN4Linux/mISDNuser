@@ -14,6 +14,8 @@ AM_CPPFLAGS = -Wall -Werror -I$(top_srcdir)/include $(_MEMLEAKDEBUG)
 
 CLEANFILES = *~
 
+EXTRA_DIST = misdnlogger.conf.sample
+
 install-data-local:
 	install -d $(DESTDIR)$(sysconfdir)
 	install -m 644 misdnlogger.conf.sample $(DESTDIR)$(sysconfdir)/misdnlogger.conf
