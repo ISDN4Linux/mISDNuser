@@ -540,7 +540,7 @@ static int opt_parse(int ac, char *av[])
 	return 0;
 }
 
-static void printbinary(char *name, uint32_t val, uint8_t bits)
+static void printbinary(const char *name, uint32_t val, uint8_t bits)
 {
 	uint32_t m;
 
@@ -1779,9 +1779,7 @@ static int gen_flat_frame_data(struct fr_data *frd)
 	return ret;
 }
 
-int main(argc, argv)
-int argc;
-char *argv[];
+int main(int argc, char *argv[])
 {
 	int i, channel;
 	int log_socket;

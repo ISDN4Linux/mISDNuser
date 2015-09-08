@@ -56,7 +56,7 @@ enum {
 	ST_PLCI_P_RES,
 } const ST_PLCI_COUNT = ST_PLCI_P_RES + 1;
 
-static char *str_st_plci[] = {
+static const char *str_st_plci[] = {
 	"ST_PLCI_P_0",
 	"ST_PLCI_P_0_1",
 	"ST_PLCI_P_1",
@@ -117,7 +117,7 @@ enum {
 	EV_AP_RELEASE,
 } const EV_PLCI_COUNT = EV_AP_RELEASE + 1;
 
-static char *str_ev_plci[] = {
+static const char *str_ev_plci[] = {
 	"EV_AP_CONNECT_REQ",
 	"EV_PI_CONNECT_CONF",
 	"EV_PI_CONNECT_IND",
@@ -166,7 +166,7 @@ static char *str_ev_plci[] = {
 
 static struct Fsm plci_fsm = { 0, 0, 0, 0, 0 };
 
-static void lPLCI_debug(struct FsmInst *fi, char *fmt, ...)
+static void lPLCI_debug(struct FsmInst *fi, const char *fmt, ...)
 {
 	char tmp[160];
 	va_list args;

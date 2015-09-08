@@ -46,8 +46,7 @@
 #include <malloc.h>
 #include <time.h>
 
-static void usage(pname)
-char *pname;
+static void usage(char *pname)
 {
 	fprintf(stderr, "\n\nCall with %s [options] <infile> <outfile>\n", pname);
 	fprintf(stderr, "\n");
@@ -171,9 +170,7 @@ static void normalize_tv(struct timeval *tv)
 	}
 }
 
-int main(argc, argv)
-int argc;
-char *argv[];
+int main(int argc, char *argv[])
 {
 	char *infilename = NULL;
 	char *outfilename = NULL;

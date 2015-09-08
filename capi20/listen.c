@@ -15,7 +15,7 @@ enum {
 	ST_LISTEN_L_1_1,
 } const ST_LISTEN_COUNT = ST_LISTEN_L_1_1 + 1;
 
-static char *str_st_listen[] = {
+static const char *str_st_listen[] = {
 	"ST_LISTEN_L_0",
 	"ST_LISTEN_L_0_1",
 	"ST_LISTEN_L_1",
@@ -27,14 +27,14 @@ enum {
 	EV_LISTEN_CONF,
 } const EV_LISTEN_COUNT = EV_LISTEN_CONF + 1;
 
-static char *str_ev_listen[] = {
+static const char *str_ev_listen[] = {
 	"EV_LISTEN_REQ",
 	"EV_LISTEN_CONF",
 };
 
 static struct Fsm listen_fsm = { 0, 0, 0, 0, 0 };
 
-static void listen_debug(struct FsmInst *fi, char *fmt, ...)
+static void listen_debug(struct FsmInst *fi, const char *fmt, ...)
 {
 	char tmp[128];
 	va_list args;

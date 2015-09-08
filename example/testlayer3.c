@@ -43,8 +43,7 @@
 #include <mISDN/mISDNif.h>
 #include <mISDN/mlayer3.h>
 
-void usage(pname) 
-char *pname;
+void usage(char *pname)
 {
 	fprintf(stderr,"Call with %s [options] [filename]\n", pname);
 	fprintf(stderr,"\n");
@@ -1561,9 +1560,7 @@ static struct mi_ext_fn_s myfn = {
 	.prt_debug = my_lib_debug,
 };
 
-int main(argc,argv)
-int argc;
-char *argv[];
+int main(int argc, char *argv[])
 {
 	char FileNameIn[200],FileNameOut[200];
 	devinfo_t DevInfo;

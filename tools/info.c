@@ -19,7 +19,7 @@
 #include <mISDN/af_isdn.h>
 #include <errno.h>
 
-char *spaces = "                ";
+const char *spaces = "                ";
 
 int main(int argc, char *argv[])
 {

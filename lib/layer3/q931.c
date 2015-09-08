@@ -1144,7 +1144,7 @@ mi_decode_notification_ind(struct l3_msg *l3m, int *notInd)
 const char *
 mi_bearer2str(int cap)
 {
-	static char *bearers[] = {
+	static const char *bearers[] = {
 		"Speech",
 		"Audio 3.1 kHz",
 		"Audio 7 kHz",

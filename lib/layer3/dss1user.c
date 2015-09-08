@@ -1691,7 +1691,7 @@ l3dss1_tretrieve(l3_process_t *pc, unsigned int pr, struct l3_msg *l3m)
 }
 
 static void
-send_timeout(l3_process_t *pc, char *nr)
+send_timeout(l3_process_t *pc, const char *nr)
 {
 	struct l3_msg	*l3m;
 	unsigned char	c[5];

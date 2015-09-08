@@ -117,7 +117,7 @@ _mi_thread_create(pthread_t *thread, pthread_attr_t *attr, void *(*start_routine
 }
 
 void
-mi_dhexprint(const char *file, int line, const char *func, char *head, unsigned char *buf, int len)
+mi_dhexprint(const char *file, int line, const char *func, const char *head, unsigned char *buf, int len)
 {
 	int	i;
 	char	*p,*obuf;

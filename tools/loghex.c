@@ -42,8 +42,7 @@
 
 static int dch_echo = 0;
 
-static void usage(pname)
-char *pname;
+static void usage(char *pname)
 {
 	fprintf(stderr, "Call with %s [options]\n", pname);
 	fprintf(stderr, "\n");
@@ -141,9 +140,7 @@ struct ctstamp {
 	struct timeval tv;
 };
 
-int main(argc, argv)
-int argc;
-char *argv[];
+int main(int argc, char *argv[])
 {
 	int aidx = 1, idx, i, channel;
 	int cardnr = 0;
@@ -153,7 +150,8 @@ char *argv[];
 	char sw;
 	char wfilename[512];
 	int head = 0;
-	char *pn, pns[32];
+	const char *pn;
+	char pns[32];
 	u_char buffer[buflen];
 	struct msghdr mh;
 	struct iovec iov[1];

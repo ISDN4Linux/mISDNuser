@@ -36,7 +36,7 @@
 const int ST_NCCI_COUNT = ST_NCCI_N_5 + 1;
 const int EV_NCCI_COUNT = EV_AP_RELEASE + 1;
 
-static char *str_st_ncci[] = {
+static const char *str_st_ncci[] = {
 	"ST_NCCI_N_0",
 	"ST_NCCI_N_0_1",
 	"ST_NCCI_N_1",
@@ -47,7 +47,7 @@ static char *str_st_ncci[] = {
 	"ST_NCCI_N_5",
 };
 
-static char *str_ev_ncci[] = {
+static const char *str_ev_ncci[] = {
 	"EV_AP_CONNECT_B3_REQ",
 	"EV_NC_CONNECT_B3_CONF",
 	"EV_NC_CONNECT_B3_IND",
@@ -93,7 +93,7 @@ const char *_mi_ncci_ev2str(enum ev_ncci_e ev)
 }
 
 
-static void ncci_debug(struct FsmInst *fi, char *fmt, ...)
+static void ncci_debug(struct FsmInst *fi, const char *fmt, ...)
 {
 	char tmp[128];
 	va_list args;

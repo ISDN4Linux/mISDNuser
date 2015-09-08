@@ -57,7 +57,7 @@ extern int mi_printf(const char *file, int line, const char *func, int lev, cons
 
 #define dhexprint(m, h, d, l)	do { if (m & mI_debug_mask) mi_dhexprint(__FILE__, __LINE__, __PRETTY_FUNCTION__, h, d, l);} while(0)
 
-extern void mi_dhexprint(const char *file, int line, const char *func, char *head, unsigned char *buf, int len);
+extern void mi_dhexprint(const char *file, int line, const char *func, const char *head, unsigned char *buf, int len);
 extern void mi_shexprint(char *dest, unsigned char *buf, int len);
 
 #ifdef MEMLEAK_DEBUG

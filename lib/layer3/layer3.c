@@ -30,7 +30,7 @@
 #include "debug.h"
 
 void
-mIl3_debug(layer3_t *l3, char *fmt, ...)
+mIl3_debug(layer3_t *l3, const char *fmt, ...)
 {
 	va_list args;
 	char buf[256], *p;
@@ -44,7 +44,7 @@ mIl3_debug(layer3_t *l3, char *fmt, ...)
 }
 
 void
-mIpc_debug(u_int dmask, l3_process_t *pc, char *fmt, ...)
+mIpc_debug(u_int dmask, l3_process_t *pc, const char *fmt, ...)
 {
 	struct _layer3 *l3;
 	va_list args;
@@ -66,7 +66,7 @@ mIpc_debug(u_int dmask, l3_process_t *pc, char *fmt, ...)
 }
 
 static void
-l3fi_debug(struct FsmInst *fi, char *fmt, ...)
+l3fi_debug(struct FsmInst *fi, const char *fmt, ...)
 {
 	struct l2l3if *l2i = fi->userdata;
 	layer3_t *l3 = l2i->l3;
@@ -95,7 +95,7 @@ enum {
 
 #define L3_STATE_COUNT (ST_L3_LC_ESTAB + 1)
 
-static char *strL3State[] =
+static const char *strL3State[] =
 {
 	"ST_L3_LC_REL",
 	"ST_L3_LC_ESTAB_WAIT",
@@ -116,7 +116,7 @@ enum {
 
 #define L3_EVENT_COUNT (EV_TIMEOUT+1)
 
-static char *strL3Event[] =
+static const char *strL3Event[] =
 {
 	"EV_ESTABLISH_REQ",
 	"EV_ESTABLISH_IND",

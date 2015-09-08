@@ -421,7 +421,7 @@ int ParseReturnErrorComponent(struct asn1_parm *pc, u_char * p, u_char * end, in
 {
 	int invokeId;
 	unsigned int errorValue;
-	char *error;
+	const char *error;
 	char msg[20];
 	INIT;
 

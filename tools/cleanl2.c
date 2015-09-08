@@ -39,8 +39,7 @@
 #include <mISDN/mISDNif.h>
 #include <mISDN/af_isdn.h>
 
-void usage(pname)
-char *pname;
+void usage(char *pname)
 {
 	fprintf(stderr, "Call with %s [options]\n", pname);
 	fprintf(stderr, "\n");
@@ -51,9 +50,7 @@ char *pname;
 	fprintf(stderr, "\n");
 }
 
-int main(argc, argv)
-int argc;
-char *argv[];
+int main(int argc, char *argv[])
 {
 	int aidx = 1;
 	int cardnr = 0;

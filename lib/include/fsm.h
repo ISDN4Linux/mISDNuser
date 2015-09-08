@@ -28,7 +28,7 @@ typedef void (* FSMFNPTR)(struct FsmInst *, int, void *);
 struct Fsm {
 	FSMFNPTR *jumpmatrix;
 	int state_count, event_count;
-	char **strEvent, **strState;
+	const char **strEvent, **strState;
 };
 
 struct FsmInst {
@@ -38,7 +38,7 @@ struct FsmInst {
 	int			debug;
 	void			*userdata;
 	int			userint;
-	void			(*printdebug)(struct FsmInst *, char *, ...);
+	void			(*printdebug)(struct FsmInst *, const char *, ...);
 };
 
 struct FsmNode {

@@ -278,7 +278,7 @@ static int log_output(struct mController *mc)
 	return 0;
 }
 
-static int open_logfile()
+static int open_logfile(void)
 {
 	int i, err;
 	struct mController *mc;
@@ -311,7 +311,7 @@ static int open_logfile()
 	return 0;
 }
 
-static void close_logfile()
+static void close_logfile(void)
 {
 	int i;
 	FILE *log;
@@ -354,7 +354,7 @@ static int logprint(struct mController *mc, const char *fmt, ...)
  * fmt 1 log each octet with one space before
  * fmt n log each octet with one space before and a extra space every n octets
  */
-static void loghex(struct mController *mc, char *head, unsigned char *p, int len, int fmt, int ie_idx)
+static void loghex(struct mController *mc, const char *head, unsigned char *p, int len, int fmt, int ie_idx)
 {
 	int i, rest, n = 1;
 
@@ -494,7 +494,7 @@ static const char MTidx[] = {
 };
 
 
-static int log_coding(struct mController *mc, char *head, int cstd, int loc, int typ, int plan)
+static int log_coding(struct mController *mc, const char *head, int cstd, int loc, int typ, int plan)
 {
 	int ret = 0;
 	if (head) {
@@ -862,7 +862,7 @@ static void log_call_state(struct mController *mc, unsigned char *p, struct l3_m
 static void log_channel_id(struct mController *mc, unsigned char *p)
 {
 	unsigned char ift, excl, dch;
-	char *cu;
+	const char *cu;
 	int ret, ch, st, l = *p++;
 
 	ift = *p & 0x20;
@@ -994,7 +994,7 @@ static const char *get_lookup_str(int val, struct _lookup_table *tab)
 
 static void log_facility(struct mController *mc, unsigned char *p, int idx)
 {
-	char *cp, *ops;
+	const char *cp, *ops;
 	const char *opstr;
 	int id, op, ret = 0, l = *p;
 	struct asn1_parm ap;
@@ -1196,7 +1196,7 @@ static void log_notify(struct mController *mc, unsigned char *p)
 	}
 }
 
-static void log_ia5_chars(struct mController *mc, char *head, unsigned char *p, int len)
+static void log_ia5_chars(struct mController *mc, const char *head, unsigned char *p, int len)
 {
 	int ret;
 
@@ -1224,9 +1224,9 @@ static void log_date(struct mController *mc, unsigned char *p)
 	return;
 }
 
-static void log_number(struct mController *mc, int ie, char *head, unsigned char *p)
+static void log_number(struct mController *mc, int ie, const char *head, unsigned char *p)
 {
-	char *ts, *ps;
+	const char *ts, *ps;
 	int ret = 0, t, pl, len = *p++;
 
 	if (head) {
@@ -1370,7 +1370,7 @@ static void log_number(struct mController *mc, int ie, char *head, unsigned char
 	}
 }
 
-static void log_subaddress(struct mController *mc, char *head, unsigned char *p)
+static void log_subaddress(struct mController *mc, const char *head, unsigned char *p)
 {
 	int ret = 0, t, odd, len = *p++;
 
@@ -1984,7 +1984,7 @@ static int log_layer2(struct mController *mc, struct mbuffer *mb)
 static int log_layer1(struct mController *mc, struct mbuffer *mb)
 {
 	int ret = 0;
-	char *pn = NULL;
+	const char *pn = NULL;
 	
 	switch (mb->h->prim) {
 	case PH_DATA_E_IND:
@@ -2139,9 +2139,7 @@ static int main_loop(int enabled)
 }
 
 
-int main(argc, argv)
-int argc;
-char *argv[];
+int main(int argc, char *argv[])
 {
 	int result;
 	int opt;

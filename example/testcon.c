@@ -51,8 +51,7 @@
 #define MISDN_CTRL_L1_GET_SYNC_INFO	0x00010004
 #endif
 
-void usage(pname) 
-char *pname;
+void usage(char *pname)
 {
 	fprintf(stderr,"Call with %s [options] [filename]\n",pname);
 	fprintf(stderr,"\n");
@@ -1308,10 +1307,7 @@ static int do_setup(devinfo_t *di) {
 	return 0;
 }
 
-int main(argc,argv)
-int argc;
-char *argv[];
-
+int main(int argc, char *argv[])
 {
 	char FileName[200],FileNameOut[200], FileNameIn[200];
 	int aidx=1,para=1, idx;

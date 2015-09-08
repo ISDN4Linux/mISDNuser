@@ -30,7 +30,7 @@ typedef struct _l3_process	l3_process_t;
 struct _layer3;
 
 struct l3protocol {
-	char			*name;
+	const char		*name;
 	unsigned int		protocol;
 	void			(*init)(struct _layer3 *);
 };
@@ -117,8 +117,8 @@ extern l3_process_t	*create_new_process(layer3_t *, unsigned int, unsigned int, 
 extern void 		release_l3_process(struct _l3_process *);
 extern void		SendMsg(struct _l3_process *, struct l3_msg *, int);
 extern void 		mISDN_l3up(l3_process_t *, unsigned int, struct l3_msg *);
-extern void		mIl3_debug(layer3_t *, char *, ...);
-extern void		mIpc_debug(u_int, struct _l3_process *, char *, ...);
+extern void		mIl3_debug(layer3_t *, const char *, ...);
+extern void		mIpc_debug(u_int, struct _l3_process *, const char *, ...);
 
 static inline void
 newl3state(l3_process_t *pc, int state)

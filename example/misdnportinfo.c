@@ -39,7 +39,7 @@
 #include <mISDN/q931.h>
 #include <mISDN/af_isdn.h>
 
-int main()
+int main(int argc, char *argv[])
 {
 	int 			cnt, ret = 0, i = 0;
 	int			sk;
