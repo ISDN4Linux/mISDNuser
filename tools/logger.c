@@ -662,6 +662,9 @@ static void log_bearer_capability(struct mController *mc, unsigned char *p)
 			case 1:
 				ret = logprint(mc, "protocol V.110/X.30");
 				break;
+			case 2:
+				ret = logprint(mc, "protocol G.711 ulaw");
+				break;
 			case 3:
 				ret = logprint(mc, "protocol G.711 Alaw");
 				break;
@@ -669,13 +672,13 @@ static void log_bearer_capability(struct mController *mc, unsigned char *p)
 				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
 				break;
 			case 5:
-				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
+				ret = logprint(mc, "protocol G.722 7kHz audio");
 				break;
 			case 6:
-				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
+				ret = logprint(mc, "protocol G.7xx 384 kbit/s video");
 				break;
 			case 7:
-				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
+				ret = logprint(mc, "none CCITT rate adaption");
 				break;
 			case 9:
 				ret = logprint(mc, "protocol G.721 32kbit/s ADPCM");
