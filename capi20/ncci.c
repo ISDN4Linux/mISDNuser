@@ -557,6 +557,7 @@ static struct FsmNode fn_ncci_list[] = {
 #endif
 	{ST_NCCI_N_4, EV_NC_DISCONNECT_B3_CONF, ncci_disconnect_b3_conf},
 	{ST_NCCI_N_4, EV_NC_DISCONNECT_B3_IND, ncci_disconnect_b3_ind},
+	{ST_NCCI_N_4, EV_DL_RELEASE_IND, ncci_dl_release_ind_conf},
 	{ST_NCCI_N_4, EV_DL_RELEASE_CONF, ncci_dl_release_ind_conf},
 	{ST_NCCI_N_4, EV_DL_DOWN_IND, ncci_dl_down_ind},
 	{ST_NCCI_N_4, EV_AP_MANUFACTURER_REQ, ncci_manufacturer_req},
