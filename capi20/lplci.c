@@ -2168,6 +2168,11 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 			lPLCIInfoIndIE(lp, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, mc);
 			lPLCIInfoIndIE(lp, IE_PROGRESS, CAPI_INFOMASK_PROGRESS | CAPI_INFOMASK_EARLYB3, mc);
 			lPLCIInfoIndIE(lp, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, mc);
+			ret = plci_parse_channel_id(lp, mc);
+			if (ret < -1) {
+				wprint("%s: Got channel coding error in %s (%d)\n", CAPIobjIDstr(&lp->cobj),
+					_mi_msg_type2str(pr), ret);
+			}
 		}
 		break;
 	case MT_ALERTING:
