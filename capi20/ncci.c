@@ -151,7 +151,7 @@ static void ncci_connect_b3_resp(struct FsmInst *fi, int event, void *arg)
 	struct mNCCI *ncci = fi->userdata;
 	struct mc_buf *mc = arg;
 
-	if (mc->cmsg.Info == 0) {
+	if (mc->cmsg.Reject == 0) {
 		FsmChangeState(fi, ST_NCCI_N_2);
 		ncciCmsgHeader(ncci, mc, CAPI_CONNECT_B3_ACTIVE, CAPI_IND);
 		if (ncci->ncpi)
