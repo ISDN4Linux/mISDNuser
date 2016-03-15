@@ -134,6 +134,7 @@ static void usage(void)
 	fprintf(stderr, "  Options are\n");
 	fprintf(stderr, "   -?, --help                            this help\n");
 	fprintf(stderr, "   -c, --config <file>                   use this config file - default %s\n", def_config);
+	fprintf(stderr, "   -d, --debug <debugmask>               enable additional debug (see m_capi.h for the bits)\n");
 	fprintf(stderr, "   -D, --debug-file <debug file>         use debug file (default stdout/stderr)\n");
 	fprintf(stderr, "   -f, --foreground                      run in forground, not as daemon\n");
 	fprintf(stderr, "   -k, --keeptemp                        do not delete temporary files (e.g. TIFF for fax)\n");
