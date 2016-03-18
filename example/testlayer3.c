@@ -1203,6 +1203,7 @@ static int do_control_worker(devinfo_t *di)
 				break;
 #endif
 			}
+			break;
 		case MT_CONNECT_ACKNOWLEDGE:
 			mylog(3, "got %s\n", mi_msg_type2str(cmd));
 			/* We got connect ack, so bring B-channel up */
