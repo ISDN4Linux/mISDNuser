@@ -1296,6 +1296,8 @@ static int bch_worker(devinfo_t *di)
 			ret = write(di->save, buf + MISDN_HEADER_LEN, len - MISDN_HEADER_LEN);
 			if (ret < 0)
 				fprintf(stderr,"got error on write %s\n", strerror(errno));
+			else
+				ret = 0;
 			break;
 		case PH_DATA_CNF:
 			/* get ACK of send data, so we can
