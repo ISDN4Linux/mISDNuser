@@ -20,14 +20,10 @@ EXTRA_DIST = capi20.conf.sample
 
 CLEANFILES = *~
 
-MISDN_SOCKET_DIR = $(localstatedir)/run/mISDNcapid
-
-install-exec-hook:
-	install  -d $(DESTDIR)$(MISDN_SOCKET_DIR)
-
 install-data-local:
 	install -d $(DESTDIR)$(sysconfdir)
 	install -m 644 capi20.conf.sample $(DESTDIR)$(sysconfdir)/capi20.conf
 
 distuninstallcheck_listfiles = \
 	find . -type f -print | grep -v 'capi20.conf'
+

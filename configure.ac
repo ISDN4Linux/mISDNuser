@@ -143,6 +143,8 @@ then
 			AC_MSG_ERROR([spandsp header file not found - install spandsp development files])
 		)
 	fi
+	AC_SUBST( [MISDN_CAPI_SOCKET_NAME], "sock" )
+	AC_SUBST( [MISDN_CAPI_SOCKET_DIR], "$(localstatedir)/run/mISDNcapid" )
 fi
 
 # Checks for library functions.
@@ -181,6 +183,7 @@ AC_CONFIG_FILES([Makefile
                  guitools/Makefile
                  guitools/qmisdnwatch/Makefile
                  capi20/Makefile
+                 capi20/m_capi_sock.h
                  capi20/module/Makefile
                ])
 

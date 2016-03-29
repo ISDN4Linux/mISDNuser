@@ -3,7 +3,7 @@
  *
  * Author       Karsten Keil <kkeil@linux-pingi.de>
  *
- * Copyright 2011  by Karsten Keil <kkeil@linux-pingi.de>
+ * Copyright 2011,2016  by Karsten Keil <kkeil@linux-pingi.de>
  *
  * This code is free software; you can redistribute it and/or modify
  * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
@@ -25,7 +25,8 @@
 extern "C" {
 #endif
 
-#define MISDN_CAPI_SOCKET_PATH	"/var/run/mISDNcapid/sock"
+#define MISDN_CAPI_SOCKET_NAME          "@MISDN_CAPI_SOCKET_NAME@"
+#define MISDN_CAPI_SOCKET_DIR           "@MISDN_CAPI_SOCKET_DIR@"
 
 #define MIC_INFO_CODING_ERROR	1
 

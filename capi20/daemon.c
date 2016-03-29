@@ -81,8 +81,8 @@ static int mainpoll_size = 0;
 static char def_config[] = DEF_CONFIG_FILE;
 static char *config_file = NULL;
 static int do_daemon = 1;
-static int mIsock = 0;
-static int mCsock = 0;
+static int mIsock = -1;
+static int mCsock = -1;
 static int mIControl[2] = {-1, -1};
 static struct pController *mI_Controller = NULL;
 int mI_ControllerCount = 0;
@@ -2196,6 +2196,8 @@ int main(int argc, char *argv[])
 	if (ret)
 		exit(1);
 
+	memset(&mcaddr, 0, sizeof(mcaddr));
+
 	if (DebugFileName) {
 		DebugFile = fopen(DebugFileName, "w");
 		if (!DebugFile) {
@@ -2366,7 +2368,15 @@ retry_Csock:
 	}
 		
 	mcaddr.sun_family = AF_UNIX;
-	sprintf(mcaddr.sun_path, MISDN_CAPI_SOCKET_PATH);
+	ret = mkdir(MISDN_CAPI_SOCKET_DIR, S_IRWXU | S_IRWXG);
+	if (ret < 0) {
+		if (errno != EEXIST) {
+			fprintf(stderr, "cannot create socket directory %s - %s\n", MISDN_CAPI_SOCKET_DIR, strerror(errno));
+			goto errout;
+		} else
+			iprint("directory %s already exist - reusing it\n", MISDN_CAPI_SOCKET_DIR);
+	}
+	sprintf(mcaddr.sun_path, "%s/%s", MISDN_CAPI_SOCKET_DIR, MISDN_CAPI_SOCKET_NAME);
 	ret = bind(mCsock, (struct sockaddr *)&mcaddr, sizeof(mcaddr));
 	if (ret < 0) {
 		fprintf(stderr, "cannot bind socket to %s - %s\n", mcaddr.sun_path, strerror(errno));
@@ -2374,10 +2384,10 @@ retry_Csock:
 			ret = connect(mCsock, (struct sockaddr *)&mcaddr, sizeof(mcaddr));
 			if (ret < 0) {
 				/* seems the socket file is not in use */
-				ret = unlink(MISDN_CAPI_SOCKET_PATH);
+				ret = unlink(mcaddr.sun_path);
 				if (ret < 0) {
 					fprintf(stderr, "cannot remove old socket file %s - %s\n",
-						MISDN_CAPI_SOCKET_PATH, strerror(errno));
+						mcaddr.sun_path, strerror(errno));
 					goto errout;
 				}
 				close(mCsock);
@@ -2389,9 +2399,9 @@ retry_Csock:
 
 		}
 	}
-	ret = chmod(MISDN_CAPI_SOCKET_PATH, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+	ret = chmod(mcaddr.sun_path, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 	if (ret < 0) {
-		fprintf(stderr, "cannot change permissions on unix socket:%s - %s\n", MISDN_CAPI_SOCKET_PATH, strerror(errno));
+		fprintf(stderr, "cannot change permissions on unix socket:%s - %s\n", mcaddr.sun_path, strerror(errno));
 		goto errout;
 	}
 
@@ -2459,7 +2469,8 @@ errout:
 	if (mICAPItimer_base->tdev > 0)
 		close(mICAPItimer_base->tdev);
 	mICAPItimer_base->tdev = -1;
-	unlink(MISDN_CAPI_SOCKET_PATH);
+	if (mcaddr.sun_path[0])
+		unlink(mcaddr.sun_path);
 	if (TempDirectory && !KeepTemporaryFiles) {
 		ret = rmdir(TempDirectory);
 		if (ret)

@@ -65,7 +65,7 @@ static int misdnOpenSocket(void)
 		return -1;
 	}
 	mcaddr.sun_family = AF_UNIX;
-	sprintf(mcaddr.sun_path, MISDN_CAPI_SOCKET_PATH);
+	sprintf(mcaddr.sun_path, "%s/%s", MISDN_CAPI_SOCKET_DIR, MISDN_CAPI_SOCKET_NAME);
 
 	/* Connect socket to address */
 	if (!connect(nHandle, (struct sockaddr *)&mcaddr, sizeof(mcaddr))) {
