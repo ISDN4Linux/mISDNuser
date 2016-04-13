@@ -273,6 +273,30 @@ static void lPLCIInfoIndMsg(struct lPLCI *lp, uint32_t mask, unsigned char mt, s
 		mc_clear_cmsg(mc);
 }
 
+static void lPLCIInfoIndIEProcess(struct lPLCI *lp, unsigned char ie, unsigned char *iep, struct mc_buf *mc)
+{
+#ifdef HANDLE_EARLYB3
+	if (ie == IE_PROGRESS && lp->lc->InfoMask & CAPI_INFOMASK_EARLYB3) {
+		if (iep[0] == 0x02 && iep[2] == 0x88) {	// in-band information available
+			ret = lPLCILinkUp(lp);
+			if (ret != 0) {
+				....
+			}
+			if (!test_bit(PLCI_STATE_STACKREADY, &lp->plci->state)) {
+				Send2ApplicationDelayed(lp, cmsg);
+				return;
+			}
+		}
+	}
+#endif
+
+	mc_clear_cmsg(mc);
+	lPLCICmsgHeader(lp, &mc->cmsg, CAPI_INFO, CAPI_IND);
+	mc->cmsg.InfoNumber = ie;
+	mc->cmsg.InfoElement = iep;
+	Send2Application(lp, mc);
+}
+
 static void lPLCIInfoIndIE(struct lPLCI *lp, unsigned char ie, uint32_t mask, struct mc_buf *mc)
 {
 	unsigned char **v_ie, *iep;
@@ -298,25 +322,27 @@ static void lPLCIInfoIndIE(struct lPLCI *lp, unsigned char ie, uint32_t mask, st
 	if ((iep == NULL) || (*iep == 0))	/* not available in message */
 		return;
 
-	mc_clear_cmsg(mc);
-	lPLCICmsgHeader(lp, &mc->cmsg, CAPI_INFO, CAPI_IND);
-	mc->cmsg.InfoNumber = ie;
-	mc->cmsg.InfoElement = iep;
-#ifdef HANDLE_EARLYB3
-	if (ie == IE_PROGRESS && lp->lc->InfoMask & CAPI_INFOMASK_EARLYB3) {
-		if (iep[0] == 0x02 && iep[2] == 0x88) {	// in-band information available
-			ret = lPLCILinkUp(lp);
-			if (ret != 0) {
-				....
-			}
-			if (!test_bit(PLCI_STATE_STACKREADY, &lp->plci->state)) {
-				Send2ApplicationDelayed(lp, cmsg);
-				return;
-			}
-		}
+	lPLCIInfoIndIEProcess(lp, ie, iep, mc);
+
+	if (ie & 0x80)	/* Single octet IEs aren't stored in an extra array */
+		return;
+
+	for (pos = 0; pos < 8; pos++) {
+		if (mc->l3m->extra[pos].codeset)
+			continue;
+
+		/* assume that extra is filled in order without holes */
+		if (!mc->l3m->extra[pos].val)
+			break;
+
+		if (mc->l3m->extra[pos].ie != ie)
+			continue;
+
+		if (!(*mc->l3m->extra[pos].val))
+			continue;
+
+		lPLCIInfoIndIEProcess(lp, ie, mc->l3m->extra[pos].val, mc);
 	}
-#endif
-	Send2Application(lp, mc);
 }
 
 uint16_t CIPMask2CIPValue(uint32_t mask)
