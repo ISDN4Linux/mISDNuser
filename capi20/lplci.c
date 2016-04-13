@@ -278,7 +278,7 @@ static void lPLCIInfoIndIE(struct lPLCI *lp, unsigned char ie, uint32_t mask, st
 	unsigned char **v_ie, *iep;
 	int pos;
 
-	if (!mc || mc->l3m)
+	if (!mc || !mc->l3m)
 		return;
 
 	if (!lp->lc || !(lp->lc->InfoMask & mask))	/* not requested by application */
