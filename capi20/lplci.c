@@ -25,6 +25,9 @@
 static int lPLCILinkUp(struct lPLCI *);
 static int lPLCILinkDown(struct lPLCI *);
 
+/* Enable experimental partial early B3 support */
+/* #define HANDLE_EARLYB3 1 */
+
 /* T301 is usually 180 - give it a chance, if not clear down 2 sec later */
 #define ALERT_TIMEOUT	182000
 
@@ -277,14 +280,12 @@ static void lPLCIInfoIndIEProcess(struct lPLCI *lp, unsigned char ie, unsigned c
 {
 #ifdef HANDLE_EARLYB3
 	if (ie == IE_PROGRESS && lp->lc->InfoMask & CAPI_INFOMASK_EARLYB3) {
-		if (iep[0] == 0x02 && iep[2] == 0x88) {	// in-band information available
+		if (iep[0] == 0x02 && (iep[1] & 0x60) == 0x00 && (iep[2] == 0x81 || iep[2] == 0x88)) {
+			/* in-band information is (maybe) available */
+			int ret;
 			ret = lPLCILinkUp(lp);
 			if (ret != 0) {
-				....
-			}
-			if (!test_bit(PLCI_STATE_STACKREADY, &lp->plci->state)) {
-				Send2ApplicationDelayed(lp, cmsg);
-				return;
+				wprint("%s: early B3 link establish failed, ret=%d\n", CAPIobjIDstr(&lp->cobj), ret);
 			}
 		}
 	}
@@ -2009,6 +2010,12 @@ static int lPLCILinkUp(struct lPLCI *lp)
 	int ret = 0;
 	struct mPLCI *plci = p4lPLCI(lp);
 
+	if (lp->BIlink) {
+		dprint(MIDEBUG_PLCI, "%s: lPLCILinkUp lp->link(%p) already up, nothing to do\n", CAPIobjIDstr(&lp->cobj),
+			lp->BIlink);
+		return 0;
+	}
+
 	if (lp->chid.nr == MI_CHAN_NONE || lp->chid.nr == MI_CHAN_ANY) {
 		/* no valid channel set */
 		wprint("%s: no channel selected (0x%x)\n", CAPIobjIDstr(&lp->cobj), lp->chid.nr);
@@ -2033,11 +2040,16 @@ static int lPLCILinkUp(struct lPLCI *lp)
 	if (!OpenBInstance(lp->BIlink, lp)) {
 		if (!plci->outgoing) { /* incoming call */
 			ret = activate_bchannel(lp->BIlink);
-			if (ret)
+			if (ret) {
+				CloseBInstance(lp->BIlink);
+				lp->BIlink = NULL;
 				ret = CapiMsgOSResourceErr;
+			}
 		}
 	} else {
 		wprint("%s: OpenBInstance failed\n", CAPIobjIDstr(&lp->cobj));
+		ControllerDeSelChannel(lp->BIlink);
+		lp->BIlink = NULL;
 		ret = CapiMsgOSResourceErr;
 	}
 	return ret;

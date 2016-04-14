@@ -250,6 +250,7 @@ struct pController {
 struct pController *get_mController(int);
 struct pController *get_cController(int);
 struct BInstance *ControllerSelChannel(struct pController *, int, int);
+int ControllerDeSelChannel(struct BInstance *);
 uint32_t NextFreePLCI(struct mCAPIobj *);
 int OpenLayer3(struct pController *);
 int check_free_bchannels(struct pController *);

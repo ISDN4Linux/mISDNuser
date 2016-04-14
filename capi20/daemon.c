@@ -811,6 +811,28 @@ struct BInstance *ControllerSelChannel(struct pController *pc, int nr, int proto
 	return bi;
 }
 
+int ControllerDeSelChannel(struct BInstance *bi)
+{
+	int err;
+
+	err = pthread_mutex_lock(&bi->lock);
+	if (err == 0) {
+		if (bi->usecnt) {
+			bi->usecnt--;
+			bi->proto = ISDN_P_NONE;
+		} else {
+			wprint("BI[%d] usage count is already zero\n",
+				bi->nr);
+			err = -EINVAL;
+		}
+		pthread_mutex_unlock(&bi->lock);
+	} else {
+		eprint("Lock for BI[%d] could not be acquired - %s\n",
+			bi->nr, strerror(err));
+	}
+	return err;
+}
+
 int check_free_bchannels(struct pController *pc)
 {
 	int i, cnt = 0;
