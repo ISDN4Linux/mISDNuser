@@ -2125,17 +2125,17 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 		break;
 	case MT_CONNECT:
 		if (mc->l3m) {
+			ret = plci_parse_channel_id(lp, mc);
+			if (ret < 0) {
+				dprint(MIDEBUG_PLCI, "%s: Got no valid channel on %s (%d)\n", CAPIobjIDstr(&lp->cobj),
+					_mi_msg_type2str(pr), ret);
+			}
 			lPLCIInfoIndIE(lp, IE_DATE, CAPI_INFOMASK_DISPLAY, mc);
 			lPLCIInfoIndIE(lp, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, mc);
 			lPLCIInfoIndIE(lp, IE_USER_USER, CAPI_INFOMASK_USERUSER, mc);
 			lPLCIInfoIndIE(lp, IE_PROGRESS, CAPI_INFOMASK_PROGRESS, mc);
 			lPLCIInfoIndIE(lp, IE_FACILITY, CAPI_INFOMASK_FACILITY, mc);
 			lPLCIInfoIndIE(lp, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, mc);
-			ret = plci_parse_channel_id(lp, mc);
-			if (ret < 0) {
-				dprint(MIDEBUG_PLCI, "%s: Got no valid channel on %s (%d)\n", CAPIobjIDstr(&lp->cobj),
-					_mi_msg_type2str(pr), ret);
-			}
 		}
 		del_timer(&lp->atimer);
 		FsmEvent(&lp->plci_m, EV_L3_SETUP_CONF, mc);
@@ -2189,43 +2189,43 @@ void lPLCI_l3l4(struct lPLCI *lp, int pr, struct mc_buf *mc)
 		break;
 	case MT_SETUP_ACKNOWLEDGE:
 		if (mc->l3m) {
+			ret = plci_parse_channel_id(lp, mc);
+			if (ret < -1) {
+				wprint("%s: Got channel coding error in %s (%d)\n", CAPIobjIDstr(&lp->cobj),
+					_mi_msg_type2str(pr), ret);
+			}
 			lPLCIInfoIndMsg(lp, CAPI_INFOMASK_PROGRESS, MT_SETUP_ACKNOWLEDGE, mc);
 			lPLCIInfoIndIE(lp, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, mc);
 			lPLCIInfoIndIE(lp, IE_PROGRESS, CAPI_INFOMASK_PROGRESS | CAPI_INFOMASK_EARLYB3, mc);
 			lPLCIInfoIndIE(lp, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, mc);
-			ret = plci_parse_channel_id(lp, mc);
-			if (ret < -1) {
-				wprint("%s: Got channel coding error in %s (%d)\n", CAPIobjIDstr(&lp->cobj),
-					_mi_msg_type2str(pr), ret);
-			}
 		}
 		break;
 	case MT_CALL_PROCEEDING:
 		if (mc->l3m) {
-			lPLCIInfoIndMsg(lp, CAPI_INFOMASK_PROGRESS, MT_CALL_PROCEEDING, mc);
-			lPLCIInfoIndIE(lp, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, mc);
-			lPLCIInfoIndIE(lp, IE_PROGRESS, CAPI_INFOMASK_PROGRESS | CAPI_INFOMASK_EARLYB3, mc);
-			lPLCIInfoIndIE(lp, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, mc);
 			ret = plci_parse_channel_id(lp, mc);
 			if (ret < -1) {
 				wprint("%s: Got channel coding error in %s (%d)\n", CAPIobjIDstr(&lp->cobj),
 					_mi_msg_type2str(pr), ret);
 			}
+			lPLCIInfoIndMsg(lp, CAPI_INFOMASK_PROGRESS, MT_CALL_PROCEEDING, mc);
+			lPLCIInfoIndIE(lp, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, mc);
+			lPLCIInfoIndIE(lp, IE_PROGRESS, CAPI_INFOMASK_PROGRESS | CAPI_INFOMASK_EARLYB3, mc);
+			lPLCIInfoIndIE(lp, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, mc);
 		}
 		break;
 	case MT_ALERTING:
 		if (mc->l3m) {
+			ret = plci_parse_channel_id(lp, mc);
+			if (ret < -1) {
+				wprint("%s: Got channel coding error in %s (%d)\n", CAPIobjIDstr(&lp->cobj),
+					_mi_msg_type2str(pr), ret);
+			}
 			lPLCIInfoIndMsg(lp, CAPI_INFOMASK_PROGRESS, MT_ALERTING, mc);
 			lPLCIInfoIndIE(lp, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, mc);
 			lPLCIInfoIndIE(lp, IE_USER_USER, CAPI_INFOMASK_USERUSER, mc);
 			lPLCIInfoIndIE(lp, IE_PROGRESS, CAPI_INFOMASK_PROGRESS | CAPI_INFOMASK_EARLYB3, mc);
 			lPLCIInfoIndIE(lp, IE_FACILITY, CAPI_INFOMASK_FACILITY, mc);
 			lPLCIInfoIndIE(lp, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, mc);
-			ret = plci_parse_channel_id(lp, mc);
-			if (ret < -1) {
-				wprint("%s: Got channel coding error in %s (%d)\n", CAPIobjIDstr(&lp->cobj),
-					_mi_msg_type2str(pr), ret);
-			}
 			add_timer(&lp->atimer, ALERT_TIMEOUT);
 		}
 		break;
