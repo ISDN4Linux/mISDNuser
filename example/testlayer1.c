@@ -115,6 +115,9 @@ void usage(void) {
 #define CHAN_D  	2
 #define MAX_CHAN	3
 
+#define CHAN_ACTIVATE   1
+#define CHAN_DEACTIVATE 0
+
 #define TX_BURST_HEADER_SZ 5
 
 
@@ -159,14 +162,16 @@ typedef struct {
 	unsigned char idle_cnt; // cnt seconds if channel is acivated by idle
 	unsigned char res_cnt; // cnt channel ressurections
 	unsigned char hdlc;
+	unsigned char toggle;    // ACTIVATE/DEACTIVATE channel during testloop
+	unsigned int toggle_cnt; // toggle count
 } channel_data_t;
 
 typedef struct _devinfo {
 	int device;
 	int cardnr;
-	int layerid[4]; // layer1 ID
+
+	int layerid[4]; // layer1 ID (sockets)
 	struct sockaddr_mISDN laddr[4];
-	int nds;
 
 	channel_data_t ch[4]; // data channel info for D,B2,B2,(E)
 	unsigned char channel_mask; // enable channel streams
@@ -179,6 +184,7 @@ static int debug = 0;
 static int usleep_val = 200;
 static int te_mode = 0;
 static int stop = 0; // stop after x seconds
+static int exit_app = 0; // stop after x seconds
 static unsigned char payload = 1;
 static int btrans = 0;
 static int testloop = 0;
@@ -188,19 +194,19 @@ static devinfo_t mISDN;
 static unsigned char trans_tx_val[MAX_CHAN] = {0, 0, 0};
 static unsigned char trans_rx_val[MAX_CHAN] = {0, 0, 0};
 
-void sig_handler(int sig) {
-	int i;
 
-	fprintf(stdout, "exiting...\n");
-	fflush(stdout);
-	fflush(stderr);
-	for (i = 0; i < MAX_CHAN; i++) {
-		if (mISDN.layerid[i] > 0) {
-			fprintf(stdout, "closing socket '%s'\n", CHAN_NAMES[i]);
-			close(mISDN.layerid[i]);
-		}
+// function header
+int control_channel(devinfo_t *di, unsigned char chan_id, unsigned char activate);
+
+
+void sig_handler(int sig) {
+	switch (sig) {
+		case 2:
+			exit_app = 1; // request graceful stop of mainloop
+			return;
+		default:
+			exit(0);
 	}
-	exit(0);
 }
 
 void set_signals() {
@@ -244,10 +250,6 @@ int setup_bchannel(devinfo_t *di, unsigned char bch) {
 		return 2;
 	}
 
-	if (di->layerid[bch] > di->nds - 1) {
-		di->nds = di->layerid[bch] + 1;
-	}
-
 	ret = fcntl(di->layerid[bch], F_SETFL, O_NONBLOCK);
 	if (ret < 0) {
 		fprintf(stdout, "fcntl error %s\n", strerror(errno));
@@ -268,62 +270,101 @@ int setup_bchannel(devinfo_t *di, unsigned char bch) {
 	return ret;
 }
 
-int activate_bchan(devinfo_t *di, unsigned char bch) {
-	unsigned char buf[2048];
-	struct mISDNhead *hh = (struct mISDNhead *) buf;
+/*
+ * activate / deactivate B-Channel
+ */
+int control_channel(devinfo_t *di, unsigned char chan_id, unsigned char activate)
+{
+	unsigned char buffer[2048];
+	struct mISDNhead *hh = (struct mISDNhead *) buffer;
 	struct timeval tout;
 	fd_set rds;
 	int ret;
+	socklen_t alen;
+	unsigned char done = 0;
 
-	hh->prim = PH_ACTIVATE_REQ;
+	hh->prim = activate ? PH_ACTIVATE_REQ : PH_DEACTIVATE_REQ;
 	hh->id = MISDN_ID_ANY;
-	ret = sendto(di->layerid[bch], buf, MISDN_HEADER_LEN, 0, NULL, 0);
+	ret = sendto(di->layerid[chan_id], buffer, MISDN_HEADER_LEN, 0, NULL, 0);
 
 	if (ret < 0) {
-		fprintf(stdout, "could not send ACTIVATE_REQ %s\n", strerror(errno));
+		fprintf(stdout, "could not send %s %s\n",
+			(activate ? "PH_ACTIVATE_REQ" : "PH_DEACTIVATE_REQ"),
+			strerror(errno));
 		return 0;
 	}
 
-	fprintf(stdout, "--> B%i -  PH_ACTIVATE_REQ\n", bch + 1);
-
-	tout.tv_usec = 0;
-	tout.tv_sec = 10;
-	FD_ZERO(&rds);
-	FD_SET(di->layerid[bch], &rds);
-
-	ret = select(di->nds, &rds, NULL, NULL, &tout);
-	if (debug > 3) {
-		fprintf(stdout, "select ret=%d\n", ret);
-	}
-	if (ret < 0) {
-		fprintf(stdout, "select error  %s\n", strerror(errno));
-		return 0;
-	}
-	if (ret == 0) {
-		fprintf(stdout, "select timeeout\n");
-		return 0;
+	if (!di->ch[chan_id].toggle_cnt || exit_app) {
+		fprintf(stdout, "--> %s - %s\n", CHAN_NAMES[chan_id], (activate ? "PH_ACTIVATE_REQ" : "PH_DEACTIVATE_REQ"));
 	}
 
-	if (FD_ISSET(di->layerid[bch], &rds)) {
-		ret = recv(di->layerid[bch], buf, 2048, 0);
+	int max_retry = 128;
+
+	do {
+		tout.tv_usec = 1000 * 100;
+		tout.tv_sec = 0;
+		FD_ZERO(&rds);
+		FD_SET(di->layerid[chan_id], &rds);
+
+		ret = select(di->layerid[chan_id]+1, &rds, NULL, NULL, &tout);
+		if (debug > 3) {
+			fprintf(stdout, "select ret=%d\n", ret);
+		}
 		if (ret < 0) {
-			fprintf(stdout, "recv error  %s\n", strerror(errno));
+			fprintf(stdout, "select error  %s\n", strerror(errno));
 			return 0;
 		}
-		if (hh->prim == PH_ACTIVATE_IND) {
-			fprintf(stdout, "<-- B%i -  PH_ACTIVATE_IND\n", bch + 1);
-			di->ch[bch].activated = 1;
+		if (ret == 0) {
+			fprintf(stdout, "select timeeout\n");
+			return 0;
+		}
+
+		if (FD_ISSET(di->layerid[chan_id], &rds)) {
+			alen = sizeof (di->laddr[chan_id]);
+			ret = recvfrom(di->layerid[chan_id], buffer, 2048, 0,
+				(struct sockaddr *) &di->laddr[chan_id], &alen);
+			if (ret < 0) {
+				fprintf(stdout, "recvfrom error %s\n",
+					strerror(errno));
+				return 0;
+			}
+			if (debug > 3) {
+				fprintf(stdout, "alen =%d, dev(%d) channel(%d)\n",
+					alen, di->laddr[chan_id].dev, di->laddr[chan_id].channel);
+			}
+			if (activate && ((hh->prim == PH_ACTIVATE_IND) || (hh->prim == PH_ACTIVATE_CNF))) {
+				if (!di->ch[chan_id].toggle_cnt || exit_app) {
+					fprintf(stdout,
+						"<-- %s - PH_ACTIVATE_%s\n",
+						CHAN_NAMES[chan_id],
+						(hh->prim == PH_ACTIVATE_IND) ? "IND" : "CNF");
+				}
+				di->ch[chan_id].toggle_cnt++;
+				di->ch[chan_id].activated = 1;
+				done = 1;
+			} else
+			if (!activate && ((hh->prim == PH_DEACTIVATE_IND) || (hh->prim == PH_DEACTIVATE_CNF))) {
+				if (!di->ch[chan_id].toggle_cnt || exit_app) {
+					fprintf(stdout,
+						"<-- %s - PH_DEACTIVATE_%s\n",
+						CHAN_NAMES[chan_id],
+						(hh->prim == PH_DEACTIVATE_IND) ? "IND" : "CNF");
+				}
+				di->ch[chan_id].toggle_cnt++;
+				di->ch[chan_id].activated = 0;
+				done = 1;
+			} else {
+				if (debug)
+					fprintf(stdout, "<-- %s -  unhandled prim 0x%x\n",
+					CHAN_NAMES[chan_id], hh->prim);
+			}
 		} else {
-			if (debug)
-				fprintf(stdout, "<-- B%i -  unhandled prim 0x%x\n",
-				bch + 1, hh->prim);
+			fprintf(stdout, "chan fd not in set\n");
 			return 0;
 		}
-	} else {
-		fprintf(stdout, "bchan fd not in set\n");
-		return 0;
-	}
-	return ret;
+	} while (!done && (max_retry-- > 0));
+
+	return (done==1);
 }
 
 /*
@@ -331,77 +372,27 @@ int activate_bchan(devinfo_t *di, unsigned char bch) {
  * returns 0 if PH_ACTIVATE_IND received within timeout interval
  */
 int do_setup(devinfo_t *di) {
-	int ret = 0;
-	struct timeval tout;
-	struct mISDNhead *hh;
-	unsigned char buffer[2048];
-	fd_set rds;
-	socklen_t alen;
+	if (!control_channel(di, CHAN_D, CHAN_ACTIVATE)) {
+		fprintf(stdout, "error activateing D Channel\n");
+		return 0;
+	}
 
-	hh = (struct mISDNhead *) buffer;
-	hh->prim = PH_ACTIVATE_REQ;
-	hh->id = MISDN_ID_ANY;
-	fprintf(stdout, "--> D  -  PH_ACTIVATE_REQ\n");
-	ret = sendto(di->layerid[CHAN_D], buffer, MISDN_HEADER_LEN, 0, NULL, 0);
-
-	while (1) {
-		tout.tv_usec = 0;
-		tout.tv_sec = 1;
-		FD_ZERO(&rds);
-		FD_SET(di->layerid[CHAN_D], &rds);
-
-		ret = select(di->nds, &rds, NULL, NULL, &tout);
-		if (debug > 3) {
-			fprintf(stdout, "select ret=%d\n", ret);
-		}
-		if (ret < 0) {
-			fprintf(stdout, "select error %s\n", strerror(errno));
-			return 9;
-		}
-		if (ret == 0) {
-			fprintf(stdout, "select timeeout\n");
-			return 10;
-		}
-
-		if (FD_ISSET(di->layerid[CHAN_D], &rds)) {
-			alen = sizeof (di->laddr[CHAN_D]);
-			ret = recvfrom(di->layerid[CHAN_D], buffer, 300, 0,
-				(struct sockaddr *) &di->laddr[CHAN_D], &alen);
-			if (ret < 0) {
-				fprintf(stdout, "recvfrom error %s\n",
-					strerror(errno));
-				return 11;
-			}
-			if (debug > 3) {
-				fprintf(stdout, "alen =%d, dev(%d) channel(%d)\n",
-					alen, di->laddr[CHAN_D].dev, di->laddr[CHAN_D].channel);
-			}
-			if ((hh->prim == PH_ACTIVATE_IND) || (hh->prim == PH_ACTIVATE_CNF)) {
-				if (hh->prim == PH_ACTIVATE_IND) {
-					fprintf(stdout, "<-- D  -  PH_ACTIVATE_IND\n");
-				} else {
-					fprintf(stdout, "<-- D  -  PH_ACTIVATE_CNF\n");
-				}
-				di->ch[CHAN_D].activated = 1;
-
-				if ((di->ch[CHAN_B1].tx_ack) && (!setup_bchannel(di, CHAN_B1))) {
-					activate_bchan(di, CHAN_B1);
-				}
-
-				if ((di->ch[CHAN_B2].tx_ack) && (!setup_bchannel(di, CHAN_B2))) {
-					activate_bchan(di, CHAN_B2);
-				}
-
+	if (di->ch[CHAN_D].activated) {
+		if ((di->ch[CHAN_B1].tx_ack) && (!setup_bchannel(di, CHAN_B1))) {
+			if (!control_channel(di, CHAN_B1, CHAN_ACTIVATE)) {
+				fprintf(stdout, "error activateing B1 Channel\n");
 				return 0;
-			} else {
-				if (debug) {
-					fprintf(stdout, "<-- D  -  unhandled prim 0x%x\n", hh->prim);
-				}
+			}
+		}
+		if ((di->ch[CHAN_B2].tx_ack) && (!setup_bchannel(di, CHAN_B2))) {
+			if (!control_channel(di, CHAN_B2, CHAN_ACTIVATE)) {
+				fprintf(stdout, "error activateing B2 Channel\n");
+				return 0;
 			}
 		}
 	}
 
-	return 666;
+	return (di->ch[CHAN_D].activated ? 0 : 1);
 }
 
 int check_rx_data_hdlc(devinfo_t *di, int ch_idx, int ret, unsigned char *rx_buf) {
@@ -568,8 +559,14 @@ int main_data_loop(devinfo_t *di) {
 	printf("\nwaiting for data (use CTRL-C to cancel) stop(%i) sleep(%i)...\n", stop, usleep_val);
 	while (1) {
 		for (ch_idx = 0; ch_idx < MAX_CHAN; ch_idx++) {
-			if (!di->ch[ch_idx].activated)
+			if (!di->ch[ch_idx].activated) {
+				if (di->ch[ch_idx].toggle) {
+					if (control_channel(di, ch_idx, CHAN_ACTIVATE)) {
+						di->ch[ch_idx].tx_ack = 1;
+					}
+				}
 				continue;
+			}
 
 			/* write data */
 			if (di->ch[ch_idx].tx_ack) {
@@ -598,7 +595,7 @@ int main_data_loop(devinfo_t *di) {
 			FD_ZERO(&rds);
 			FD_SET(di->layerid[ch_idx], &rds);
 
-			ret = select(di->nds, &rds, NULL, NULL, &tout);
+			ret = select(di->layerid[ch_idx] + 1, &rds, NULL, NULL, &tout);
 			if (ret < 0) {
 				fprintf(stdout, "select error %s\n", strerror(errno));
 			}
@@ -646,8 +643,15 @@ int main_data_loop(devinfo_t *di) {
 					if (rx_error) {
 						di->ch[ch_idx].rx.err_pkt++;
 					}
+
+					if (di->ch[ch_idx].toggle) {
+						control_channel(di, ch_idx, CHAN_DEACTIVATE);
+					}
 				} else if (hhrx->prim == PH_DATA_CNF) {
-					di->ch[ch_idx].tx_ack++;
+					if (!di->ch[ch_idx].toggle) {
+						// ready to send next TX package in next mainloop
+						di->ch[ch_idx].tx_ack++;
+					}
 				} else {
 					if (debug > 2) {
 						fprintf(stdout, "<-- %s - unhandled prim 0x%x\n",
@@ -662,7 +666,7 @@ int main_data_loop(devinfo_t *di) {
 
 		// print out data rate stats:
 		t2 = get_tick_count();
-		if ((t2 - t1) > (TICKS_PER_SEC / 1)) {
+		if ((t2 - t1) > (TICKS_PER_SEC / 1) || exit_app) {
 			t1 = t2;
 			running_since++;
 
@@ -670,16 +674,17 @@ int main_data_loop(devinfo_t *di) {
 				rx_delta = (di->ch[ch_idx].rx.total - di->ch[ch_idx].rx.delta);
 				printf("%s rate/s: %lu, rate-avg: %4.3f,"
 					" rx total: %lu kb since %llu secs,"
-					" pkt(rx/tx): %lu/%lu, rx-err:%lu,%i\n",
+					" pkt(tx/rx): %lu/%lu, rx-err:%lu,%i DEACT/ACT(%d)\n",
 					CHAN_NAMES[ch_idx], rx_delta,
 					(double) ((double) ((unsigned long long) di->ch[ch_idx].rx.total * TICKS_PER_SEC)
 					/ (double) (t2 - di->ch[ch_idx].t_start)),
 					(di->ch[ch_idx].rx.total),
 					di->ch[ch_idx].t_start ? ((t2 - di->ch[ch_idx].t_start) / TICKS_PER_SEC) : 0,
-					di->ch[ch_idx].rx.pkt_cnt,
 					di->ch[ch_idx].tx.pkt_cnt,
+					di->ch[ch_idx].rx.pkt_cnt,
 					di->ch[ch_idx].rx.err_pkt,
-					di->ch[ch_idx].res_cnt);
+					di->ch[ch_idx].res_cnt,
+					di->ch[ch_idx].toggle_cnt);
 
 				/*
 				 * care for idle but 'active' channels, what happens
@@ -687,7 +692,7 @@ int main_data_loop(devinfo_t *di) {
 				 */
 				if ((di->ch[ch_idx].activated) && (!rx_delta)) {
 					di->ch[ch_idx].idle_cnt++;
-					if (di->ch[ch_idx].idle_cnt > 2) {
+					if ((di->ch[ch_idx].idle_cnt > 2) && !di->ch[ch_idx].toggle) {
 						// resurrect data pipe
 						di->ch[ch_idx].seq_num++;
 						di->ch[ch_idx].res_cnt++;
@@ -702,7 +707,19 @@ int main_data_loop(devinfo_t *di) {
 			}
 			printf("\n");
 
-			if ((stop) && (running_since >= stop)) {
+			// closing all channels before exit
+			if (exit_app || (stop && (running_since >= stop))) {
+				for (ch_idx = 0; ch_idx < MAX_CHAN; ch_idx++) {
+					if (di->ch[ch_idx].activated) {
+						di->ch[ch_idx].activated = 0;
+						control_channel(di, ch_idx, CHAN_DEACTIVATE);
+					}
+
+					if (mISDN.layerid[ch_idx] > 0) {
+						fprintf(stdout, "closing socket '%s'\n", CHAN_NAMES[ch_idx]);
+						close(mISDN.layerid[ch_idx]);
+					}
+				}
 				return 0;
 			}
 		}
@@ -764,7 +781,6 @@ connect_layer1_d(devinfo_t *di) {
 		return 5;
 	}
 
-	di->nds = di->layerid[CHAN_D] + 1;
 	ret = fcntl(di->layerid[CHAN_D], F_SETFL, O_NONBLOCK);
 	if (ret < 0) {
 		fprintf(stdout, "fcntl error %s\n", strerror(errno));
@@ -892,6 +908,11 @@ int main(int argc, char *argv[]) {
 	// init Data burst values
 	for (ch_idx = 0; ch_idx < MAX_CHAN; ch_idx++) {
 		if (mISDN.channel_mask & (1 << ch_idx)) {
+			if (mISDN.ch[ch_idx].tx_size < 0) {
+				mISDN.ch[ch_idx].toggle = 1;
+				mISDN.ch[ch_idx].tx_size *= -1;
+			}
+
 			if (!mISDN.ch[ch_idx].tx_size) {
 				mISDN.ch[ch_idx].tx_size = CHAN_DFLT_PKT_SZ[ch_idx];
 			}
@@ -929,8 +950,8 @@ int main(int argc, char *argv[]) {
 		set_signals();
 		err = do_setup(&mISDN);
 		if (err) {
-			fprintf(stdout, "do_setup error %d\n", err);
-			return (0);
+			fprintf(stdout, "do_setup error %d\n", err); return
+			(0);
 		}
 		if (mISDN.channel_mask) {
 			main_data_loop(&mISDN);
