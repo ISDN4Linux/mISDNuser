@@ -156,7 +156,7 @@ typedef struct {
 	int tx_ack;
 	int transp_rx;
 	int activated;
-	unsigned long long t_start; // time of day first TX
+	unsigned long long t_start; // timestamp of first channel activate CNF
 	data_stats_t rx, tx; // contains data statistics
 	unsigned long seq_num;
 	unsigned char idle_cnt; // cnt seconds if channel is acivated by idle
@@ -556,6 +556,15 @@ int main_data_loop(devinfo_t *di) {
 	tout.tv_usec = 0;
 	tout.tv_sec = 1;
 
+
+	for (ch_idx = 0; ch_idx < MAX_CHAN; ch_idx++) {
+		// start timer tick for first TX packet
+		if (!di->ch[ch_idx].t_start) {
+			di->ch[ch_idx].t_start = t1;
+			di->ch[ch_idx].seq_num = di->ch[ch_idx].tx.pkt_cnt;
+		}
+	}
+
 	printf("\nwaiting for data (use CTRL-C to cancel) stop(%i) sleep(%i)...\n", stop, usleep_val);
 	while (1) {
 		for (ch_idx = 0; ch_idx < MAX_CHAN; ch_idx++) {
@@ -570,12 +579,6 @@ int main_data_loop(devinfo_t *di) {
 
 			/* write data */
 			if (di->ch[ch_idx].tx_ack) {
-				// start timer tick at first TX packet
-				if (!di->ch[ch_idx].t_start) {
-					di->ch[ch_idx].t_start = get_tick_count();
-					di->ch[ch_idx].seq_num = di->ch[ch_idx].tx.pkt_cnt;
-				}
-
 				l = build_tx_data(di, ch_idx, tx_buf + MISDN_HEADER_LEN);
 				if (debug > 4) {
 					printf("%s-TX size(%d) : ", CHAN_NAMES[ch_idx], l);
