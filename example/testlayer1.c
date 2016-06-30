@@ -551,21 +551,13 @@ int main_data_loop(devinfo_t *di) {
 	unsigned long rx_delta;
 	unsigned int running_since = 0;
 
+	printf("\nwaiting for data (use CTRL-C to cancel) stop(%i) sleep(%i)...\n", stop, usleep_val);
+
 	t1 = get_tick_count();
 
-	tout.tv_usec = 0;
-	tout.tv_sec = 1;
+	tout.tv_usec = 4000;
+	tout.tv_sec = 0;
 
-
-	for (ch_idx = 0; ch_idx < MAX_CHAN; ch_idx++) {
-		// start timer tick for first TX packet
-		if (!di->ch[ch_idx].t_start) {
-			di->ch[ch_idx].t_start = t1;
-			di->ch[ch_idx].seq_num = di->ch[ch_idx].tx.pkt_cnt;
-		}
-	}
-
-	printf("\nwaiting for data (use CTRL-C to cancel) stop(%i) sleep(%i)...\n", stop, usleep_val);
 	while (1) {
 		for (ch_idx = 0; ch_idx < MAX_CHAN; ch_idx++) {
 			if (!di->ch[ch_idx].activated) {
@@ -592,6 +584,9 @@ int main_data_loop(devinfo_t *di) {
 					sizeof (di->laddr[ch_idx]));
 
 				di->ch[ch_idx].tx_ack--;
+				if (!di->ch[ch_idx].t_start) {
+					di->ch[ch_idx].t_start = get_tick_count();
+				}
 			}
 
 			/* read data */
@@ -651,6 +646,10 @@ int main_data_loop(devinfo_t *di) {
 						control_channel(di, ch_idx, CHAN_DEACTIVATE);
 					}
 				} else if (hhrx->prim == PH_DATA_CNF) {
+					if (debug > 2) {
+						fprintf(stdout, "<-- %s - PH_DATA_CNF (toggle:%i)\n",
+							CHAN_NAMES[ch_idx], di->ch[ch_idx].toggle);
+					}
 					if (!di->ch[ch_idx].toggle) {
 						// ready to send next TX package in next mainloop
 						di->ch[ch_idx].tx_ack++;
@@ -663,9 +662,6 @@ int main_data_loop(devinfo_t *di) {
 				}
 			}
 		}
-
-		/* relax cpu usage */
-		usleep(usleep_val);
 
 		// print out data rate stats:
 		t2 = get_tick_count();
@@ -726,6 +722,8 @@ int main_data_loop(devinfo_t *di) {
 				return 0;
 			}
 		}
+
+		usleep(usleep_val);
 	}
 }
 
@@ -793,7 +791,9 @@ connect_layer1_d(devinfo_t *di) {
 	di->laddr[CHAN_D].family = AF_ISDN;
 	di->laddr[CHAN_D].dev = di->cardnr;
 	di->laddr[CHAN_D].channel = 0;
+
 	ret = bind(di->layerid[CHAN_D], (struct sockaddr *) &di->laddr[CHAN_D], sizeof (di->laddr[CHAN_D]));
+	sleep(1);
 
 	if (ret < 0) {
 		fprintf(stdout, "could not bind l1 socket %s\n", strerror(errno));
@@ -926,19 +926,12 @@ int main(int argc, char *argv[]) {
 
 			mISDN.ch[ch_idx].hdlc = (!(((ch_idx == CHAN_B1) || (ch_idx == CHAN_B2)) && btrans));
 			mISDN.ch[ch_idx].tx_ack = 1;
+			mISDN.ch[ch_idx].seq_num = 0;
 
 			fprintf(stdout, "chan %s stream enabled with packet sz %d bytes\n",
 				CHAN_NAMES[ch_idx], di->ch[ch_idx].tx_size);
 		}
 	}
-
-	err = socket(PF_ISDN, SOCK_RAW, ISDN_P_BASE);
-	if (err < 0) {
-		fprintf(stderr, "cannot open mISDN due to %s\n",
-			strerror(errno));
-		return 1;
-	}
-	close(err);
 
 	err = connect_layer1_d(&mISDN);
 	if (err) {
