@@ -881,6 +881,8 @@ static int Create_tty(struct BInstance *bi)
 					dprint(MIDEBUG_CONTROLLER, "close bi[%d]->tty %d\n", bi->nr, bi->tty);
 					close(bi->tty);
 					bi->tty = -1;
+				} else {
+					bi->tty_received = 0;
 				}
 			}
 			
@@ -918,6 +920,7 @@ static int recv_tty(struct BInstance *bi)
 		ret = -EMSGSIZE;
 	}
 	if (ret > 0) {
+		bi->tty_received = 1;
 		mc->len = ret;
 		/* Fake length of DATA_B3 REQ to pass offset check */
 		capimsg_setu16(mc->rb, 0, 22);

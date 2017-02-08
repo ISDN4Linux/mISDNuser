@@ -176,6 +176,7 @@ struct BInstance {
 	int			proto;
 	int			fd;
 	int			tty;
+	int			tty_received;
 	int			rx_min;
 	int			rx_max;
 	int			org_rx_min;
