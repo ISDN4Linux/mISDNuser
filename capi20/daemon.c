@@ -1432,12 +1432,10 @@ int activate_bchannel(struct BInstance *bi)
 	struct mISDNhead mh;
 
 	mh.id = 1;
-	if (bi->proto == ISDN_P_B_RAW)
-		mh.prim = PH_ACTIVATE_REQ;
-	else if (bi->proto == ISDN_P_NONE)
+	if (bi->proto == ISDN_P_NONE)
 		return -EINVAL;
 	else
-		mh.prim = DL_ESTABLISH_REQ;
+		mh.prim = PH_ACTIVATE_REQ;
 
 	ret = send(bi->fd, &mh, sizeof(mh), 0);
 	if (ret != sizeof(mh)) {
