@@ -1175,6 +1175,8 @@ static void ncciDataConf(struct mNCCI *ncci, struct mc_buf *mc)
 	pthread_mutex_unlock(&ncci->lock);
 	if (do_answer)
 		AnswerDataB3Req(ncci, mc, CapiNoError);
+	else
+		free_mc_buf(mc);
 	SendDataB3Down(ncci, 0);
 	return;
 }
