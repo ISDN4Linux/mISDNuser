@@ -235,7 +235,7 @@ static void lPLCIClearOtherApps(struct lPLCI *lp)
 static int lPLCIDisconnectInd(struct lPLCI *lp, struct mc_buf *mc)
 {
 	struct BInstance *bi = lp->BIlink;
-	int ret = -ENODEV;
+	int ret = 0;
 
 	if (mc && bi) {
 		lPLCICmsgHeader(lp, &mc->cmsg, CAPI_DISCONNECT, CAPI_IND);
