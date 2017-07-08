@@ -784,7 +784,7 @@ int ParseDeactivationStatusNotificationDiv(struct asn1_parm *pc, u_char * p, u_c
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacInterrogationDiversion(__u8 * Dest, const const struct asn1_parm *pc, const struct FacInterrogationDiversion *InterrogationDiversion)
+int encodeFacInterrogationDiversion(__u8 * Dest, const struct asn1_parm *pc, const struct FacInterrogationDiversion *InterrogationDiversion)
 {
 	int Length;
 	__u8 *p;
@@ -893,7 +893,7 @@ int ParseInterrogationDiversion_RES(struct asn1_parm *pc, u_char * p, u_char * e
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacDiversionInformation(__u8 * Dest, const const struct asn1_parm *pc, const struct FacDiversionInformation *DiversionInformation)
+int encodeFacDiversionInformation(__u8 * Dest, const struct asn1_parm *pc, const struct FacDiversionInformation *DiversionInformation)
 {
 	int Length;
 	__u8 *p;
@@ -1052,7 +1052,7 @@ int ParseDiversionInformation(struct asn1_parm *pc, u_char * p, u_char * end,
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCallDeflection(__u8 * Dest, const const struct asn1_parm *pc, const struct FacCallDeflection *CallDeflection)
+int encodeFacCallDeflection(__u8 * Dest, const struct asn1_parm *pc, const struct FacCallDeflection *CallDeflection)
 {
 	int Length;
 	__u8 *p;
@@ -1142,7 +1142,7 @@ int ParseCallDeflection(struct asn1_parm *pc, u_char * p, u_char * end, struct F
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacCallRerouteing(__u8 * Dest, const const struct asn1_parm *pc, const struct FacCallRerouteing *CallRerouteing)
+int encodeFacCallRerouteing(__u8 * Dest, const struct asn1_parm *pc, const struct FacCallRerouteing *CallRerouteing)
 {
 	int Length;
 	__u8 *p;
@@ -1284,7 +1284,7 @@ int ParseCallRerouteing(struct asn1_parm *pc, u_char * p, u_char * end, struct F
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacInterrogateServedUserNumbers(__u8 * Dest, const const struct asn1_parm *pc, const struct FacServedUserNumberList *InterrogateServedUserNumbers)
+int encodeFacInterrogateServedUserNumbers(__u8 * Dest, const struct asn1_parm *pc, const struct FacServedUserNumberList *InterrogateServedUserNumbers)
 {
 	int Length;
 	__u8 *p;
@@ -1353,7 +1353,7 @@ int ParseInterrogateServedUserNumbers_RES(struct asn1_parm *pc, u_char * p, u_ch
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacDivertingLegInformation1(__u8 * Dest, const const struct asn1_parm *pc, const struct FacDivertingLegInformation1 *DivertingLegInformation1)
+int encodeFacDivertingLegInformation1(__u8 * Dest, const struct asn1_parm *pc, const struct FacDivertingLegInformation1 *DivertingLegInformation1)
 {
 	int Length;
 	__u8 *p;
@@ -1422,7 +1422,7 @@ int ParseDivertingLegInformation1(struct asn1_parm *pc, u_char * p, u_char * end
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacDivertingLegInformation2(__u8 * Dest, const const struct asn1_parm *pc, const struct FacDivertingLegInformation2 *DivertingLegInformation2)
+int encodeFacDivertingLegInformation2(__u8 * Dest, const struct asn1_parm *pc, const struct FacDivertingLegInformation2 *DivertingLegInformation2)
 {
 	int Length;
 	__u8 *p;
@@ -1524,7 +1524,7 @@ int ParseDivertingLegInformation2(struct asn1_parm *pc, u_char * p, u_char * end
  * \retval length on success.
  * \retval -1 on error.
  */
-int encodeFacDivertingLegInformation3(__u8 * Dest, const const struct asn1_parm *pc, const struct FacDivertingLegInformation3 *DivertingLegInformation3)
+int encodeFacDivertingLegInformation3(__u8 * Dest, const struct asn1_parm *pc, const struct FacDivertingLegInformation3 *DivertingLegInformation3)
 {
 	int Length;
 	__u8 *p;
