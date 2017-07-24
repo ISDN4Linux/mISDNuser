@@ -2089,6 +2089,7 @@ void B3ReleaseLink(struct lPLCI *lp, struct BInstance *bi)
 {
 	switch(bi->type) {
 	case BType_Direct:
+	case BType_tty:
 		ncciReleaseLink(bi->b3data);
 		break;
 #ifdef USE_SOFTFAX
