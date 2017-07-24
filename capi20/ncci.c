@@ -1073,6 +1073,12 @@ static int ncciDataInd(struct mNCCI *ncci, int pr, struct mc_buf *mc)
 		pthread_mutex_unlock(&ncci->lock);
 		hh++;
 		mc->rp = (unsigned char *)hh;
+		if (!ncci->BIlink->tty_received) {
+			wprint("%s: frame with %d bytes discarded to avoid loopback\n",
+				CAPIobjIDstr(&ncci->cobj), dlen);
+			dhexprint(MIDEBUG_NCCI_DATA, "Data: ", mc->rp, dlen);
+			return -EBUSY;
+		}
 		ret = write(ncci->BIlink->tty, mc->rp, dlen);
 		if (ret != dlen)
 			wprint("%s: frame with %d bytes only %d bytes were written to tty - %s\n",
