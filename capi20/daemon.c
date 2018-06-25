@@ -340,7 +340,6 @@ Signal handler for clean shutdown
 static void
 termHandler(int sig)
 {
-	iprint("Terminating on signal %d -- request shutdown mISDNcapid\n", sig);
 	send_master_control(MICD_CTRL_SHUTDOWN, 0, NULL);
 	return;
 }
@@ -420,6 +419,15 @@ const char *BItype2str(enum BType bt)
 
 static void
 dumpHandler(int sig)
+{
+	if (sig == SIGUSR1)
+		send_master_control(MICD_CTRL_DUMP_1, 0, NULL);  // master control will call do_dump
+	else
+		send_master_control(MICD_CTRL_DUMP_2, 0, NULL);  // master control will call do_dump
+	return;
+}
+
+static void do_dump(const int sig)
 {
 	if (sig == SIGUSR1) {
 		iprint("Received  signal %d -- start dumping\n", sig);
@@ -595,8 +603,10 @@ static int main_control(int idx)
 	}
 	switch (event & MICD_EV_MASK) {
 	case MICD_CTRL_SHUTDOWN:
+		iprint("Terminating on signal -- request shutdown mISDNcapid\n");
 		break;
 	case MICD_CTRL_REOPEN_LOG:
+		iprint("Re-opening log on signal\n");
 		if (DebugFileName)
 		{
 			iprint("Received SIGHUP, closing this file for immediate re-open\n");
@@ -613,6 +623,12 @@ static int main_control(int idx)
 		}
 		else
 			iprint("Nothing to do for SIGHUP since no debug file configured\n");
+		break;
+	case MICD_CTRL_DUMP_1:
+		do_dump(SIGUSR1);
+		break;
+	case MICD_CTRL_DUMP_2:
+		do_dump(SIGUSR2);
 		break;
 
 	case MICD_CTRL_DISABLE_POLL:
