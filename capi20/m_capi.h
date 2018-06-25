@@ -57,6 +57,7 @@ extern pid_t	gettid(void);
 #define MICD_CTRL_SHUTDOWN	0x42010000
 #define MICD_CTRL_DISABLE_POLL	0x42020000
 #define MICD_CTRL_ENABLE_POLL	0x42030000
+#define MICD_CTRL_REOPEN_LOG	0x42040000
 
 int send_master_control(int, int, void *);
 
