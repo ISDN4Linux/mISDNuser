@@ -340,8 +340,19 @@ Signal handler for clean shutdown
 static void
 termHandler(int sig)
 {
-	iprint("Terminating on signal %d -- request shutdown mISDNcapid\n", sig);
 	send_master_control(MICD_CTRL_SHUTDOWN, 0, NULL);
+	return;
+}
+
+
+
+/**********************************************************************
+Signal handler for re-opening log file
+***********************************************************************/
+static void
+hupHandler(int sig)
+{
+	send_master_control(MICD_CTRL_REOPEN_LOG, 0, NULL);
 	return;
 }
 
@@ -408,6 +419,15 @@ const char *BItype2str(enum BType bt)
 
 static void
 dumpHandler(int sig)
+{
+	if (sig == SIGUSR1)
+		send_master_control(MICD_CTRL_DUMP_1, 0, NULL);  // master control will call do_dump
+	else
+		send_master_control(MICD_CTRL_DUMP_2, 0, NULL);  // master control will call do_dump
+	return;
+}
+
+static void do_dump(const int sig)
 {
 	if (sig == SIGUSR1) {
 		iprint("Received  signal %d -- start dumping\n", sig);
@@ -583,7 +603,34 @@ static int main_control(int idx)
 	}
 	switch (event & MICD_EV_MASK) {
 	case MICD_CTRL_SHUTDOWN:
+		iprint("Terminating on signal -- request shutdown mISDNcapid\n");
 		break;
+	case MICD_CTRL_REOPEN_LOG:
+		iprint("Re-opening log on signal\n");
+		if (DebugFileName)
+		{
+			iprint("Received SIGHUP, closing this file for immediate re-open\n");
+			fflush(DebugFile);
+			fclose(DebugFile);
+			DebugFile = fopen(DebugFileName, "a");
+			if (!DebugFile)
+			{
+				fprintf(stderr, "Cannot re-open %s - %s\n", DebugFileName, strerror(errno));
+				break;
+			}
+			iprint("Re-opened debug log file after SIGHUP\n");
+			fflush(DebugFile);
+		}
+		else
+			iprint("Nothing to do for SIGHUP since no debug file configured\n");
+		break;
+	case MICD_CTRL_DUMP_1:
+		do_dump(SIGUSR1);
+		break;
+	case MICD_CTRL_DUMP_2:
+		do_dump(SIGUSR2);
+		break;
+
 	case MICD_CTRL_DISABLE_POLL:
 	case MICD_CTRL_ENABLE_POLL:
 		len /= sizeof(int);
@@ -2201,7 +2248,7 @@ static struct mi_ext_fn_s l3dbg = {
 	.prt_debug = my_lib_debug,
 };
 
-static struct sigaction mysig_term, mysig_dump;
+static struct sigaction mysig_term, mysig_dump, mysig_hup;
 
 int main(int argc, char *argv[])
 {
@@ -2454,10 +2501,6 @@ retry_Csock:
 	if (ret) {
 		wprint("Error to setup signal handler for SIGTERM - %s\n", strerror(errno));
 	}
-	ret = sigaction(SIGHUP, &mysig_term, NULL);
-	if (ret) {
-		wprint("Error to setup signal handler for SIGHUP - %s\n", strerror(errno));
-	}
 	ret = sigaction(SIGINT, &mysig_term, NULL);
 	if (ret) {
 		wprint("Error to setup signal handler for SIGINT - %s\n", strerror(errno));
@@ -2472,6 +2515,13 @@ retry_Csock:
 	ret = sigaction(SIGUSR2, &mysig_dump, NULL);
 	if (ret) {
 		wprint("Error to setup signal handler for SIGUSR2 - %s\n", strerror(errno));
+	}
+
+	memset(&mysig_hup, 0, sizeof(mysig_hup));
+	mysig_hup.sa_handler = hupHandler;
+	ret = sigaction(SIGHUP, &mysig_hup, NULL);
+	if (ret) {
+		wprint("Error to setup signal handler for SIGHUP - %s\n", strerror(errno));
 	}
 	exitcode = main_loop();
 	free_ncci_fsm();
