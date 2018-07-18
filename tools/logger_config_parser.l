@@ -460,9 +460,9 @@ static int setLayer3(int, int);
 						if (defController == currentController)
 							fprintf(stderr, "dumpfile ignored for global section\n");
 						else
-							strncpy(currentController->dumpfile, yytext, MAX_FILE_NAME);
+							strncpy(currentController->dumpfile, yytext, MAX_FILE_NAME - 1);
 					} else if (filetyp == 2) {
-						strncpy(currentController->logfile, yytext, MAX_FILE_NAME);
+						strncpy(currentController->logfile, yytext, MAX_FILE_NAME - 1);
 					} else {
 						fprintf(stderr, "Got unhandled filetype %d with %s  - abort\n", filetyp, yytext);
 						return -1;

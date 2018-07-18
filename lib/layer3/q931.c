@@ -506,7 +506,7 @@ mi_encode_called_nr(struct l3_msg *l3m, char *nr, unsigned int type, unsigned in
 int
 mi_encode_redirecting_nr(struct l3_msg *l3m, char *nr, int pres, unsigned int type, unsigned int plan, int reason)
 {
-	unsigned char ie[24];
+	unsigned char ie[32];
 	int l;
 
 	if (nr == NULL || *nr == 0) /* not provided */
@@ -537,7 +537,7 @@ mi_encode_redirecting_nr(struct l3_msg *l3m, char *nr, int pres, unsigned int ty
 int
 mi_encode_redirection_nr(struct l3_msg *l3m, char *nr, int pres, unsigned int type, unsigned int plan)
 {
-	unsigned char ie[24];
+	unsigned char ie[32];
 	int l;
 
 	if (nr == NULL || *nr == 0) /* not provided */

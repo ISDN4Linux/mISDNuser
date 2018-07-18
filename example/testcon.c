@@ -1309,7 +1309,7 @@ static int do_setup(devinfo_t *di) {
 
 int main(int argc, char *argv[])
 {
-	char FileName[200],FileNameOut[200], FileNameIn[200];
+	char FileName[200],FileNameOut[208], FileNameIn[208];
 	int aidx=1,para=1, idx;
 	char sw;
 	devinfo_t mISDN;
@@ -1373,7 +1373,7 @@ int main(int argc, char *argv[])
 			}  else {
 				if (para==1) {
 					if (argc > 1)
-						strncpy(FileName, argv[aidx], 199);
+						strncpy(FileName, argv[aidx], sizeof(FileName) - 1);
 					para++;
 				} else {
 					fprintf(stderr,"Undefined argument %s\n",argv[aidx]);
@@ -1391,8 +1391,8 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	close(err);
-	sprintf(FileNameOut,"%s.out", FileName);
-	sprintf(FileNameIn,"%s.in", FileName);
+	snprintf(FileNameOut, sizeof(FileNameOut) - 1, "%s.out", FileName);
+	snprintf(FileNameIn, sizeof(FileNameIn) - 1, "%s.in", FileName);
 	if (0>(mISDN.save = open(FileNameIn, O_WRONLY|O_CREAT|O_TRUNC,S_IRWXU))) {
 		printf("TestmISDN cannot open %s due to %s\n",FileNameIn,
 			strerror(errno));

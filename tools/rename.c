@@ -88,7 +88,7 @@ next_dev:
 	}
 found_dev:
 	devname.id = i;
-	strncpy(devname.name, argv[2], MISDN_MAX_IDLEN);
+	strncpy(devname.name, argv[2], MISDN_MAX_IDLEN - 1);
 	ret = ioctl(sock, IMSETDEVNAME, &devname);
 	if (ret < 0) {
 		fprintf(stderr, "Cannot set device name for port %d: %s\n", i, strerror(errno));
