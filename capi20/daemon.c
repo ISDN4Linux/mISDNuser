@@ -1016,9 +1016,9 @@ static void *BCthread(void *arg)
 			continue;
 		}
 		if (ret == 0) { /* timeout */
-			wprint("Bchannel%d %stimeout (release %spending) thread=%05d\n", bi->nr,
-				bi->got_timeout ? "2. " : "", bi->release_pending ? "" : "not ", bi->tid);
 			if (bi->release_pending) {
+				wprint("Bchannel%d %stimeout (release pending) thread=%05d\n", bi->nr,
+					bi->got_timeout ? "2. " : "", bi->tid);
 				if (bi->got_timeout) { /* 2 times */
 					bi->detached = 1;
 					ret = pthread_detach(bi->thread);
